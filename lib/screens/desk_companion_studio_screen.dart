@@ -215,23 +215,34 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   subtitle: 'Scan Wi-Fi from the device, pick a network, then send only the password.',
                   child: Column(
                     children: [
-                      DropdownButtonFormField<String>(
-                        value: selectedWifiSsid,
-                        items: availableWifiNetworks
-                            .map(
-                              (ssid) => DropdownMenuItem<String>(
-                                value: ssid,
-                                child: Text(ssid, overflow: TextOverflow.ellipsis),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: controller.busy || !controller.isBleConnected
-                            ? null
-                            : (value) => setState(() => _selectedWifiSsid = value),
+                      InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Wi-Fi network',
                           hintText: 'Scan from device first',
                         ),
+                        child: availableWifiNetworks.isEmpty
+                            ? const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text('No scanned networks yet.'),
+                              )
+                            : Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: availableWifiNetworks
+                                    .map(
+                                      (ssid) => ChoiceChip(
+                                        label: Text(
+                                          ssid,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        selected: selectedWifiSsid == ssid,
+                                        onSelected: controller.busy || !controller.isBleConnected
+                                            ? null
+                                            : (_) => setState(() => _selectedWifiSsid = ssid),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
