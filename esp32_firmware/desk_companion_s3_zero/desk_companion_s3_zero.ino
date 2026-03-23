@@ -1,3 +1,5 @@
+#include <dummy.h>
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <BLE2902.h>
@@ -361,7 +363,7 @@ void renderIdle() {
   display.println("Desk Companion");
   display.drawLine(10, 17, SCREEN_WIDTH - 11, 17, SSD1306_WHITE);
   display.setCursor(12, 24);
-  display.println(ipAddress.isEmpty ? "Waiting for Wi-Fi" : ipAddress);
+  display.println(ipAddress.isEmpty() ? "Waiting for Wi-Fi" : ipAddress);
   display.setCursor(12, 38);
   display.println("Use the phone app");
   display.setCursor(12, 50);
