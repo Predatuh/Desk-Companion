@@ -692,15 +692,20 @@ void setupDisplay() {
   Wire.begin();
 #endif
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
-    // Try the other common address
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-      // Both failed — blink built-in LED as error indicator and halt
-      pinMode(LED_BUILTIN, OUTPUT);
-      while (true) {
-        digitalWrite(LED_BUILTIN, HIGH); delay(200);
-        digitalWrite(LED_BUILTIN, LOW);  delay(200);
-      }
+  // Probe bus to find the actual I2C address before initialising
+  uint8_t foundAddr = 0;
+  for (uint8_t addr : {0x3C, 0x3D}) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) { foundAddr = addr; break; }
+  }
+  if (foundAddr == 0) foundAddr = OLED_ADDRESS; // best-guess fallback
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, foundAddr)) {
+    // Still failed — blink LED and halt
+    pinMode(LED_BUILTIN, OUTPUT);
+    while (true) {
+      digitalWrite(LED_BUILTIN, HIGH); delay(200);
+      digitalWrite(LED_BUILTIN, LOW);  delay(200);
     }
   }
 
