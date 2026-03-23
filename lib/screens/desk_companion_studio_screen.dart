@@ -166,7 +166,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         onChanged: controller.updateRelayBaseUrl,
                         decoration: const InputDecoration(
                           labelText: 'Relay base URL',
-                          hintText: 'https://relay.nudgebox.net',
+                          hintText: 'https://desk-companion-production.up.railway.app',
                           helperText: 'Use the base domain only. Full paths like /v1/device/... are cleaned automatically.',
                         ),
                       ),
