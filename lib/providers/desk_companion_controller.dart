@@ -87,8 +87,8 @@ class DeskCompanionController extends ChangeNotifier {
     final normalizedPath = normalizedSegments.isEmpty ? '/' : '/${normalizedSegments.join('/')}/';
     final normalizedUri = parsed.replace(
       path: normalizedPath,
-      query: '',
-      fragment: '',
+      query: null,
+      fragment: null,
     );
 
     return hasScheme
