@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -37,6 +36,35 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
     widget.onPixel(point.dx.toInt(), point.dy.toInt());
   }
 
+  void _emitLine(Offset start, Offset end) {
+    int x0 = start.dx.toInt();
+    int y0 = start.dy.toInt();
+    final int x1 = end.dx.toInt();
+    final int y1 = end.dy.toInt();
+
+    final int deltaX = (x1 - x0).abs();
+    final int stepX = x0 < x1 ? 1 : -1;
+    final int deltaY = -(y1 - y0).abs();
+    final int stepY = y0 < y1 ? 1 : -1;
+    int error = deltaX + deltaY;
+
+    while (true) {
+      _emitGridPoint(Offset(x0.toDouble(), y0.toDouble()));
+      if (x0 == x1 && y0 == y1) {
+        break;
+      }
+      final int doubledError = error * 2;
+      if (doubledError >= deltaY) {
+        error += deltaY;
+        x0 += stepX;
+      }
+      if (doubledError <= deltaX) {
+        error += deltaX;
+        y0 += stepY;
+      }
+    }
+  }
+
   void _forward(Offset localPosition, Size size) {
     final current = _toGridPoint(localPosition, size);
     final previous = _lastGridPoint;
@@ -46,24 +74,7 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
       return;
     }
 
-    final deltaX = current.dx - previous.dx;
-    final deltaY = current.dy - previous.dy;
-    final steps = math.max(deltaX.abs(), deltaY.abs()).round();
-
-    if (steps == 0) {
-      _emitGridPoint(current);
-      _lastGridPoint = current;
-      return;
-    }
-
-    for (var step = 1; step <= steps; step++) {
-      final progress = step / steps;
-      final point = Offset(
-        (previous.dx + (deltaX * progress)).roundToDouble(),
-        (previous.dy + (deltaY * progress)).roundToDouble(),
-      );
-      _emitGridPoint(point);
-    }
+    _emitLine(previous, current);
 
     _lastGridPoint = current;
   }

@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/companion_image_payload.dart';
@@ -376,6 +376,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         spacing: 10,
                         runSpacing: 10,
                         children: [
+                          ActionChip(
+                            label: const Text('Fullscreen'),
+                            avatar: const Icon(Icons.open_in_full, size: 18),
+                            onPressed: () => _openFullscreenDrawEditor(),
+                          ),
                           FilterChip(
                             label: const Text('Draw mode'),
                             selected: _drawModeEnabled,
@@ -651,6 +656,34 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     });
   }
 
+  Future<void> _openFullscreenDrawEditor() async {
+    final result = await Navigator.of(context).push<_FullscreenDrawResult>(
+      MaterialPageRoute(
+        builder: (_) => _FullscreenDrawEditor(
+          bitmap: _drawBitmap,
+          showGrid: _showGrid,
+          liveDraw: _liveDraw,
+          eraserMode: _eraserMode,
+          brushSize: _brushSize,
+        ),
+        fullscreenDialog: true,
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    setState(() {
+      _drawBitmap = result.bitmap;
+      _showGrid = result.showGrid;
+      _liveDraw = result.liveDraw;
+      _eraserMode = result.eraserMode;
+      _brushSize = result.brushSize;
+      _drawModeEnabled = true;
+    });
+  }
+
   Future<void> _sendWifi(DeskCompanionController controller) async {
     final selectedWifiSsid = _resolveSelectedWifiSsid(
       controller.availableWifiNetworks,
@@ -802,6 +835,228 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+    );
+  }
+}
+
+class _FullscreenDrawResult {
+  const _FullscreenDrawResult({
+    required this.bitmap,
+    required this.showGrid,
+    required this.liveDraw,
+    required this.eraserMode,
+    required this.brushSize,
+  });
+
+  final Uint8List bitmap;
+  final bool showGrid;
+  final bool liveDraw;
+  final bool eraserMode;
+  final double brushSize;
+}
+
+class _FullscreenDrawEditor extends StatefulWidget {
+  const _FullscreenDrawEditor({
+    required this.bitmap,
+    required this.showGrid,
+    required this.liveDraw,
+    required this.eraserMode,
+    required this.brushSize,
+  });
+
+  final Uint8List bitmap;
+  final bool showGrid;
+  final bool liveDraw;
+  final bool eraserMode;
+  final double brushSize;
+
+  @override
+  State<_FullscreenDrawEditor> createState() => _FullscreenDrawEditorState();
+}
+
+class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
+  late Uint8List _bitmap;
+  late bool _showGrid;
+  late bool _liveDraw;
+  late bool _eraserMode;
+  late double _brushSize;
+  Timer? _liveSyncTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _bitmap = Uint8List.fromList(widget.bitmap);
+    _showGrid = widget.showGrid;
+    _liveDraw = widget.liveDraw;
+    _eraserMode = widget.eraserMode;
+    _brushSize = widget.brushSize;
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    _liveSyncTimer?.cancel();
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+    ]);
+    super.dispose();
+  }
+
+  void _paintPixel(int x, int y) {
+    final next = Uint8List.fromList(_bitmap);
+    final radius = (_brushSize.round() - 1).clamp(0, 4);
+    for (var py = y - radius; py <= y + radius; py++) {
+      if (py < 0 || py >= 64) {
+        continue;
+      }
+      for (var px = x - radius; px <= x + radius; px++) {
+        if (px < 0 || px >= 128) {
+          continue;
+        }
+        final byteIndex = py * 16 + (px >> 3);
+        final bitMask = 1 << (7 - (px & 7));
+        if (_eraserMode) {
+          next[byteIndex] &= ~bitMask;
+        } else {
+          next[byteIndex] |= bitMask;
+        }
+      }
+    }
+
+    setState(() => _bitmap = next);
+    _queueLiveDraw();
+  }
+
+  void _queueLiveDraw() {
+    if (!_liveDraw) {
+      return;
+    }
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) {
+        return;
+      }
+      context.read<DeskCompanionController>().sendLiveBitmap(_bitmap);
+    });
+  }
+
+  void _close() {
+    Navigator.of(context).pop(
+      _FullscreenDrawResult(
+        bitmap: _bitmap,
+        showGrid: _showGrid,
+        liveDraw: _liveDraw,
+        eraserMode: _eraserMode,
+        brushSize: _brushSize,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<DeskCompanionController>();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Fullscreen draw'),
+        actions: [
+          IconButton(
+            onPressed: _close,
+            icon: const Icon(Icons.check),
+            tooltip: 'Save and close',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Expanded(
+                child: OledDrawingPad(
+                  bitmap: _bitmap,
+                  showGrid: _showGrid,
+                  enabled: true,
+                  onPixel: _paintPixel,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilterChip(
+                    label: const Text('Pen'),
+                    selected: !_eraserMode,
+                    onSelected: (_) => setState(() => _eraserMode = false),
+                  ),
+                  FilterChip(
+                    label: const Text('Eraser'),
+                    selected: _eraserMode,
+                    onSelected: (_) => setState(() => _eraserMode = true),
+                  ),
+                  FilterChip(
+                    label: const Text('Grid'),
+                    selected: _showGrid,
+                    onSelected: (_) => setState(() => _showGrid = !_showGrid),
+                  ),
+                  FilterChip(
+                    label: const Text('Live push'),
+                    selected: _liveDraw,
+                    onSelected: (_) => setState(() => _liveDraw = !_liveDraw),
+                  ),
+                ],
+              ),
+              Text(
+                'Brush size: ${_brushSize.round()} px',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              Slider(
+                min: 1,
+                max: 5,
+                divisions: 4,
+                value: _brushSize,
+                onChanged: (value) => setState(() => _brushSize = value),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: controller.busy
+                          ? null
+                          : () {
+                              setState(() => _bitmap = Uint8List(OledBitmapCodec.byteLength));
+                              _queueLiveDraw();
+                            },
+                      icon: const Icon(Icons.layers_clear_outlined),
+                      label: const Text('Clear'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: controller.busy
+                          ? null
+                          : () {
+                              final payload = OledBitmapCodec.fromBitmap(
+                                bitmap: _bitmap,
+                                name: 'oled_drawing',
+                              );
+                              controller.sendImage(payload);
+                            },
+                      icon: const Icon(Icons.draw_outlined),
+                      label: const Text('Push drawing'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
