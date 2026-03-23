@@ -11,6 +11,8 @@ import '../theme/companion_theme.dart';
 import '../utils/oled_bitmap_codec.dart';
 import '../widgets/oled_drawing_pad.dart';
 
+const int kMaxNoteCharacters = 80;
+
 class DeskCompanionStudioScreen extends StatefulWidget {
   const DeskCompanionStudioScreen({super.key});
 
@@ -246,9 +248,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         controller: _noteController,
                         minLines: 3,
                         maxLines: 5,
+                        maxLength: kMaxNoteCharacters,
                         decoration: const InputDecoration(
                           labelText: 'Message',
                           hintText: 'good luck today, i packed snacks in your bag',
+                          helperText: 'Up to 80 characters so the full note fits on screen.',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -620,8 +624,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendNote(DeskCompanionController controller) async {
+    final boundedNote = _noteController.text.trim();
     await _perform(
-      () => controller.sendNote(_noteController.text.trim()),
+      () => controller.sendNote(
+        boundedNote.length > kMaxNoteCharacters
+            ? boundedNote.substring(0, kMaxNoteCharacters)
+            : boundedNote,
+      ),
       success: 'Note delivered.',
     );
   }

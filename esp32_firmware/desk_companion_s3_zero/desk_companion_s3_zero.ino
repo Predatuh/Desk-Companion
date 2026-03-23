@@ -25,6 +25,7 @@
 #define BTN_CLEAR_PIN 5   // 5-second hold → clear display
 #define BTN_HOLD_MS   5000UL
 #define NOTE_QUEUE_MAX 5
+#define NOTE_TEXT_MAX 80
 
 static const char* DEVICE_NAME = "Desk Companion S3";
 static const char* SERVICE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f001";
@@ -309,6 +310,7 @@ void drawWrappedText(const String& text) {
   display.drawCircle(118, 9, 2, SH110X_WHITE);
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
+  display.setTextWrap(true);
 
   const int maxChars = 20;
   int cursorY = 14;
@@ -348,6 +350,7 @@ void renderBannerFrame() {
   display.setTextColor(SH110X_WHITE);
   display.drawLine(0, 18, SCREEN_WIDTH - 1, 18, SH110X_WHITE);
   display.setTextSize(2);
+  display.setTextWrap(false);
   display.setCursor(bannerOffset, 32);
   display.print(currentBanner);
   display.display();
@@ -407,12 +410,14 @@ void setIdleStatus(const String& value) {
 }
 
 void setNote(const String& text) {
+  const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
+
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
-    noteQueue[noteQueueCount++] = text;
+    noteQueue[noteQueueCount++] = boundedText;
   } else {
     for (int i = 0; i < NOTE_QUEUE_MAX - 1; i++) noteQueue[i] = noteQueue[i + 1];
-    noteQueue[NOTE_QUEUE_MAX - 1] = text;
+    noteQueue[NOTE_QUEUE_MAX - 1] = boundedText;
     if (noteQueueIndex > 0) noteQueueIndex--;
   }
   // Display the newest note
