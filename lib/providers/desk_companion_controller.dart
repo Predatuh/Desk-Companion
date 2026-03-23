@@ -54,11 +54,11 @@ class DeskCompanionController extends ChangeNotifier {
   bool get isBleConnected => _bleState == CompanionBleState.connected;
 
   Uri? get _resolvedRelayUri {
-    final raw = _relayBaseUrl.trim();
-    if (raw.isEmpty) {
+    final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
+    if (sanitized.isEmpty) {
       return null;
     }
-    final normalized = raw.endsWith('/') ? raw : '$raw/';
+    final normalized = sanitized.endsWith('/') ? sanitized : '$sanitized/';
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
       return Uri.tryParse(normalized);
     }
@@ -66,6 +66,47 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   bool get hasRelayTarget => _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
+
+  String _sanitizeRelayBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    final hasScheme = trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    final parsed = Uri.tryParse(hasScheme ? trimmed : 'http://$trimmed');
+    if (parsed == null || parsed.host.isEmpty) {
+      return trimmed;
+    }
+
+    final segments = parsed.pathSegments.where((segment) => segment.isNotEmpty).toList();
+    final relayPrefixIndex = _findRelayPrefixIndex(segments);
+    final normalizedSegments = relayPrefixIndex == -1
+        ? <String>[]
+        : segments.sublist(0, relayPrefixIndex);
+    final normalizedPath = normalizedSegments.isEmpty ? '/' : '/${normalizedSegments.join('/')}/';
+    final normalizedUri = parsed.replace(
+      path: normalizedPath,
+      query: '',
+      fragment: '',
+    );
+
+    return hasScheme
+        ? normalizedUri.toString()
+        : normalizedUri.toString().replaceFirst(RegExp(r'^http://'), '');
+  }
+
+  int _findRelayPrefixIndex(List<String> segments) {
+    for (var index = 0; index < segments.length - 1; index += 1) {
+      if (segments[index] == 'v1' && segments[index + 1] == 'device') {
+        return index;
+      }
+    }
+    if (segments.length == 1 && segments.first == 'health') {
+      return 0;
+    }
+    return segments.length;
+  }
 
   void updateRelayBaseUrl(String value) {
     _relayBaseUrl = value.trim();
@@ -215,12 +256,13 @@ class DeskCompanionController extends ChangeNotifier {
     required String token,
   }) async {
     await _runBusy(() async {
+      final sanitizedRelayUrl = _sanitizeRelayBaseUrl(relayUrl);
       await _sendBleCommand({
         'type': 'set_relay',
-        'relayUrl': relayUrl,
+        'relayUrl': sanitizedRelayUrl,
         'deviceToken': token,
       });
-      _relayBaseUrl = relayUrl.trim();
+      _relayBaseUrl = sanitizedRelayUrl;
       _deviceToken = token.trim();
       _setStatus('Relay configuration sent over BLE.');
     });
