@@ -1,10 +1,11 @@
 import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 typedef OledPixelCallback = void Function(int x, int y);
 
-class OledDrawingPad extends StatelessWidget {
+class OledDrawingPad extends StatefulWidget {
   const OledDrawingPad({
     super.key,
     required this.bitmap,
@@ -19,6 +20,59 @@ class OledDrawingPad extends StatelessWidget {
   final bool enabled;
 
   @override
+  State<OledDrawingPad> createState() => _OledDrawingPadState();
+}
+
+class _OledDrawingPadState extends State<OledDrawingPad> {
+  Offset? _lastGridPoint;
+
+  Offset _toGridPoint(Offset localPosition, Size size) {
+    return Offset(
+      ((localPosition.dx / size.width) * 128).floor().clamp(0, 127).toDouble(),
+      ((localPosition.dy / size.height) * 64).floor().clamp(0, 63).toDouble(),
+    );
+  }
+
+  void _emitGridPoint(Offset point) {
+    widget.onPixel(point.dx.toInt(), point.dy.toInt());
+  }
+
+  void _forward(Offset localPosition, Size size) {
+    final current = _toGridPoint(localPosition, size);
+    final previous = _lastGridPoint;
+    if (previous == null) {
+      _emitGridPoint(current);
+      _lastGridPoint = current;
+      return;
+    }
+
+    final deltaX = current.dx - previous.dx;
+    final deltaY = current.dy - previous.dy;
+    final steps = math.max(deltaX.abs(), deltaY.abs()).round();
+
+    if (steps == 0) {
+      _emitGridPoint(current);
+      _lastGridPoint = current;
+      return;
+    }
+
+    for (var step = 1; step <= steps; step++) {
+      final progress = step / steps;
+      final point = Offset(
+        (previous.dx + (deltaX * progress)).roundToDouble(),
+        (previous.dy + (deltaY * progress)).roundToDouble(),
+      );
+      _emitGridPoint(point);
+    }
+
+    _lastGridPoint = current;
+  }
+
+  void _resetStroke() {
+    _lastGridPoint = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 2,
@@ -26,34 +80,39 @@ class OledDrawingPad extends StatelessWidget {
         builder: (context, constraints) {
           final size = Size(constraints.maxWidth, constraints.maxHeight);
 
-          void forward(Offset localPosition) {
-            final x = ((localPosition.dx / size.width) * 128)
-                .floor()
-                .clamp(0, 127);
-            final y = ((localPosition.dy / size.height) * 64)
-                .floor()
-                .clamp(0, 63);
-            onPixel(x, y);
-          }
-
           return Stack(
             fit: StackFit.expand,
             children: [
               SizedBox.expand(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTapDown: enabled ? (details) => forward(details.localPosition) : null,
-                  onPanStart: enabled ? (details) => forward(details.localPosition) : null,
-                  onPanUpdate: enabled ? (details) => forward(details.localPosition) : null,
+                  onTapDown: widget.enabled
+                      ? (details) {
+                          _resetStroke();
+                          _forward(details.localPosition, size);
+                          _resetStroke();
+                        }
+                      : null,
+                  onPanStart: widget.enabled
+                      ? (details) {
+                          _resetStroke();
+                          _forward(details.localPosition, size);
+                        }
+                      : null,
+                  onPanUpdate: widget.enabled
+                      ? (details) => _forward(details.localPosition, size)
+                      : null,
+                  onPanEnd: widget.enabled ? (_) => _resetStroke() : null,
+                  onPanCancel: widget.enabled ? _resetStroke : null,
                   child: CustomPaint(
                     painter: _OledDrawingPadPainter(
-                      bitmap: bitmap,
-                      showGrid: showGrid,
+                      bitmap: widget.bitmap,
+                      showGrid: widget.showGrid,
                     ),
                   ),
                 ),
               ),
-              if (!enabled)
+              if (!widget.enabled)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: DecoratedBox(
