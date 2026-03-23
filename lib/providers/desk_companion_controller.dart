@@ -345,55 +345,67 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<bool> _postRelay(Map<String, dynamic> command) async {
-    final relayUri = _resolvedRelayUri;
+    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
     final token = _deviceToken.trim();
     _lastRelayError = null;
-    if (relayUri == null || token.isEmpty) {
+    if (base.isEmpty || token.isEmpty) {
       _lastRelayError = 'Relay URL or token is missing.';
       return false;
     }
 
+    final url = '$base/v1/device/${Uri.encodeComponent(token)}/command';
+    debugPrint('[relay] POST $url');
     try {
       final response = await http.post(
-        relayUri.resolve('v1/device/$token/command'),
+        Uri.parse(url),
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({'command': command}),
       );
+      debugPrint('[relay] POST response: ${response.statusCode}');
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        _setStatus('Queued through relay. Device will apply it when online.');
+        _setStatus('Queued through relay.');
         return true;
       }
-      _lastRelayError = 'Relay request failed: ${response.statusCode}';
+      _lastRelayError = 'Relay $url → ${response.statusCode}';
       _setStatus(_lastRelayError!);
       return false;
     } catch (error) {
-      _lastRelayError = 'Relay request failed: $error';
+      _lastRelayError = 'Relay $url → $error';
       _setStatus(_lastRelayError!);
       return false;
     }
   }
 
   Future<void> _fetchRelayStatus() async {
-    final relayUri = _resolvedRelayUri;
+    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
     final token = _deviceToken.trim();
-    if (relayUri == null || token.isEmpty) {
+    if (base.isEmpty || token.isEmpty) {
+      _setStatus('Relay URL or token is empty — cannot check relay.');
       return;
     }
 
-    final response = await http.get(relayUri.resolve('v1/device/$token/status'));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _setStatus('Failed to read relay device status.');
-      return;
-    }
+    final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+    debugPrint('[relay] GET $url');
+    try {
+      final response = await http.get(Uri.parse(url));
+      debugPrint('[relay] GET response: ${response.statusCode} ${response.body.length} bytes');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _setStatus('Relay $url → ${response.statusCode}');
+        return;
+      }
 
-    final payload = jsonDecode(response.body);
-    if (payload is! Map<String, dynamic>) {
-      return;
-    }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return;
+      }
 
-    final lastStatus = payload['lastStatus'];
-    if (lastStatus is Map<String, dynamic>) {
-      _applyStatusMap(lastStatus);
+      _setStatus('Relay status refreshed.');
+      final lastStatus = payload['lastStatus'];
+      if (lastStatus is Map<String, dynamic>) {
+        _applyStatusMap(lastStatus);
+      }
+    } catch (error) {
+      _setStatus('Relay $url → $error');
     }
   }
 
@@ -402,10 +414,16 @@ class DeskCompanionController extends ChangeNotifier {
     _deviceIp = (payload['ip'] as String? ?? _deviceIp).trim();
     _connectedSsid = (payload['ssid'] as String? ?? _connectedSsid).trim();
     _statusMessage = (payload['status'] as String? ?? _statusMessage).trim();
-    _relayBaseUrl = _sanitizeRelayBaseUrl(
-      payload['relayUrl'] as String? ?? _relayBaseUrl,
+    final incomingRelayUrl = _sanitizeRelayBaseUrl(
+      payload['relayUrl'] as String? ?? '',
     );
-    _deviceToken = (payload['deviceToken'] as String? ?? _deviceToken).trim();
+    if (incomingRelayUrl.isNotEmpty) {
+      _relayBaseUrl = incomingRelayUrl;
+    }
+    final incomingToken = (payload['deviceToken'] as String? ?? '').trim();
+    if (incomingToken.isNotEmpty) {
+      _deviceToken = incomingToken;
+    }
     final wifiNetworks = payload['wifiNetworks'];
     if (wifiNetworks is List) {
       _availableWifiNetworks = wifiNetworks
