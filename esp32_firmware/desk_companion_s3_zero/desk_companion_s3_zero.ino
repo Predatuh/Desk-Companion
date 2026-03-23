@@ -21,6 +21,11 @@
 #define OLED_SDA_PIN -1
 #define OLED_SCL_PIN -1
 
+#define BTN_NEXT_PIN  4   // short press → next note
+#define BTN_CLEAR_PIN 5   // 5-second hold → clear display
+#define BTN_HOLD_MS   5000UL
+#define NOTE_QUEUE_MAX 5
+
 static const char* DEVICE_NAME = "Desk Companion S3";
 static const char* SERVICE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f001";
 static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
@@ -64,6 +69,18 @@ size_t expectedImageBytes = 0;
 size_t receivedImageBytes = 0;
 bool imageTransferActive = false;
 
+// Note queue
+String noteQueue[NOTE_QUEUE_MAX];
+int noteQueueCount = 0;
+int noteQueueIndex = 0;
+
+// Button state
+bool btnNextLast = HIGH;
+bool btnClearLast = HIGH;
+bool btnClearHoldFired = false;
+unsigned long btnNextDownMs = 0;
+unsigned long btnClearDownMs = 0;
+
 const char* modeName(DisplayMode mode);
 bool beginHttpClient(HTTPClient& client, const String& url);
 void clearImageBuffer();
@@ -86,6 +103,8 @@ void pushRelayStatus();
 void pollRelay();
 void setupBle();
 void setupDisplay();
+void setupButtons();
+void handleButtons();
 
 String bleValueToString(const String& value) {
   return value;
@@ -388,7 +407,17 @@ void setIdleStatus(const String& value) {
 }
 
 void setNote(const String& text) {
-  currentNote = text;
+  // Push into circular queue, evicting oldest when full
+  if (noteQueueCount < NOTE_QUEUE_MAX) {
+    noteQueue[noteQueueCount++] = text;
+  } else {
+    for (int i = 0; i < NOTE_QUEUE_MAX - 1; i++) noteQueue[i] = noteQueue[i + 1];
+    noteQueue[NOTE_QUEUE_MAX - 1] = text;
+    if (noteQueueIndex > 0) noteQueueIndex--;
+  }
+  // Display the newest note
+  noteQueueIndex = noteQueueCount - 1;
+  currentNote = noteQueue[noteQueueIndex];
   currentMode = MODE_NOTE;
   statusText = "Showing note";
   renderCurrentMode();
@@ -673,9 +702,61 @@ void setupDisplay() {
   display.display();
 }
 
+void setupButtons() {
+  pinMode(BTN_NEXT_PIN,  INPUT_PULLUP);
+  pinMode(BTN_CLEAR_PIN, INPUT_PULLUP);
+}
+
+void handleButtons() {
+  bool nextNow  = digitalRead(BTN_NEXT_PIN);
+  bool clearNow = digitalRead(BTN_CLEAR_PIN);
+  unsigned long now = millis();
+
+  // --- BTN_NEXT: short press advances through note queue ---
+  if (nextNow == LOW && btnNextLast == HIGH) {
+    // falling edge (press)
+    btnNextDownMs = now;
+  }
+  if (nextNow == HIGH && btnNextLast == LOW) {
+    // rising edge (release) — treat as short press
+    if (noteQueueCount > 1 && (now - btnNextDownMs) < 2000) {
+      noteQueueIndex = (noteQueueIndex + 1) % noteQueueCount;
+      currentNote = noteQueue[noteQueueIndex];
+      currentMode = MODE_NOTE;
+      statusText = "Showing note";
+      renderCurrentMode();
+    }
+  }
+  btnNextLast = nextNow;
+
+  // --- BTN_CLEAR: 5-second hold clears display ---
+  if (clearNow == LOW && btnClearLast == HIGH) {
+    // falling edge
+    btnClearDownMs = now;
+    btnClearHoldFired = false;
+  }
+  if (clearNow == LOW && !btnClearHoldFired) {
+    if ((now - btnClearDownMs) >= BTN_HOLD_MS) {
+      btnClearHoldFired = true;
+      noteQueueCount = 0;
+      noteQueueIndex = 0;
+      currentMode = MODE_IDLE;
+      currentNote = "";
+      setIdleStatus("Ready");
+      renderCurrentMode();
+      publishStatus();
+    }
+  }
+  if (clearNow == HIGH) {
+    btnClearHoldFired = false;
+  }
+  btnClearLast = clearNow;
+}
+
 void setup() {
   Serial.begin(115200);
   setupDisplay();
+  setupButtons();
   clearImageBuffer();
   setupBle();
   tryStoredWifi();
@@ -716,6 +797,7 @@ void loop() {
     pushRelayStatus();
   }
   pollRelay();
+  handleButtons();
 
   delay(1);
 }
