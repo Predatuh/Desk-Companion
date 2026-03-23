@@ -91,7 +91,7 @@ function readBody(req) {
 }
 
 function parsePath(url) {
-  const pathname = new URL(url, 'http://localhost').pathname;
+  const pathname = new URL(url, 'http://localhost').pathname.replace(/^\/+/, '/');
   return pathname.split('/').filter(Boolean);
 }
 

@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["cd relay_server && npm install --production"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "cd relay_server && node server.js"
