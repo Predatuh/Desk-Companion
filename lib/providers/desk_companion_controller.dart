@@ -109,7 +109,7 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   void updateRelayBaseUrl(String value) {
-    _relayBaseUrl = value.trim();
+    _relayBaseUrl = _sanitizeRelayBaseUrl(value);
     notifyListeners();
   }
 
