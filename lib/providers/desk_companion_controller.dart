@@ -58,7 +58,7 @@ class DeskCompanionController extends ChangeNotifier {
     if (sanitized.isEmpty) return null;
     final withScheme = (sanitized.startsWith('http://') || sanitized.startsWith('https://'))
         ? sanitized
-        : 'http://$sanitized';
+        : 'https://$sanitized';
     return Uri.tryParse('$withScheme/');
   }
 
@@ -83,6 +83,12 @@ class DeskCompanionController extends ChangeNotifier {
     // Remove trailing slashes.
     while (url.endsWith('/')) {
       url = url.substring(0, url.length - 1);
+    }
+
+    // Force https for known hosted platforms (Railway, Render, etc.)
+    // to avoid HTTP→HTTPS redirects that break POST requests.
+    if (url.startsWith('http://') && !url.contains('localhost') && !url.contains('127.0.0.1') && !url.contains('192.168.')) {
+      url = 'https://${url.substring(7)}';
     }
 
     return url;
