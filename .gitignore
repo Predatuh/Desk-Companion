@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Railway deployment — prevent Dockerfile auto-detection
+Dockerfile
+**/Dockerfile
+relay_server/data/
