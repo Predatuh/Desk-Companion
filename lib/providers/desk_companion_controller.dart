@@ -23,7 +23,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceIp = '';
   String _connectedSsid = '';
   String _deviceName = '';
-  String _relayBaseUrl = '';
+  String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
   String _deviceToken = '';
   List<String> _availableWifiNetworks = const [];
   String? _lastRelayError;
