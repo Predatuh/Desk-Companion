@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Desk Companion Relay</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7efe8;
+      --card: #fffaf5;
+      --ink: #221a16;
+      --muted: #6b5d56;
+      --accent: #d26b42;
+      --line: #e7d7cb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at top, #fff8f2, var(--bg));
+      color: var(--ink);
+    }
+    main {
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(34, 26, 22, 0.08);
+      margin-bottom: 16px;
+    }
+    h1, h2 { margin: 0 0 8px; }
+    p { color: var(--muted); }
+    label { display: block; font-weight: 600; margin: 12px 0 6px; }
+    input, textarea, select, button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font: inherit;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    pre {
+      background: #1f1916;
+      color: #f6eee7;
+      padding: 12px;
+      border-radius: 14px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Desk Companion Relay</h1>
+      <p>Send notes and banner messages through your hosted relay without using the phone app.</p>
+      <div class="row">
+        <div>
+          <label for="relayBase">Relay base URL</label>
+          <input id="relayBase" placeholder="https://relay.yourdomain.com" />
+        </div>
+        <div>
+          <label for="token">Device token</label>
+          <input id="token" placeholder="desk-01" />
+        </div>
+      </div>
+      <label for="note">Sticky note</label>
+      <textarea id="note" placeholder="good luck today"></textarea>
+      <div class="row">
+        <div>
+          <label for="banner">Banner text</label>
+          <input id="banner" placeholder="miss you already <3" />
+        </div>
+        <div>
+          <label for="speed">Banner speed</label>
+          <input id="speed" type="number" value="35" min="10" max="80" />
+        </div>
+      </div>
+      <div class="actions">
+        <button id="sendNote">Send note</button>
+        <button id="sendBanner">Start banner</button>
+        <button id="clearDisplay">Clear display</button>
+        <button id="checkStatus">Fetch status</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Response</h2>
+      <pre id="output">Ready.</pre>
+    </section>
+  </main>
+  <script>
+    const relayBase = document.getElementById('relayBase');
+    const token = document.getElementById('token');
+    const note = document.getElementById('note');
+    const banner = document.getElementById('banner');
+    const speed = document.getElementById('speed');
+    const output = document.getElementById('output');
+
+    relayBase.value = window.location.origin;
+
+    function commandUrl() {
+      const base = relayBase.value.trim().replace(/\/$/, '');
+      const deviceToken = token.value.trim();
+      if (!base || !deviceToken) {
+        throw new Error('Relay base URL and device token are required.');
+      }
+      return `${base}/v1/device/${encodeURIComponent(deviceToken)}`;
+    }
+
+    async function sendCommand(command) {
+      const response = await fetch(`${commandUrl()}/command`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ command }),
+      });
+      const body = await response.text();
+      output.textContent = body || `${response.status} ${response.statusText}`;
+    }
+
+    document.getElementById('sendNote').addEventListener('click', async () => {
+      try {
+        await sendCommand({ type: 'set_note', text: note.value.trim() });
+      } catch (error) {
+        output.textContent = String(error);
+      }
+    });
+
+    document.getElementById('sendBanner').addEventListener('click', async () => {
+      try {
+        await sendCommand({ type: 'set_banner', text: banner.value.trim(), speed: Number(speed.value || 35) });
+      } catch (error) {
+        output.textContent = String(error);
+      }
+    });
+
+    document.getElementById('clearDisplay').addEventListener('click', async () => {
+      try {
+        await sendCommand({ type: 'clear' });
+      } catch (error) {
+        output.textContent = String(error);
+      }
+    });
+
+    document.getElementById('checkStatus').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${commandUrl()}/status`);
+        output.textContent = await response.text();
+      } catch (error) {
+        output.textContent = String(error);
+      }
+    });
+  </script>
+</body>
+</html>

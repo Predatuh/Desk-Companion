@@ -1,7 +1,13 @@
+const fs = require('fs/promises');
 const http = require('http');
+const path = require('path');
 
 const port = Number(process.env.PORT || 8787);
+const dataDir = path.join(__dirname, 'data');
+const dataFile = path.join(dataDir, 'devices.json');
+const publicDir = path.join(__dirname, 'public');
 const devices = new Map();
+let persistTimer = null;
 
 function getDevice(token) {
   if (!devices.has(token)) {
@@ -14,9 +20,59 @@ function getDevice(token) {
   return devices.get(token);
 }
 
+function serializeDevices() {
+  return JSON.stringify(
+    Object.fromEntries(devices.entries()),
+    null,
+    2,
+  );
+}
+
+async function loadDevices() {
+  try {
+    const raw = await fs.readFile(dataFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    for (const [token, value] of Object.entries(parsed)) {
+      devices.set(token, {
+        queue: Array.isArray(value.queue) ? value.queue : [],
+        lastStatus: value.lastStatus ?? null,
+        updatedAt: value.updatedAt ?? null,
+      });
+    }
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') {
+      console.error('Failed to load relay data:', error);
+    }
+  }
+}
+
+function queuePersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(async () => {
+    persistTimer = null;
+    try {
+      await fs.mkdir(dataDir, { recursive: true });
+      await fs.writeFile(dataFile, serializeDevices(), 'utf8');
+    } catch (error) {
+      console.error('Failed to persist relay data:', error);
+    }
+  }, 150);
+}
+
 function sendJson(res, statusCode, body) {
   res.writeHead(statusCode, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+function sendFile(res, filePath, contentType) {
+  fs.readFile(filePath)
+    .then((body) => {
+      res.writeHead(200, { 'content-type': contentType });
+      res.end(body);
+    })
+    .catch(() => sendJson(res, 404, { error: 'not_found' }));
 }
 
 function readBody(req) {
@@ -43,6 +99,10 @@ const server = http.createServer(async (req, res) => {
   try {
     const parts = parsePath(req.url || '/');
 
+    if (req.method === 'GET' && (parts.length === 0 || (parts.length === 1 && parts[0] === 'index.html'))) {
+      return sendFile(res, path.join(publicDir, 'index.html'), 'text/html; charset=utf-8');
+    }
+
     if (req.method === 'GET' && parts.length === 1 && parts[0] === 'health') {
       return sendJson(res, 200, { ok: true, devices: devices.size });
     }
@@ -62,6 +122,7 @@ const server = http.createServer(async (req, res) => {
       }
       device.queue.push(body.command);
       device.updatedAt = new Date().toISOString();
+      queuePersist();
       return sendJson(res, 202, {
         queued: true,
         pending: device.queue.length,
@@ -72,6 +133,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && action === 'pull') {
       const nextCommand = device.queue.shift();
       device.updatedAt = new Date().toISOString();
+      queuePersist();
       if (!nextCommand) {
         res.writeHead(204);
         return res.end();
@@ -83,6 +145,7 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse((await readBody(req)) || '{}');
       device.lastStatus = body;
       device.updatedAt = new Date().toISOString();
+      queuePersist();
       return sendJson(res, 200, { stored: true, token });
     }
 
@@ -104,6 +167,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`Desk Companion relay listening on ${port}`);
+loadDevices().finally(() => {
+  server.listen(port, () => {
+    console.log(`Desk Companion relay listening on ${port}`);
+  });
 });

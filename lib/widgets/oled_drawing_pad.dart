@@ -37,32 +37,37 @@ class OledDrawingPad extends StatelessWidget {
           }
 
           return Stack(
+            fit: StackFit.expand,
             children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: enabled ? (details) => forward(details.localPosition) : null,
-                onPanStart: enabled ? (details) => forward(details.localPosition) : null,
-                onPanUpdate: enabled ? (details) => forward(details.localPosition) : null,
-                child: CustomPaint(
-                  painter: _OledDrawingPadPainter(
-                    bitmap: bitmap,
-                    showGrid: showGrid,
+              SizedBox.expand(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: enabled ? (details) => forward(details.localPosition) : null,
+                  onPanStart: enabled ? (details) => forward(details.localPosition) : null,
+                  onPanUpdate: enabled ? (details) => forward(details.localPosition) : null,
+                  child: CustomPaint(
+                    painter: _OledDrawingPadPainter(
+                      bitmap: bitmap,
+                      showGrid: showGrid,
+                    ),
                   ),
                 ),
               ),
               if (!enabled)
                 Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.24),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Turn on Draw mode to sketch',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.24),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'Turn on Draw mode to sketch',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),

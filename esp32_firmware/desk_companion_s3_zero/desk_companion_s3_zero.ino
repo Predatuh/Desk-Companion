@@ -8,6 +8,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -40,6 +41,8 @@ BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
+WiFiClient relayHttpClient;
+WiFiClientSecure relayHttpsClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -273,9 +276,10 @@ const char* modeName(DisplayMode mode) {
 
 bool beginHttpClient(HTTPClient& client, const String& url) {
   if (url.startsWith("https://")) {
-    return false;
+    relayHttpsClient.setInsecure();
+    return client.begin(relayHttpsClient, url);
   }
-  return client.begin(url);
+  return client.begin(relayHttpClient, url);
 }
 
 void clearImageBuffer() {
