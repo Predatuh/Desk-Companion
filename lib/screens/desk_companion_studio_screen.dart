@@ -21,7 +21,6 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _wifiSsidController = TextEditingController();
   final _wifiPasswordController = TextEditingController();
-  final _hostController = TextEditingController();
   final _relayUrlController = TextEditingController();
   final _deviceTokenController = TextEditingController();
   final _noteController = TextEditingController();
@@ -29,7 +28,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
-  bool _preferHttp = true;
   bool _invertImage = false;
   bool _showGrid = true;
   bool _liveDraw = false;
@@ -42,7 +40,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   void dispose() {
     _wifiSsidController.dispose();
     _wifiPasswordController.dispose();
-    _hostController.dispose();
     _relayUrlController.dispose();
     _deviceTokenController.dispose();
     _noteController.dispose();
@@ -55,17 +52,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget build(BuildContext context) {
     final controller = context.watch<DeskCompanionController>();
 
-    _syncController(_hostController, controller.manualHost);
     _syncController(_relayUrlController, controller.relayBaseUrl);
     _syncController(_deviceTokenController, controller.deviceToken);
 
-    final canUseHttp = controller.hasHttpTarget;
     final canUseRelay = controller.hasRelayTarget;
-    final transportHint = _preferHttp && canUseHttp
-        ? 'Wi-Fi first, relay or BLE fallback'
-        : canUseRelay
-            ? 'Relay or BLE'
-            : 'BLE only';
+    final transportHint = canUseRelay ? 'Relay or BLE' : 'BLE only';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Desk Companion')),
@@ -153,25 +144,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      TextField(
-                        controller: _hostController,
-                        onChanged: controller.updateManualHost,
-                        decoration: const InputDecoration(
-                          labelText: 'Manual host override',
-                          hintText: '192.168.1.88 or http://desk.local',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Prefer Wi-Fi delivery when available'),
-                        subtitle: Text(canUseHttp
-                            ? 'Current host is ready for HTTP commands.'
-                            : canUseRelay
-                                ? 'Relay is configured, so remote commands can still queue.'
-                                : 'BLE will be used until the device reports an IP address.'),
-                        value: _preferHttp,
-                        onChanged: (value) => setState(() => _preferHttp = value),
+                      Text(
+                        canUseRelay
+                            ? 'This build uses BLE for setup and relay for remote delivery.'
+                            : 'Connect over BLE first, then save a relay URL and token for remote delivery.',
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
                   ),
@@ -187,7 +164,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         onChanged: controller.updateRelayBaseUrl,
                         decoration: const InputDecoration(
                           labelText: 'Relay base URL',
-                          hintText: 'https://your-server.example.com',
+                          hintText: 'http://your-server.example.com',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -204,8 +181,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy ||
-                                      (!controller.isBleConnected && !controller.hasHttpTarget)
+                              onPressed: controller.busy || !controller.isBleConnected
                                   ? null
                                   : () => _saveRelay(controller),
                               icon: const Icon(Icons.cloud_done_outlined),
@@ -291,7 +267,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               onPressed: controller.busy
                                   ? null
                                   : () => _perform(
-                                        () => controller.clearDisplay(preferHttp: _preferHttp),
+                                        () => controller.clearDisplay(),
                                         success: 'Display cleared.',
                                       ),
                               icon: const Icon(Icons.cleaning_services_outlined),
@@ -618,8 +594,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         return;
       }
       context.read<DeskCompanionController>().sendLiveBitmap(
-            _drawBitmap,
-            preferHttp: _preferHttp,
+        _drawBitmap,
           );
     });
   }
@@ -646,7 +621,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   Future<void> _sendNote(DeskCompanionController controller) async {
     await _perform(
-      () => controller.sendNote(_noteController.text.trim(), preferHttp: _preferHttp),
+      () => controller.sendNote(_noteController.text.trim()),
       success: 'Note delivered.',
     );
   }
@@ -656,7 +631,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       () => controller.sendBanner(
         _bannerController.text.trim(),
         speed: _bannerSpeed.round(),
-        preferHttp: _preferHttp,
       ),
       success: 'Banner started.',
     );
@@ -668,7 +642,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       name: 'oled_drawing',
     );
     await _perform(
-      () => controller.sendImage(payload, preferHttp: _preferHttp),
+      () => controller.sendImage(payload),
       success: 'Drawing delivered.',
     );
   }
@@ -680,7 +654,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     }
 
     await _perform(
-      () => controller.sendImage(payload, preferHttp: _preferHttp),
+      () => controller.sendImage(payload),
       success: 'Image delivered.',
     );
   }

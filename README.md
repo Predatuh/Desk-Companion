@@ -6,11 +6,12 @@ Separate Flutter app, ESP32-S3 firmware, and optional relay service for a tiny d
 
 - Connects to the ESP32-S3 Zero over BLE for first-time setup.
 - Sends Wi-Fi credentials to the device over BLE.
+- Saves Wi-Fi credentials on the device so it can reconnect after reboot or temporary Wi-Fi loss.
 - Sends sticky notes, scrolling banner text, and 128x64 monochrome images.
 - Includes an exact 128x64 drawing pad so anything you sketch on the phone maps pixel-for-pixel to the OLED.
 - Includes a live draw mode that streams the current bitmap while you sketch.
 - Supports a small relay server for off-home-network delivery.
-- Uses local Wi-Fi HTTP delivery when the device has an IP, with relay or BLE fallback depending on what is configured.
+- Uses BLE for setup and fallback, plus a hosted relay for remote delivery.
 
 ## Flutter app
 
@@ -23,7 +24,6 @@ Main UI flow:
 - Find the device over BLE.
 - Send Wi-Fi credentials.
 - Optionally save relay URL plus device token to the ESP32.
-- Refresh until the device reports its IP address.
 - Send note, banner, image, or drawing payloads.
 - Turn on live draw if you want the OLED to update as your finger moves.
 
@@ -76,15 +76,6 @@ Characteristics:
 
 Command payloads are JSON strings. Images are transferred as raw 1024-byte monochrome bitmap chunks after a `begin_image` command.
 
-## Local HTTP API
-
-- `GET /api/status`
-- `POST /api/note`
-- `POST /api/banner`
-- `POST /api/image`
-- `POST /api/clear`
-- `POST /api/relay`
-
 ## Relay server
 
 Project path:
@@ -102,4 +93,8 @@ The ESP32 stores the relay base URL and token, then polls the relay for queued c
 
 Firmware note:
 
+- The ESP32 firmware in this repo does not run a local HTTP server.
+- Device setup happens over BLE.
+- Remote delivery happens through the relay server.
+- Wi-Fi credentials are stored in device preferences so the ESP32 can reconnect automatically.
 - For the ESP32-S3 Zero build in this repo, use an `http://` relay URL instead of `https://` to keep the sketch within the default app size limit.

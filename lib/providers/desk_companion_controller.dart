@@ -22,7 +22,6 @@ class DeskCompanionController extends ChangeNotifier {
   String _mode = 'idle';
   String _deviceIp = '';
   String _connectedSsid = '';
-  String _manualHost = '';
   String _deviceName = '';
   String _relayBaseUrl = '';
   String _deviceToken = '';
@@ -45,23 +44,11 @@ class DeskCompanionController extends ChangeNotifier {
   String get mode => _mode;
   String get deviceIp => _deviceIp;
   String get connectedSsid => _connectedSsid;
-  String get manualHost => _manualHost;
   String get deviceName => _deviceName;
   String get relayBaseUrl => _relayBaseUrl;
   String get deviceToken => _deviceToken;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
-
-  Uri? get _resolvedBaseUri {
-    final rawHost = _manualHost.trim().isNotEmpty ? _manualHost.trim() : _deviceIp.trim();
-    if (rawHost.isEmpty) {
-      return null;
-    }
-    if (rawHost.startsWith('http://') || rawHost.startsWith('https://')) {
-      return Uri.tryParse(rawHost);
-    }
-    return Uri.tryParse('http://$rawHost');
-  }
 
   Uri? get _resolvedRelayUri {
     final raw = _relayBaseUrl.trim();
@@ -72,16 +59,10 @@ class DeskCompanionController extends ChangeNotifier {
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
       return Uri.tryParse(normalized);
     }
-    return Uri.tryParse('https://$normalized');
+    return Uri.tryParse('http://$normalized');
   }
 
-  bool get hasHttpTarget => _resolvedBaseUri != null;
   bool get hasRelayTarget => _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
-
-  void updateManualHost(String value) {
-    _manualHost = value.trim();
-    notifyListeners();
-  }
 
   void updateRelayBaseUrl(String value) {
     _relayBaseUrl = value.trim();
@@ -224,24 +205,11 @@ class DeskCompanionController extends ChangeNotifier {
     required String token,
   }) async {
     await _runBusy(() async {
-      final command = {
+      await _sendBleCommand({
         'type': 'set_relay',
         'relayUrl': relayUrl,
         'deviceToken': token,
-      };
-      if (hasHttpTarget) {
-        final sent = await _postLocal('/api/relay', {
-          'relayUrl': relayUrl,
-          'deviceToken': token,
-        });
-        if (sent) {
-          _relayBaseUrl = relayUrl.trim();
-          _deviceToken = token.trim();
-          _setStatus('Relay configuration saved over Wi-Fi.');
-          return;
-        }
-      }
-      await _sendBleCommand(command);
+      });
       _relayBaseUrl = relayUrl.trim();
       _deviceToken = token.trim();
       _setStatus('Relay configuration sent over BLE.');
@@ -250,10 +218,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> refreshDeviceStatus() async {
     await _runBusy(() async {
-      if (hasHttpTarget) {
-        await _fetchLocalStatus();
-        return;
-      }
       if (hasRelayTarget) {
         await _fetchRelayStatus();
         return;
@@ -262,14 +226,13 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> sendNote(String text, {required bool preferHttp}) async {
+  Future<void> sendNote(String text) async {
     await _runBusy(() async {
-      if (preferHttp) {
-        final sent = await _postLocal('/api/note', {'text': text}) ||
-            await _postRelay({'type': 'set_note', 'text': text});
+      if (hasRelayTarget) {
+        final sent = await _postRelay({'type': 'set_note', 'text': text});
         if (sent) {
           _mode = 'note';
-          _setStatus(hasHttpTarget ? 'Note sent over Wi-Fi.' : 'Note queued through relay.');
+          _setStatus('Note queued through relay.');
           return;
         }
       }
@@ -282,15 +245,13 @@ class DeskCompanionController extends ChangeNotifier {
   Future<void> sendBanner(
     String text, {
     required int speed,
-    required bool preferHttp,
   }) async {
     await _runBusy(() async {
-      if (preferHttp) {
-        final sent = await _postLocal('/api/banner', {'text': text, 'speed': speed}) ||
-            await _postRelay({'type': 'set_banner', 'text': text, 'speed': speed});
+      if (hasRelayTarget) {
+        final sent = await _postRelay({'type': 'set_banner', 'text': text, 'speed': speed});
         if (sent) {
           _mode = 'banner';
-          _setStatus(hasHttpTarget ? 'Banner sent over Wi-Fi.' : 'Banner queued through relay.');
+          _setStatus('Banner queued through relay.');
           return;
         }
       }
@@ -300,24 +261,17 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> sendImage(
-    CompanionImagePayload payload, {
-    required bool preferHttp,
-  }) async {
+  Future<void> sendImage(CompanionImagePayload payload) async {
     await _runBusy(() async {
       await _sendBitmap(
         payload.bitmap,
-        preferHttp: preferHttp,
         allowRelay: true,
         silent: false,
       );
     });
   }
 
-  Future<void> sendLiveBitmap(
-    Uint8List bitmap, {
-    required bool preferHttp,
-  }) async {
+  Future<void> sendLiveBitmap(Uint8List bitmap) async {
     _queuedLiveBitmap = Uint8List.fromList(bitmap);
     if (_liveSendInFlight) {
       return;
@@ -330,7 +284,6 @@ class DeskCompanionController extends ChangeNotifier {
         _queuedLiveBitmap = null;
         await _sendBitmap(
           nextBitmap,
-          preferHttp: preferHttp,
           allowRelay: false,
           silent: true,
         );
@@ -340,14 +293,13 @@ class DeskCompanionController extends ChangeNotifier {
     }
   }
 
-  Future<void> clearDisplay({required bool preferHttp}) async {
+  Future<void> clearDisplay() async {
     await _runBusy(() async {
-      if (preferHttp) {
-        final sent = await _postLocal('/api/clear', const {}) ||
-            await _postRelay({'type': 'clear'});
+      if (hasRelayTarget) {
+        final sent = await _postRelay({'type': 'clear'});
         if (sent) {
           _mode = 'idle';
-          _setStatus(hasHttpTarget ? 'Display cleared over Wi-Fi.' : 'Display clear queued through relay.');
+          _setStatus('Display clear queued through relay.');
           return;
         }
       }
@@ -355,29 +307,6 @@ class DeskCompanionController extends ChangeNotifier {
       _mode = 'idle';
       _setStatus('Display cleared over BLE.');
     });
-  }
-
-  Future<bool> _postLocal(String path, Map<String, dynamic> body) async {
-    final baseUri = _resolvedBaseUri;
-    if (baseUri == null) {
-      return false;
-    }
-
-    try {
-      final response = await http.post(
-        baseUri.resolve(path),
-        headers: const {'content-type': 'application/json'},
-        body: jsonEncode(body),
-      );
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        await _fetchLocalStatus();
-        return true;
-      }
-      _setStatus('Wi-Fi request failed: ${response.statusCode}');
-      return false;
-    } catch (_) {
-      return false;
-    }
   }
 
   Future<bool> _postRelay(Map<String, dynamic> command) async {
@@ -401,24 +330,6 @@ class DeskCompanionController extends ChangeNotifier {
       return false;
     } catch (_) {
       return false;
-    }
-  }
-
-  Future<void> _fetchLocalStatus() async {
-    final baseUri = _resolvedBaseUri;
-    if (baseUri == null) {
-      return;
-    }
-
-    final response = await http.get(baseUri.resolve('/api/status'));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _setStatus('Failed to read device status over Wi-Fi.');
-      return;
-    }
-
-    final payload = jsonDecode(response.body);
-    if (payload is Map<String, dynamic>) {
-      _applyStatusMap(payload);
     }
   }
 
@@ -458,18 +369,9 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> _sendBitmap(
     Uint8List bitmap, {
-    required bool preferHttp,
     required bool allowRelay,
     required bool silent,
   }) async {
-    if (preferHttp && await _postLocal('/api/image', {'data': base64Encode(bitmap)})) {
-      _mode = 'image';
-      if (!silent) {
-        _setStatus('Image sent over Wi-Fi.');
-      }
-      return;
-    }
-
     if (allowRelay && await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
       _mode = 'image';
       if (!silent) {

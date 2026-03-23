@@ -7,7 +7,6 @@
 #include <BLEUtils.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
-#include <WebServer.h>
 #include <WiFi.h>
 #include <Wire.h>
 #include <ctype.h>
@@ -30,7 +29,6 @@ static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Preferences preferences;
-WebServer server(80);
 
 BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
@@ -84,13 +82,6 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 bool connectToWifi(const String& ssid, const String& password);
 void tryStoredWifi();
 void handleCommandJson(const String& body);
-void handleStatusRoute();
-void handleNoteRoute();
-void handleBannerRoute();
-void handleClearRoute();
-void handleImageRoute();
-void handleRelayRoute();
-void setupHttpServer();
 void pushRelayStatus();
 void pollRelay();
 void setupBle();
@@ -594,73 +585,6 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-void handleStatusRoute() {
-  server.send(200, "application/json", buildStatusJson());
-}
-
-void handleNoteRoute() {
-  const String body = server.arg("plain");
-  const String text = extractJsonStringField(body, "text");
-  if (text.isEmpty() && body.indexOf("\"text\"") < 0) {
-    server.send(400, "text/plain", "invalid json");
-    return;
-  }
-  setNote(text);
-  handleStatusRoute();
-}
-
-void handleBannerRoute() {
-  const String body = server.arg("plain");
-  const String text = extractJsonStringField(body, "text");
-  if (text.isEmpty() && body.indexOf("\"text\"") < 0) {
-    server.send(400, "text/plain", "invalid json");
-    return;
-  }
-  setBanner(text, extractJsonIntField(body, "speed", 35));
-  handleStatusRoute();
-}
-
-void handleClearRoute() {
-  clearImageBuffer();
-  setIdleStatus("Display cleared");
-  handleStatusRoute();
-}
-
-void handleImageRoute() {
-  const String encoded = extractJsonStringField(server.arg("plain"), "data");
-  if (!decodeBase64IntoImage(encoded)) {
-    server.send(400, "text/plain", "bad image payload");
-    return;
-  }
-
-  setImageReady();
-  handleStatusRoute();
-}
-
-void handleRelayRoute() {
-  const String body = server.arg("plain");
-  const String nextRelayUrl = extractJsonStringField(body, "relayUrl");
-  const String nextDeviceToken = extractJsonStringField(body, "deviceToken");
-  if ((nextRelayUrl.isEmpty() && body.indexOf("\"relayUrl\"") < 0) ||
-      (nextDeviceToken.isEmpty() && body.indexOf("\"deviceToken\"") < 0)) {
-    server.send(400, "text/plain", "invalid json");
-    return;
-  }
-
-  saveRelaySettings(nextRelayUrl, nextDeviceToken);
-  handleStatusRoute();
-}
-
-void setupHttpServer() {
-  server.on("/api/status", HTTP_GET, handleStatusRoute);
-  server.on("/api/note", HTTP_POST, handleNoteRoute);
-  server.on("/api/banner", HTTP_POST, handleBannerRoute);
-  server.on("/api/clear", HTTP_POST, handleClearRoute);
-  server.on("/api/image", HTTP_POST, handleImageRoute);
-  server.on("/api/relay", HTTP_POST, handleRelayRoute);
-  server.begin();
-}
-
 void pushRelayStatus() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
     return;
@@ -755,14 +679,11 @@ void setup() {
   clearImageBuffer();
   setupBle();
   tryStoredWifi();
-  setupHttpServer();
   renderCurrentMode();
   publishStatus();
 }
 
 void loop() {
-  server.handleClient();
-
   if (millis() - lastDecorTickMs >= 500) {
     lastDecorTickMs = millis();
     idleOrbit = (idleOrbit + 1) % 4;
