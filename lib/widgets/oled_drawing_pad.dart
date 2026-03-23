@@ -10,11 +10,13 @@ class OledDrawingPad extends StatelessWidget {
     required this.bitmap,
     required this.onPixel,
     this.showGrid = true,
+    this.enabled = true,
   });
 
   final Uint8List bitmap;
   final OledPixelCallback onPixel;
   final bool showGrid;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -34,17 +36,39 @@ class OledDrawingPad extends StatelessWidget {
             onPixel(x, y);
           }
 
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => forward(details.localPosition),
-            onPanStart: (details) => forward(details.localPosition),
-            onPanUpdate: (details) => forward(details.localPosition),
-            child: CustomPaint(
-              painter: _OledDrawingPadPainter(
-                bitmap: bitmap,
-                showGrid: showGrid,
+          return Stack(
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: enabled ? (details) => forward(details.localPosition) : null,
+                onPanStart: enabled ? (details) => forward(details.localPosition) : null,
+                onPanUpdate: enabled ? (details) => forward(details.localPosition) : null,
+                child: CustomPaint(
+                  painter: _OledDrawingPadPainter(
+                    bitmap: bitmap,
+                    showGrid: showGrid,
+                  ),
+                ),
               ),
-            ),
+              if (!enabled)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Turn on Draw mode to sketch',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           );
         },
       ),

@@ -32,6 +32,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
   bool _invertImage = false;
   bool _showGrid = true;
+  bool _drawModeEnabled = false;
   bool _liveDraw = false;
   bool _eraserMode = false;
   double _bannerSpeed = 35;
@@ -62,7 +63,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _syncController(_deviceTokenController, controller.deviceToken);
 
     final canUseRelay = controller.hasRelayTarget;
-    final transportHint = canUseRelay ? 'Relay or BLE' : 'BLE only';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Desk Companion')),
@@ -76,17 +76,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
+            physics: _drawModeEnabled
+                ? const NeverScrollableScrollPhysics()
+                : const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroPanel(
-                  bleState: controller.bleState.name,
-                  mode: controller.mode,
-                  transportHint: transportHint,
-                  liveDraw: _liveDraw,
-                ),
-                const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Device link',
                   subtitle: controller.statusMessage,
@@ -125,7 +121,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                       ? null
                                       : () => controller.scanAndConnect(),
                               icon: const Icon(Icons.bluetooth_searching),
-                              label: const Text('Find device'),
+                              label: const Text('Connect device'),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -363,13 +359,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Draw live',
-                  subtitle: 'The phone canvas is the OLED screen. Every pixel you set here maps straight to the display buffer.',
+                  subtitle: _drawModeEnabled
+                      ? 'Draw mode is on. Page scrolling is locked until you turn it off.'
+                      : 'Turn on Draw mode before sketching so the page does not scroll while you draw.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       OledDrawingPad(
                         bitmap: _drawBitmap,
                         showGrid: _showGrid,
+                        enabled: _drawModeEnabled,
                         onPixel: _paintPixel,
                       ),
                       const SizedBox(height: 12),
@@ -377,6 +376,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         spacing: 10,
                         runSpacing: 10,
                         children: [
+                          FilterChip(
+                            label: const Text('Draw mode'),
+                            selected: _drawModeEnabled,
+                            onSelected: (_) => setState(() => _drawModeEnabled = !_drawModeEnabled),
+                          ),
                           FilterChip(
                             label: const Text('Pen'),
                             selected: !_eraserMode,
@@ -753,63 +757,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 }
 
-class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({
-    required this.bleState,
-    required this.mode,
-    required this.transportHint,
-    required this.liveDraw,
-  });
-
-  final String bleState;
-  final String mode;
-  final String transportHint;
-  final bool liveDraw;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: CompanionTheme.charcoal,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Desk display studio',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Send a note, a scrolling banner, a converted image, or draw directly on a 128×64 OLED template and mirror it live.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.white70),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _Pill(label: 'BLE ${bleState.toUpperCase()}'),
-              _Pill(label: 'MODE ${mode.toUpperCase()}'),
-              _Pill(label: transportHint.toUpperCase()),
-              if (liveDraw) const _Pill(label: 'LIVE DRAW ON'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
@@ -855,30 +802,6 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: Colors.white),
-      ),
     );
   }
 }
