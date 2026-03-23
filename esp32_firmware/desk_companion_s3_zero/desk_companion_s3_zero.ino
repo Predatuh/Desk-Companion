@@ -1,5 +1,5 @@
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 #include <BLEDevice.h>
@@ -32,7 +32,7 @@ static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
 static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Preferences preferences;
 
 BLEServer* bleServer = nullptr;
@@ -304,10 +304,10 @@ void publishStatus() {
 
 void drawWrappedText(const String& text) {
   display.clearDisplay();
-  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 8, SSD1306_WHITE);
-  display.drawCircle(10, 9, 2, SSD1306_WHITE);
-  display.drawCircle(118, 9, 2, SSD1306_WHITE);
-  display.setTextColor(SSD1306_WHITE);
+  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 8, SH110X_WHITE);
+  display.drawCircle(10, 9, 2, SH110X_WHITE);
+  display.drawCircle(118, 9, 2, SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
 
   const int maxChars = 20;
@@ -340,13 +340,13 @@ void drawWrappedText(const String& text) {
 
 void renderBannerFrame() {
   display.clearDisplay();
-  display.fillRect(0, 0, SCREEN_WIDTH, 14, SSD1306_WHITE);
-  display.setTextColor(SSD1306_BLACK);
+  display.fillRect(0, 0, SCREEN_WIDTH, 14, SH110X_WHITE);
+  display.setTextColor(SH110X_BLACK);
   display.setTextSize(1);
   display.setCursor(6, 3);
   display.print("FOR YOUR DESK");
-  display.setTextColor(SSD1306_WHITE);
-  display.drawLine(0, 18, SCREEN_WIDTH - 1, 18, SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
+  display.drawLine(0, 18, SCREEN_WIDTH - 1, 18, SH110X_WHITE);
   display.setTextSize(2);
   display.setCursor(bannerOffset, 32);
   display.print(currentBanner);
@@ -355,19 +355,19 @@ void renderBannerFrame() {
 
 void renderImage() {
   display.clearDisplay();
-  display.drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
-  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 6, SSD1306_WHITE);
+  display.drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SH110X_WHITE);
+  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 6, SH110X_WHITE);
   display.display();
 }
 
 void renderIdle() {
   display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
-  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 10, SSD1306_WHITE);
+  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 10, SH110X_WHITE);
   display.setCursor(12, 7);
   display.println("Desk Companion");
-  display.drawLine(10, 17, SCREEN_WIDTH - 11, 17, SSD1306_WHITE);
+  display.drawLine(10, 17, SCREEN_WIDTH - 11, 17, SH110X_WHITE);
   display.setCursor(12, 24);
   display.println(ipAddress.isEmpty() ? "Waiting for Wi-Fi" : ipAddress);
   display.setCursor(12, 38);
@@ -377,7 +377,7 @@ void renderIdle() {
 
   const int orbitXs[4] = {100, 108, 116, 108};
   const int orbitYs[4] = {22, 14, 22, 30};
-  display.fillCircle(orbitXs[idleOrbit % 4], orbitYs[idleOrbit % 4], 2, SSD1306_WHITE);
+  display.fillCircle(orbitXs[idleOrbit % 4], orbitYs[idleOrbit % 4], 2, SH110X_WHITE);
   display.display();
 }
 
@@ -710,7 +710,7 @@ void setupDisplay() {
     foundAddr = OLED_ADDRESS;
   }
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, foundAddr)) {
+  if (!display.begin(foundAddr, true)) {
     Serial.print("[OLED] display.begin() FAILED at 0x");
     Serial.println(foundAddr, HEX);
     pinMode(LED_BUILTIN, OUTPUT);

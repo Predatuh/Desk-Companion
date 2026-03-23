@@ -1,5 +1,5 @@
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 #include <Wire.h>
 
 #define SCREEN_WIDTH 128
@@ -24,7 +24,7 @@ const PinPair kPinPairs[] = {
 
 const uint8_t kAddresses[] = {0x3C, 0x3D};
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 bool probeAddress(uint8_t address) {
   Wire.beginTransmission(address);
@@ -33,7 +33,7 @@ bool probeAddress(uint8_t address) {
 
 void showSuccess(int sda, int scl, uint8_t address) {
   display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println("OLED OK");
@@ -86,7 +86,7 @@ void setup() {
       Serial.print("[OLED-DIAG] Found response at 0x");
       Serial.println(address, HEX);
 
-      if (display.begin(SSD1306_SWITCHCAPVCC, address)) {
+      if (display.begin(address, true)) {
         Serial.println("[OLED-DIAG] display.begin() OK");
         showSuccess(pair.sda, pair.scl, address);
         return;
