@@ -467,10 +467,20 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
+  const bool switchingNetworks = currentSsid != ssid;
+
+  if (WiFi.status() == WL_CONNECTED || switchingNetworks) {
+    WiFi.disconnect(false, false);
+    delay(250);
+  }
+
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   statusText = "Joining Wi-Fi";
+  currentSsid = ssid;
+  ipAddress = "";
   publishStatus();
 
   const unsigned long start = millis();
@@ -487,6 +497,7 @@ bool connectToWifi(const String& ssid, const String& password) {
 
   currentSsid = ssid;
   ipAddress = WiFi.localIP().toString();
+  WiFi.setAutoReconnect(true);
   preferences.begin("desk-cfg", false);
   preferences.putString("ssid", ssid);
   preferences.putString("pass", password);
@@ -500,7 +511,11 @@ bool connectToWifi(const String& ssid, const String& password) {
 }
 
 void scanWifiNetworks() {
+  WiFi.disconnect(false, false);
+  delay(250);
   WiFi.mode(WIFI_STA);
+  currentSsid = "";
+  ipAddress = "";
   statusText = "Scanning Wi-Fi";
   publishStatus();
 

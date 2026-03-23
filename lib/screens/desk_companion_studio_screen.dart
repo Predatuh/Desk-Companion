@@ -246,10 +246,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             child: OutlinedButton.icon(
                               onPressed: controller.busy || !controller.isBleConnected
                                   ? null
-                                  : () => _perform(
-                                        () => controller.scanWifiNetworks(),
-                                        success: 'Wi-Fi networks refreshed from device.',
-                                      ),
+                                    : () {
+                                        setState(() => _selectedWifiSsid = null);
+                                        _perform(
+                                          () => controller.scanWifiNetworks(),
+                                          success: 'Wi-Fi networks refreshed from device. Pick one from the list.',
+                                        );
+                                      },
                               icon: const Icon(Icons.wifi_find_outlined),
                               label: const Text('Scan networks'),
                             ),
@@ -706,12 +709,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   String? _resolveSelectedWifiSsid(List<String> availableWifiNetworks, String connectedSsid) {
     if (_selectedWifiSsid != null && availableWifiNetworks.contains(_selectedWifiSsid)) {
       return _selectedWifiSsid;
-    }
-    if (connectedSsid.isNotEmpty && availableWifiNetworks.contains(connectedSsid)) {
-      return connectedSsid;
-    }
-    if (availableWifiNetworks.isNotEmpty) {
-      return availableWifiNetworks.first;
     }
     return null;
   }
