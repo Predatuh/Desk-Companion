@@ -13,6 +13,7 @@
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
+#include <string>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -65,6 +66,60 @@ uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
 size_t receivedImageBytes = 0;
 bool imageTransferActive = false;
+
+const char* modeName(DisplayMode mode);
+bool beginHttpClient(HTTPClient& client, WiFiClientSecure& secureClient, const String& url);
+void clearImageBuffer();
+bool decodeBase64IntoImage(const String& input);
+void publishStatus();
+void drawWrappedText(const String& text);
+void renderBannerFrame();
+void renderImage();
+void renderIdle();
+void renderCurrentMode();
+void setIdleStatus(const String& value);
+void setNote(const String& text);
+void setBanner(const String& text, int speed);
+void setImageReady();
+void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
+bool connectToWifi(const String& ssid, const String& password);
+void tryStoredWifi();
+void handleCommandJson(const String& body);
+void handleStatusRoute();
+void handleNoteRoute();
+void handleBannerRoute();
+void handleClearRoute();
+void handleImageRoute();
+void handleRelayRoute();
+void setupHttpServer();
+void pushRelayStatus();
+void pollRelay();
+void setupBle();
+void setupDisplay();
+
+String bleValueToString(const String& value) {
+  return value;
+}
+
+String bleValueToString(const std::string& value) {
+  return String(value.c_str());
+}
+
+size_t bleValueLength(const String& value) {
+  return value.length();
+}
+
+size_t bleValueLength(const std::string& value) {
+  return value.size();
+}
+
+const uint8_t* bleValueData(const String& value) {
+  return reinterpret_cast<const uint8_t*>(value.c_str());
+}
+
+const uint8_t* bleValueData(const std::string& value) {
+  return reinterpret_cast<const uint8_t*>(value.data());
+}
 
 String jsonEscape(const String& value) {
   String escaped;
@@ -519,9 +574,10 @@ class ServerCallbacks : public BLEServerCallbacks {
 
 class CommandCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* characteristic) override {
-    const std::string value = characteristic->getValue();
-    if (!value.empty()) {
-      handleCommandJson(String(value.c_str()));
+    const auto value = characteristic->getValue();
+    const String body = bleValueToString(value);
+    if (!body.isEmpty()) {
+      handleCommandJson(body);
     }
   }
 };
@@ -532,10 +588,10 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
       return;
     }
 
-    const std::string value = characteristic->getValue();
+    const auto value = characteristic->getValue();
     const size_t remaining = sizeof(imageBuffer) - receivedImageBytes;
-    const size_t chunkSize = value.size() < remaining ? value.size() : remaining;
-    memcpy(imageBuffer + receivedImageBytes, value.data(), chunkSize);
+    const size_t chunkSize = bleValueLength(value) < remaining ? bleValueLength(value) : remaining;
+    memcpy(imageBuffer + receivedImageBytes, bleValueData(value), chunkSize);
     receivedImageBytes += chunkSize;
   }
 };
