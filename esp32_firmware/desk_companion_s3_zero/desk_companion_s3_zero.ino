@@ -16,7 +16,7 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-#define OLED_ADDRESS 0x3C
+#define OLED_ADDRESS 0x3D
 
 #define OLED_SDA_PIN -1
 #define OLED_SCL_PIN -1
@@ -693,8 +693,14 @@ void setupDisplay() {
 #endif
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
-    while (true) {
-      delay(1000);
+    // Try the other common address
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+      // Both failed — blink built-in LED as error indicator and halt
+      pinMode(LED_BUILTIN, OUTPUT);
+      while (true) {
+        digitalWrite(LED_BUILTIN, HIGH); delay(200);
+        digitalWrite(LED_BUILTIN, LOW);  delay(200);
+      }
     }
   }
 
