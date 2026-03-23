@@ -26,6 +26,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _relayBaseUrl = '';
   String _deviceToken = '';
   List<String> _availableWifiNetworks = const [];
+  String? _lastRelayError;
   bool _busy = false;
 
   BluetoothDevice? _device;
@@ -244,6 +245,7 @@ class DeskCompanionController extends ChangeNotifier {
           _setStatus('Note queued through relay.');
           return;
         }
+        throw HttpException(_lastRelayError ?? 'Relay send failed.');
       }
       await _sendBleCommand({'type': 'set_note', 'text': text});
       _mode = 'note';
@@ -263,6 +265,7 @@ class DeskCompanionController extends ChangeNotifier {
           _setStatus('Banner queued through relay.');
           return;
         }
+        throw HttpException(_lastRelayError ?? 'Relay send failed.');
       }
       await _sendBleCommand({'type': 'set_banner', 'text': text, 'speed': speed});
       _mode = 'banner';
@@ -311,6 +314,7 @@ class DeskCompanionController extends ChangeNotifier {
           _setStatus('Display clear queued through relay.');
           return;
         }
+        throw HttpException(_lastRelayError ?? 'Relay send failed.');
       }
       await _sendBleCommand({'type': 'clear'});
       _mode = 'idle';
@@ -321,7 +325,9 @@ class DeskCompanionController extends ChangeNotifier {
   Future<bool> _postRelay(Map<String, dynamic> command) async {
     final relayUri = _resolvedRelayUri;
     final token = _deviceToken.trim();
+    _lastRelayError = null;
     if (relayUri == null || token.isEmpty) {
+      _lastRelayError = 'Relay URL or token is missing.';
       return false;
     }
 
@@ -335,9 +341,12 @@ class DeskCompanionController extends ChangeNotifier {
         _setStatus('Queued through relay. Device will apply it when online.');
         return true;
       }
-      _setStatus('Relay request failed: ${response.statusCode}');
+      _lastRelayError = 'Relay request failed: ${response.statusCode}';
+      _setStatus(_lastRelayError!);
       return false;
-    } catch (_) {
+    } catch (error) {
+      _lastRelayError = 'Relay request failed: $error';
+      _setStatus(_lastRelayError!);
       return false;
     }
   }
@@ -390,12 +399,15 @@ class DeskCompanionController extends ChangeNotifier {
     required bool allowRelay,
     required bool silent,
   }) async {
-    if (allowRelay && await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
-      _mode = 'image';
-      if (!silent) {
-        _setStatus('Image queued through relay.');
+    if (allowRelay && hasRelayTarget) {
+      if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
+        _mode = 'image';
+        if (!silent) {
+          _setStatus('Image queued through relay.');
+        }
+        return;
       }
-      return;
+      throw HttpException(_lastRelayError ?? 'Relay send failed.');
     }
 
     await _sendBleCommand({
