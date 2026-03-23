@@ -1,0 +1,566 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:http/http.dart' as http;
+
+import '../models/companion_image_payload.dart';
+
+enum CompanionBleState { disconnected, scanning, connecting, connected }
+
+class DeskCompanionController extends ChangeNotifier {
+  static const String serviceUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f001';
+  static const String commandUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002';
+  static const String statusUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003';
+  static const String imageUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004';
+  static const String targetName = 'Desk Companion S3';
+
+  CompanionBleState _bleState = CompanionBleState.disconnected;
+  String _statusMessage = 'Ready to connect.';
+  String _mode = 'idle';
+  String _deviceIp = '';
+  String _connectedSsid = '';
+  String _manualHost = '';
+  String _deviceName = '';
+  String _relayBaseUrl = '';
+  String _deviceToken = '';
+  bool _busy = false;
+
+  BluetoothDevice? _device;
+  BluetoothCharacteristic? _commandCharacteristic;
+  BluetoothCharacteristic? _statusCharacteristic;
+  BluetoothCharacteristic? _imageCharacteristic;
+
+  StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<List<int>>? _notifySub;
+  StreamSubscription<BluetoothConnectionState>? _connectionSub;
+
+  bool _liveSendInFlight = false;
+  Uint8List? _queuedLiveBitmap;
+
+  CompanionBleState get bleState => _bleState;
+  String get statusMessage => _statusMessage;
+  String get mode => _mode;
+  String get deviceIp => _deviceIp;
+  String get connectedSsid => _connectedSsid;
+  String get manualHost => _manualHost;
+  String get deviceName => _deviceName;
+  String get relayBaseUrl => _relayBaseUrl;
+  String get deviceToken => _deviceToken;
+  bool get busy => _busy;
+  bool get isBleConnected => _bleState == CompanionBleState.connected;
+
+  Uri? get _resolvedBaseUri {
+    final rawHost = _manualHost.trim().isNotEmpty ? _manualHost.trim() : _deviceIp.trim();
+    if (rawHost.isEmpty) {
+      return null;
+    }
+    if (rawHost.startsWith('http://') || rawHost.startsWith('https://')) {
+      return Uri.tryParse(rawHost);
+    }
+    return Uri.tryParse('http://$rawHost');
+  }
+
+  Uri? get _resolvedRelayUri {
+    final raw = _relayBaseUrl.trim();
+    if (raw.isEmpty) {
+      return null;
+    }
+    final normalized = raw.endsWith('/') ? raw : '$raw/';
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Uri.tryParse(normalized);
+    }
+    return Uri.tryParse('https://$normalized');
+  }
+
+  bool get hasHttpTarget => _resolvedBaseUri != null;
+  bool get hasRelayTarget => _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
+
+  void updateManualHost(String value) {
+    _manualHost = value.trim();
+    notifyListeners();
+  }
+
+  void updateRelayBaseUrl(String value) {
+    _relayBaseUrl = value.trim();
+    notifyListeners();
+  }
+
+  void updateDeviceToken(String value) {
+    _deviceToken = value.trim();
+    notifyListeners();
+  }
+
+  Future<void> scanAndConnect() async {
+    if (_bleState != CompanionBleState.disconnected) {
+      return;
+    }
+
+    final adapterState = await FlutterBluePlus.adapterState.first;
+    if (adapterState != BluetoothAdapterState.on) {
+      _setStatus('Bluetooth is off. Turn it on and retry.');
+      if (Platform.isAndroid) {
+        await FlutterBluePlus.turnOn();
+      }
+      return;
+    }
+
+    _setBleState(CompanionBleState.scanning, 'Scanning for Desk Companion S3...');
+
+    await FlutterBluePlus.stopScan();
+    await _scanSub?.cancel();
+    _scanSub = FlutterBluePlus.onScanResults.listen((results) {
+      for (final result in results) {
+        final nameMatches = result.device.platformName == targetName ||
+            result.advertisementData.advName == targetName;
+        final serviceMatches = result.advertisementData.serviceUuids.any(
+          (uuid) => uuid.str.toLowerCase() == serviceUuid,
+        );
+        if (nameMatches || serviceMatches) {
+          FlutterBluePlus.stopScan();
+          unawaited(_connect(result.device));
+          return;
+        }
+      }
+    });
+
+    await FlutterBluePlus.startScan(
+      withServices: [Guid(serviceUuid)],
+      timeout: const Duration(seconds: 10),
+    );
+
+    if (_bleState == CompanionBleState.scanning) {
+      _setBleState(CompanionBleState.disconnected, 'Desk Companion not found over BLE.');
+    }
+  }
+
+  Future<void> _connect(BluetoothDevice device) async {
+    _setBleState(
+      CompanionBleState.connecting,
+      'Connecting to ${device.platformName.isEmpty ? targetName : device.platformName}...',
+    );
+    await _scanSub?.cancel();
+
+    try {
+      await device.connect(autoConnect: false);
+      _device = device;
+      _deviceName = device.platformName.isEmpty ? targetName : device.platformName;
+
+      _connectionSub = device.connectionState.listen((state) {
+        if (state == BluetoothConnectionState.disconnected) {
+          _handleDisconnection();
+        }
+      });
+
+      final services = await device.discoverServices();
+      for (final service in services) {
+        if (service.uuid.str.toLowerCase() != serviceUuid) {
+          continue;
+        }
+        for (final characteristic in service.characteristics) {
+          final uuid = characteristic.uuid.str.toLowerCase();
+          if (uuid == commandUuid) {
+            _commandCharacteristic = characteristic;
+          } else if (uuid == statusUuid) {
+            _statusCharacteristic = characteristic;
+          } else if (uuid == imageUuid) {
+            _imageCharacteristic = characteristic;
+          }
+        }
+      }
+
+      if (_commandCharacteristic == null ||
+          _statusCharacteristic == null ||
+          _imageCharacteristic == null) {
+        await disconnect();
+        _setStatus('Connected device is missing required characteristics.');
+        return;
+      }
+
+      await _statusCharacteristic!.setNotifyValue(true);
+      _notifySub = _statusCharacteristic!.lastValueStream.listen(_handleStatusBytes);
+      final currentStatus = await _statusCharacteristic!.read();
+      _handleStatusBytes(currentStatus);
+      _setBleState(CompanionBleState.connected, 'BLE connected.');
+    } catch (error) {
+      _handleDisconnection();
+      _setStatus('BLE connection failed: $error');
+    }
+  }
+
+  void _handleStatusBytes(List<int> bytes) {
+    if (bytes.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = utf8.decode(bytes).trim();
+      final payload = jsonDecode(decoded);
+      if (payload is Map<String, dynamic>) {
+        _applyStatusMap(payload);
+      }
+    } catch (_) {
+      _setStatus('Received unreadable status from device.');
+    }
+  }
+
+  Future<void> sendWifiCredentials({
+    required String ssid,
+    required String password,
+  }) async {
+    await _runBusy(() async {
+      await _sendBleCommand({
+        'type': 'connect_wifi',
+        'ssid': ssid,
+        'password': password,
+      });
+      _setStatus('Sent Wi-Fi credentials over BLE.');
+    });
+  }
+
+  Future<void> configureRelay({
+    required String relayUrl,
+    required String token,
+  }) async {
+    await _runBusy(() async {
+      final command = {
+        'type': 'set_relay',
+        'relayUrl': relayUrl,
+        'deviceToken': token,
+      };
+      if (hasHttpTarget) {
+        final sent = await _postLocal('/api/relay', {
+          'relayUrl': relayUrl,
+          'deviceToken': token,
+        });
+        if (sent) {
+          _relayBaseUrl = relayUrl.trim();
+          _deviceToken = token.trim();
+          _setStatus('Relay configuration saved over Wi-Fi.');
+          return;
+        }
+      }
+      await _sendBleCommand(command);
+      _relayBaseUrl = relayUrl.trim();
+      _deviceToken = token.trim();
+      _setStatus('Relay configuration sent over BLE.');
+    });
+  }
+
+  Future<void> refreshDeviceStatus() async {
+    await _runBusy(() async {
+      if (hasHttpTarget) {
+        await _fetchLocalStatus();
+        return;
+      }
+      if (hasRelayTarget) {
+        await _fetchRelayStatus();
+        return;
+      }
+      await _sendBleCommand({'type': 'status'});
+    });
+  }
+
+  Future<void> sendNote(String text, {required bool preferHttp}) async {
+    await _runBusy(() async {
+      if (preferHttp) {
+        final sent = await _postLocal('/api/note', {'text': text}) ||
+            await _postRelay({'type': 'set_note', 'text': text});
+        if (sent) {
+          _mode = 'note';
+          _setStatus(hasHttpTarget ? 'Note sent over Wi-Fi.' : 'Note queued through relay.');
+          return;
+        }
+      }
+      await _sendBleCommand({'type': 'set_note', 'text': text});
+      _mode = 'note';
+      _setStatus('Note sent over BLE.');
+    });
+  }
+
+  Future<void> sendBanner(
+    String text, {
+    required int speed,
+    required bool preferHttp,
+  }) async {
+    await _runBusy(() async {
+      if (preferHttp) {
+        final sent = await _postLocal('/api/banner', {'text': text, 'speed': speed}) ||
+            await _postRelay({'type': 'set_banner', 'text': text, 'speed': speed});
+        if (sent) {
+          _mode = 'banner';
+          _setStatus(hasHttpTarget ? 'Banner sent over Wi-Fi.' : 'Banner queued through relay.');
+          return;
+        }
+      }
+      await _sendBleCommand({'type': 'set_banner', 'text': text, 'speed': speed});
+      _mode = 'banner';
+      _setStatus('Banner sent over BLE.');
+    });
+  }
+
+  Future<void> sendImage(
+    CompanionImagePayload payload, {
+    required bool preferHttp,
+  }) async {
+    await _runBusy(() async {
+      await _sendBitmap(
+        payload.bitmap,
+        preferHttp: preferHttp,
+        allowRelay: true,
+        silent: false,
+      );
+    });
+  }
+
+  Future<void> sendLiveBitmap(
+    Uint8List bitmap, {
+    required bool preferHttp,
+  }) async {
+    _queuedLiveBitmap = Uint8List.fromList(bitmap);
+    if (_liveSendInFlight) {
+      return;
+    }
+
+    _liveSendInFlight = true;
+    try {
+      while (_queuedLiveBitmap != null) {
+        final nextBitmap = _queuedLiveBitmap!;
+        _queuedLiveBitmap = null;
+        await _sendBitmap(
+          nextBitmap,
+          preferHttp: preferHttp,
+          allowRelay: false,
+          silent: true,
+        );
+      }
+    } finally {
+      _liveSendInFlight = false;
+    }
+  }
+
+  Future<void> clearDisplay({required bool preferHttp}) async {
+    await _runBusy(() async {
+      if (preferHttp) {
+        final sent = await _postLocal('/api/clear', const {}) ||
+            await _postRelay({'type': 'clear'});
+        if (sent) {
+          _mode = 'idle';
+          _setStatus(hasHttpTarget ? 'Display cleared over Wi-Fi.' : 'Display clear queued through relay.');
+          return;
+        }
+      }
+      await _sendBleCommand({'type': 'clear'});
+      _mode = 'idle';
+      _setStatus('Display cleared over BLE.');
+    });
+  }
+
+  Future<bool> _postLocal(String path, Map<String, dynamic> body) async {
+    final baseUri = _resolvedBaseUri;
+    if (baseUri == null) {
+      return false;
+    }
+
+    try {
+      final response = await http.post(
+        baseUri.resolve(path),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode(body),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await _fetchLocalStatus();
+        return true;
+      }
+      _setStatus('Wi-Fi request failed: ${response.statusCode}');
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _postRelay(Map<String, dynamic> command) async {
+    final relayUri = _resolvedRelayUri;
+    final token = _deviceToken.trim();
+    if (relayUri == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await http.post(
+        relayUri.resolve('v1/device/$token/command'),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({'command': command}),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        _setStatus('Queued through relay. Device will apply it when online.');
+        return true;
+      }
+      _setStatus('Relay request failed: ${response.statusCode}');
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _fetchLocalStatus() async {
+    final baseUri = _resolvedBaseUri;
+    if (baseUri == null) {
+      return;
+    }
+
+    final response = await http.get(baseUri.resolve('/api/status'));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _setStatus('Failed to read device status over Wi-Fi.');
+      return;
+    }
+
+    final payload = jsonDecode(response.body);
+    if (payload is Map<String, dynamic>) {
+      _applyStatusMap(payload);
+    }
+  }
+
+  Future<void> _fetchRelayStatus() async {
+    final relayUri = _resolvedRelayUri;
+    final token = _deviceToken.trim();
+    if (relayUri == null || token.isEmpty) {
+      return;
+    }
+
+    final response = await http.get(relayUri.resolve('v1/device/$token/status'));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _setStatus('Failed to read relay device status.');
+      return;
+    }
+
+    final payload = jsonDecode(response.body);
+    if (payload is! Map<String, dynamic>) {
+      return;
+    }
+
+    final lastStatus = payload['lastStatus'];
+    if (lastStatus is Map<String, dynamic>) {
+      _applyStatusMap(lastStatus);
+    }
+  }
+
+  void _applyStatusMap(Map<String, dynamic> payload) {
+    _mode = (payload['mode'] as String? ?? _mode).trim();
+    _deviceIp = (payload['ip'] as String? ?? _deviceIp).trim();
+    _connectedSsid = (payload['ssid'] as String? ?? _connectedSsid).trim();
+    _statusMessage = (payload['status'] as String? ?? _statusMessage).trim();
+    _relayBaseUrl = (payload['relayUrl'] as String? ?? _relayBaseUrl).trim();
+    _deviceToken = (payload['deviceToken'] as String? ?? _deviceToken).trim();
+    notifyListeners();
+  }
+
+  Future<void> _sendBitmap(
+    Uint8List bitmap, {
+    required bool preferHttp,
+    required bool allowRelay,
+    required bool silent,
+  }) async {
+    if (preferHttp && await _postLocal('/api/image', {'data': base64Encode(bitmap)})) {
+      _mode = 'image';
+      if (!silent) {
+        _setStatus('Image sent over Wi-Fi.');
+      }
+      return;
+    }
+
+    if (allowRelay && await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
+      _mode = 'image';
+      if (!silent) {
+        _setStatus('Image queued through relay.');
+      }
+      return;
+    }
+
+    await _sendBleCommand({
+      'type': 'begin_image',
+      'total': bitmap.length,
+    });
+
+    const chunkSize = 180;
+    for (var offset = 0; offset < bitmap.length; offset += chunkSize) {
+      final end = (offset + chunkSize < bitmap.length)
+          ? offset + chunkSize
+          : bitmap.length;
+      await _imageCharacteristic!.write(
+        bitmap.sublist(offset, end),
+        withoutResponse: true,
+      );
+    }
+
+    await _sendBleCommand({'type': 'commit_image'});
+    _mode = 'image';
+    if (!silent) {
+      _setStatus('Image sent over BLE.');
+    }
+  }
+
+  Future<void> _sendBleCommand(Map<String, dynamic> body) async {
+    if (_commandCharacteristic == null || !isBleConnected) {
+      throw HttpException('BLE is not connected.');
+    }
+    await _commandCharacteristic!.write(
+      utf8.encode(jsonEncode(body)),
+      withoutResponse: false,
+    );
+  }
+
+  Future<void> disconnect() async {
+    await _scanSub?.cancel();
+    await _notifySub?.cancel();
+    await _connectionSub?.cancel();
+    await _device?.disconnect();
+    _handleDisconnection();
+  }
+
+  void _handleDisconnection() {
+    _bleState = CompanionBleState.disconnected;
+    _device = null;
+    _commandCharacteristic = null;
+    _statusCharacteristic = null;
+    _imageCharacteristic = null;
+    _deviceName = '';
+    notifyListeners();
+  }
+
+  Future<void> _runBusy(Future<void> Function() action) async {
+    if (_busy) {
+      return;
+    }
+
+    _busy = true;
+    notifyListeners();
+    try {
+      await action();
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  void _setStatus(String value) {
+    _statusMessage = value;
+    notifyListeners();
+  }
+
+  void _setBleState(CompanionBleState value, String status) {
+    _bleState = value;
+    _statusMessage = status;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _scanSub?.cancel();
+    _notifySub?.cancel();
+    _connectionSub?.cancel();
+    _device?.disconnect();
+    super.dispose();
+  }
+}

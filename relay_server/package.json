@@ -1,0 +1,9 @@
+{
+  "name": "desk-companion-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny relay queue for the Desk Companion ESP32 display.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
