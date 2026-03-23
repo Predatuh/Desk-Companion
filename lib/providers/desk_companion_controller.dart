@@ -55,57 +55,37 @@ class DeskCompanionController extends ChangeNotifier {
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
-    if (sanitized.isEmpty) {
-      return null;
-    }
-    final normalized = sanitized.endsWith('/') ? sanitized : '$sanitized/';
-    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-      return Uri.tryParse(normalized);
-    }
-    return Uri.tryParse('http://$normalized');
+    if (sanitized.isEmpty) return null;
+    final withScheme = (sanitized.startsWith('http://') || sanitized.startsWith('https://'))
+        ? sanitized
+        : 'http://$sanitized';
+    return Uri.tryParse('$withScheme/');
   }
 
   bool get hasRelayTarget => _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
 
-  String _sanitizeRelayBaseUrl(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return '';
+  static String _sanitizeRelayBaseUrl(String value) {
+    var url = value.trim();
+    if (url.isEmpty) return '';
+
+    // Strip query string and fragment.
+    final qIdx = url.indexOf('?');
+    if (qIdx != -1) url = url.substring(0, qIdx);
+    final hIdx = url.indexOf('#');
+    if (hIdx != -1) url = url.substring(0, hIdx);
+
+    // Strip known relay path suffixes so pasted full URLs still work.
+    final v1Idx = url.indexOf('/v1/device');
+    if (v1Idx != -1) url = url.substring(0, v1Idx);
+    final healthIdx = url.indexOf('/health');
+    if (healthIdx != -1) url = url.substring(0, healthIdx);
+
+    // Remove trailing slashes.
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
     }
 
-    final hasScheme = trimmed.startsWith('http://') || trimmed.startsWith('https://');
-    final parsed = Uri.tryParse(hasScheme ? trimmed : 'http://$trimmed');
-    if (parsed == null || parsed.host.isEmpty) {
-      return trimmed;
-    }
-
-    final segments = parsed.pathSegments.where((segment) => segment.isNotEmpty).toList();
-    final relayPrefixIndex = _findRelayPrefixIndex(segments);
-    final normalizedSegments = relayPrefixIndex == -1
-        ? <String>[]
-        : segments.sublist(0, relayPrefixIndex);
-    final normalizedPath = normalizedSegments.isEmpty ? '/' : '/${normalizedSegments.join('/')}/';
-    final normalizedUri = parsed.replace(
-      path: normalizedPath,
-      query: null,
-      fragment: null,
-    );
-
-    return hasScheme
-        ? normalizedUri.toString()
-        : normalizedUri.toString().replaceFirst(RegExp(r'^http://'), '');
-  }
-
-  int _findRelayPrefixIndex(List<String> segments) {
-    for (var index = 0; index < segments.length - 1; index += 1) {
-      if (segments[index] == 'v1' && segments[index + 1] == 'device') {
-        return index;
-      }
-    }
-    if (segments.length == 1 && segments.first == 'health') {
-      return 0;
-    }
-    return segments.length;
+    return url;
   }
 
   void updateRelayBaseUrl(String value) {
@@ -422,7 +402,9 @@ class DeskCompanionController extends ChangeNotifier {
     _deviceIp = (payload['ip'] as String? ?? _deviceIp).trim();
     _connectedSsid = (payload['ssid'] as String? ?? _connectedSsid).trim();
     _statusMessage = (payload['status'] as String? ?? _statusMessage).trim();
-    _relayBaseUrl = (payload['relayUrl'] as String? ?? _relayBaseUrl).trim();
+    _relayBaseUrl = _sanitizeRelayBaseUrl(
+      payload['relayUrl'] as String? ?? _relayBaseUrl,
+    );
     _deviceToken = (payload['deviceToken'] as String? ?? _deviceToken).trim();
     final wifiNetworks = payload['wifiNetworks'];
     if (wifiNetworks is List) {
