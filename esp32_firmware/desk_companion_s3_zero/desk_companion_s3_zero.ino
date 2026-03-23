@@ -1,5 +1,3 @@
-#include <dummy.h>
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <BLE2902.h>
@@ -11,7 +9,6 @@
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -70,7 +67,7 @@ size_t receivedImageBytes = 0;
 bool imageTransferActive = false;
 
 const char* modeName(DisplayMode mode);
-bool beginHttpClient(HTTPClient& client, WiFiClientSecure& secureClient, const String& url);
+bool beginHttpClient(HTTPClient& client, const String& url);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
@@ -252,10 +249,9 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-bool beginHttpClient(HTTPClient& client, WiFiClientSecure& secureClient, const String& url) {
+bool beginHttpClient(HTTPClient& client, const String& url) {
   if (url.startsWith("https://")) {
-    secureClient.setInsecure();
-    return client.begin(secureClient, url);
+    return false;
   }
   return client.begin(url);
 }
@@ -671,8 +667,7 @@ void pushRelayStatus() {
   }
 
   HTTPClient client;
-  WiFiClientSecure secureClient;
-  if (!beginHttpClient(client, secureClient, relayUrl + "/v1/device/" + deviceToken + "/status")) {
+  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/status")) {
     return;
   }
   client.addHeader("Content-Type", "application/json");
@@ -694,8 +689,7 @@ void pollRelay() {
   lastRelayPollMs = millis();
 
   HTTPClient client;
-  WiFiClientSecure secureClient;
-  if (!beginHttpClient(client, secureClient, relayUrl + "/v1/device/" + deviceToken + "/pull")) {
+  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/pull")) {
     return;
   }
 

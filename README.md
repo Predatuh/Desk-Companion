@@ -99,3 +99,7 @@ node server.js
 ```
 
 The ESP32 stores the relay base URL and token, then polls the relay for queued commands.
+
+Firmware note:
+
+- For the ESP32-S3 Zero build in this repo, use an `http://` relay URL instead of `https://` to keep the sketch within the default app size limit.
