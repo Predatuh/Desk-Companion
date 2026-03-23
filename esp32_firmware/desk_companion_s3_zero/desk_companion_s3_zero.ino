@@ -353,16 +353,10 @@ void drawWrappedText(const String& text) {
 
 void renderBannerFrame() {
   display.clearDisplay();
-  display.fillRect(0, 0, SCREEN_WIDTH, 14, SH110X_WHITE);
-  display.setTextColor(SH110X_BLACK);
-  display.setTextSize(1);
-  display.setCursor(6, 3);
-  display.print("FOR YOUR DESK");
   display.setTextColor(SH110X_WHITE);
-  display.drawLine(0, 18, SCREEN_WIDTH - 1, 18, SH110X_WHITE);
   display.setTextSize(2);
   display.setTextWrap(false);
-  display.setCursor(bannerOffset, 32);
+  display.setCursor(bannerOffset, 24);
   display.print(currentBanner);
   display.display();
 }
