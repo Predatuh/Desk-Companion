@@ -692,22 +692,36 @@ void setupDisplay() {
   Wire.begin();
 #endif
 
-  // Probe bus to find the actual I2C address before initialising
+  delay(100); // allow display to settle after power-on
+
+  // Probe bus to find the actual I2C address
   uint8_t foundAddr = 0;
   for (uint8_t addr : {0x3C, 0x3D}) {
     Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) { foundAddr = addr; break; }
+    if (Wire.endTransmission() == 0) {
+      foundAddr = addr;
+      Serial.print("[OLED] Found I2C device at 0x");
+      Serial.println(addr, HEX);
+      break;
+    }
   }
-  if (foundAddr == 0) foundAddr = OLED_ADDRESS; // best-guess fallback
+  if (foundAddr == 0) {
+    Serial.println("[OLED] ERROR: No I2C device found! Check SDA/SCL wiring.");
+    foundAddr = OLED_ADDRESS;
+  }
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, foundAddr)) {
-    // Still failed — blink LED and halt
+    Serial.print("[OLED] display.begin() FAILED at 0x");
+    Serial.println(foundAddr, HEX);
     pinMode(LED_BUILTIN, OUTPUT);
     while (true) {
       digitalWrite(LED_BUILTIN, HIGH); delay(200);
       digitalWrite(LED_BUILTIN, LOW);  delay(200);
     }
   }
+
+  Serial.print("[OLED] display.begin() OK at 0x");
+  Serial.println(foundAddr, HEX);
 
   display.clearDisplay();
   display.display();
