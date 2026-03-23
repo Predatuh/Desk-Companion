@@ -25,6 +25,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceName = '';
   String _relayBaseUrl = '';
   String _deviceToken = '';
+  List<String> _availableWifiNetworks = const [];
   bool _busy = false;
 
   BluetoothDevice? _device;
@@ -47,6 +48,7 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceName => _deviceName;
   String get relayBaseUrl => _relayBaseUrl;
   String get deviceToken => _deviceToken;
+  List<String> get availableWifiNetworks => _availableWifiNetworks;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
 
@@ -197,6 +199,13 @@ class DeskCompanionController extends ChangeNotifier {
         'password': password,
       });
       _setStatus('Sent Wi-Fi credentials over BLE.');
+    });
+  }
+
+  Future<void> scanWifiNetworks() async {
+    await _runBusy(() async {
+      await _sendBleCommand({'type': 'scan_wifi'});
+      _setStatus('Requested Wi-Fi scan from device.');
     });
   }
 
@@ -364,6 +373,15 @@ class DeskCompanionController extends ChangeNotifier {
     _statusMessage = (payload['status'] as String? ?? _statusMessage).trim();
     _relayBaseUrl = (payload['relayUrl'] as String? ?? _relayBaseUrl).trim();
     _deviceToken = (payload['deviceToken'] as String? ?? _deviceToken).trim();
+    final wifiNetworks = payload['wifiNetworks'];
+    if (wifiNetworks is List) {
+      _availableWifiNetworks = wifiNetworks
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+    }
     notifyListeners();
   }
 

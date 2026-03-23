@@ -64,6 +64,8 @@ unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
+String availableWifiNetworks[10];
+int availableWifiNetworkCount = 0;
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -98,6 +100,7 @@ void setBanner(const String& text, int speed);
 void setImageReady();
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
 bool connectToWifi(const String& ssid, const String& password);
+void scanWifiNetworks();
 void tryStoredWifi();
 void handleCommandJson(const String& body);
 void pushRelayStatus();
@@ -241,7 +244,15 @@ String buildStatusJson() {
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
-  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\"";
+  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
+  json += "\"wifiNetworks\":[";
+  for (int i = 0; i < availableWifiNetworkCount; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
+  }
+  json += "]";
   json += "}";
   return json;
 }
@@ -374,9 +385,9 @@ void renderIdle() {
   display.setCursor(12, 24);
   display.println(ipAddress.isEmpty() ? "Waiting for Wi-Fi" : ipAddress);
   display.setCursor(12, 38);
-  display.println("Use the phone app");
+  display.println("Use app or website");
   display.setCursor(12, 50);
-  display.println("to send love notes");
+  display.println("to interact");
 
   const int orbitXs[4] = {100, 108, 116, 108};
   const int orbitYs[4] = {22, 14, 22, 30};
@@ -490,6 +501,40 @@ bool connectToWifi(const String& ssid, const String& password) {
   return true;
 }
 
+void scanWifiNetworks() {
+  WiFi.mode(WIFI_STA);
+  statusText = "Scanning Wi-Fi";
+  publishStatus();
+
+  WiFi.scanDelete();
+  availableWifiNetworkCount = 0;
+
+  const int foundNetworks = WiFi.scanNetworks();
+  for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.isEmpty()) {
+      continue;
+    }
+
+    bool duplicate = false;
+    for (int existing = 0; existing < availableWifiNetworkCount; existing++) {
+      if (availableWifiNetworks[existing] == ssid) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
+      continue;
+    }
+
+    availableWifiNetworks[availableWifiNetworkCount++] = ssid;
+  }
+
+  WiFi.scanDelete();
+  statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+  publishStatus();
+}
+
 void tryStoredWifi() {
   preferences.begin("desk-cfg", true);
   currentSsid = preferences.getString("ssid", "");
@@ -516,6 +561,11 @@ void handleCommandJson(const String& body) {
       extractJsonStringField(body, "ssid"),
       extractJsonStringField(body, "password")
     );
+    return;
+  }
+
+  if (type == "scan_wifi") {
+    scanWifiNetworks();
     return;
   }
 

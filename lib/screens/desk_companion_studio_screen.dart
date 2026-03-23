@@ -21,12 +21,12 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
-  final _wifiSsidController = TextEditingController();
   final _wifiPasswordController = TextEditingController();
   final _relayUrlController = TextEditingController();
   final _deviceTokenController = TextEditingController();
   final _noteController = TextEditingController();
   final _bannerController = TextEditingController(text: 'miss you already <3');
+  String? _selectedWifiSsid;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -40,7 +40,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   @override
   void dispose() {
-    _wifiSsidController.dispose();
     _wifiPasswordController.dispose();
     _relayUrlController.dispose();
     _deviceTokenController.dispose();
@@ -53,6 +52,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DeskCompanionController>();
+    final availableWifiNetworks = controller.availableWifiNetworks;
+    final selectedWifiSsid = _resolveSelectedWifiSsid(
+      availableWifiNetworks,
+      controller.connectedSsid,
+    );
 
     _syncController(_relayUrlController, controller.relayBaseUrl);
     _syncController(_deviceTokenController, controller.deviceToken);
@@ -211,12 +215,26 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Wi-Fi setup',
-                  subtitle: 'Provision the desk device over BLE so it joins the same network as your phone.',
+                  subtitle: 'Scan Wi-Fi from the device, pick a network, then send only the password.',
                   child: Column(
                     children: [
-                      TextField(
-                        controller: _wifiSsidController,
-                        decoration: const InputDecoration(labelText: 'Wi-Fi name'),
+                      DropdownButtonFormField<String>(
+                        value: selectedWifiSsid,
+                        items: availableWifiNetworks
+                            .map(
+                              (ssid) => DropdownMenuItem<String>(
+                                value: ssid,
+                                child: Text(ssid, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: controller.busy || !controller.isBleConnected
+                            ? null
+                            : (value) => setState(() => _selectedWifiSsid = value),
+                        decoration: const InputDecoration(
+                          labelText: 'Wi-Fi network',
+                          hintText: 'Scan from device first',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -225,16 +243,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         decoration: const InputDecoration(labelText: 'Wi-Fi password'),
                       ),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy || !controller.isBleConnected
-                              ? null
-                              : () => _sendWifi(controller),
-                          icon: const Icon(Icons.wifi),
-                          label: const Text('Send Wi-Fi credentials'),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy || !controller.isBleConnected
+                                  ? null
+                                  : () => _perform(
+                                        () => controller.scanWifiNetworks(),
+                                        success: 'Wi-Fi networks refreshed from device.',
+                                      ),
+                              icon: const Icon(Icons.wifi_find_outlined),
+                              label: const Text('Scan networks'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: controller.busy || !controller.isBleConnected || selectedWifiSsid == null
+                                  ? null
+                                  : () => _sendWifi(controller),
+                              icon: const Icon(Icons.wifi),
+                              label: const Text('Send password'),
+                            ),
+                          ),
+                        ],
                       ),
+                      if (availableWifiNetworks.isEmpty) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'No scanned networks yet. Connect over BLE and tap Scan networks.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -604,13 +648,34 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendWifi(DeskCompanionController controller) async {
+    final selectedWifiSsid = _resolveSelectedWifiSsid(
+      controller.availableWifiNetworks,
+      controller.connectedSsid,
+    );
+    if (selectedWifiSsid == null) {
+      _showMessage('Scan and pick a Wi-Fi network first.');
+      return;
+    }
     await _perform(
       () => controller.sendWifiCredentials(
-        ssid: _wifiSsidController.text.trim(),
+        ssid: selectedWifiSsid,
         password: _wifiPasswordController.text,
       ),
       success: 'Wi-Fi credentials sent. Use refresh once the display joins.',
     );
+  }
+
+  String? _resolveSelectedWifiSsid(List<String> availableWifiNetworks, String connectedSsid) {
+    if (_selectedWifiSsid != null && availableWifiNetworks.contains(_selectedWifiSsid)) {
+      return _selectedWifiSsid;
+    }
+    if (connectedSsid.isNotEmpty && availableWifiNetworks.contains(connectedSsid)) {
+      return connectedSsid;
+    }
+    if (availableWifiNetworks.isNotEmpty) {
+      return availableWifiNetworks.first;
+    }
+    return null;
   }
 
   Future<void> _saveRelay(DeskCompanionController controller) async {
