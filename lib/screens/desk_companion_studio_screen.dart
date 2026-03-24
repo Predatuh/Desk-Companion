@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -62,7 +60,6 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
-  final _notePreviewKey = GlobalKey();
   final _wifiPasswordController = TextEditingController();
   final _relayUrlController = TextEditingController();
   final _deviceTokenController = TextEditingController();
@@ -70,10 +67,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _bannerController = TextEditingController(text: 'miss you already <3');
   String? _selectedWifiSsid;
   double _noteFontSize = 1;
-  NoteBorderStyle _noteBorderStyle = NoteBorderStyle.none;
-  final Set<NoteSticker> _noteStickers = <NoteSticker>{};
-  Uint8List? _customNoteFrameBytes;
-  String? _customNoteFrameName;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -86,18 +79,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _brushSize = 2;
   DeskExpression _selectedExpression = DeskExpression.happy;
   Timer? _liveSyncTimer;
-  Future<CompanionImagePayload>? _notePreviewFuture;
 
   @override
   void initState() {
     super.initState();
-    _noteController.addListener(_handleNoteChanged);
-    _invalidateNotePreview();
+    _noteController.addListener(_onNoteTextChanged);
   }
 
   @override
   void dispose() {
-    _noteController.removeListener(_handleNoteChanged);
+    _noteController.removeListener(_onNoteTextChanged);
     _wifiPasswordController.dispose();
     _relayUrlController.dispose();
     _deviceTokenController.dispose();
@@ -107,15 +98,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     super.dispose();
   }
 
-  void _handleNoteChanged() {
-    if (!mounted) {
-      return;
-    }
-    setState(() => _invalidateNotePreview());
-  }
-
-  void _invalidateNotePreview() {
-    _notePreviewFuture = _buildNoteCardPayload();
+  void _onNoteTextChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -400,7 +384,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 _SectionCard(
                   title: 'Sticky note',
                   subtitle:
-                      'Build an exact 128x64 note card with icons, borders, and custom frames.',
+                      'Type a message — rendered with the display\'s crisp built-in font.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -424,103 +408,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       Slider(
                         min: 1,
-                        max: 6,
-                        divisions: 5,
+                        max: 4,
+                        divisions: 3,
                         value: _noteFontSize,
                         onChanged: (value) => setState(() {
                           _noteFontSize = value;
-                          _invalidateNotePreview();
                         }),
                       ),
-                      Text(
-                        'Border style',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: NoteBorderStyle.values
-                            .map(
-                              (style) => ChoiceChip(
-                                label: Text(style.label),
-                                selected: _noteBorderStyle == style,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(() {
-                                          _noteBorderStyle = style;
-                                          _invalidateNotePreview();
-                                        }),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
                       Text(
-                        'Sticker icons',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: NoteSticker.values
-                            .map(
-                              (sticker) => FilterChip(
-                                label: Text(sticker.label),
-                                selected: _noteStickers.contains(sticker),
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(() {
-                                          if (_noteStickers.contains(sticker)) {
-                                            _noteStickers.remove(sticker);
-                                          } else {
-                                            _noteStickers.add(sticker);
-                                          }
-                                          _invalidateNotePreview();
-                                        }),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  controller.busy ? null : _pickCustomNoteFrame,
-                              icon: const Icon(Icons.upload_file_outlined),
-                              label: const Text('Upload frame'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ||
-                                      _customNoteFrameBytes == null
-                                  ? null
-                                  : () => setState(() {
-                                        _customNoteFrameBytes = null;
-                                        _customNoteFrameName = null;
-                                        _invalidateNotePreview();
-                                      }),
-                              icon: const Icon(Icons.backspace_outlined),
-                              label: const Text('Clear frame'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_customNoteFrameName != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Custom frame: $_customNoteFrameName',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Text(
-                        'Exact OLED preview',
+                        'Preview',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 8),
@@ -532,63 +429,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: SizedBox(
-                              width: 128,
-                              height: 64,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  Opacity(
-                                    opacity: 0.01,
-                                    child: IgnorePointer(
-                                      child: RepaintBoundary(
-                                        key: _notePreviewKey,
-                                        child: NoteCardPreview(
-                                          text: _boundedNoteText(),
-                                          fontSize: _noteFontSize.round(),
-                                          borderStyle: _noteBorderStyle,
-                                          stickers: _noteStickers,
-                                          customFrameBytes:
-                                              _customNoteFrameBytes,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  FutureBuilder<CompanionImagePayload>(
-                                    future: _notePreviewFuture,
-                                    builder: (context, snapshot) {
-                                      final previewBytes =
-                                          snapshot.data?.previewPng;
-                                      if (previewBytes == null) {
-                                        return const Center(
-                                          child: SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          ),
-                                        );
-                                      }
-
-                                      return Image.memory(
-                                        previewBytes,
-                                        gaplessPlayback: true,
-                                        filterQuality: FilterQuality.none,
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
+                            child: NoteCardPreview(
+                              text: _noteController.text.characters
+                                  .take(kMaxNoteCharacters)
+                                  .toString(),
+                              fontSize: _noteFontSize.round(),
                             ),
                           ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: controller.busy ? null : _showNotePreview,
-                          icon: const Icon(Icons.preview_outlined),
-                          label: const Text('Preview note'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -1083,107 +930,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendNote(DeskCompanionController controller) async {
+    final text = _noteController.text.characters
+        .take(kMaxNoteCharacters)
+        .toString()
+        .trim();
+    if (text.isEmpty) return;
     await _perform(
-      () async {
-        final payload = await (_notePreviewFuture ?? _buildNoteCardPayload());
-        await controller.sendImage(payload);
-      },
+      () => controller.sendNote(text, fontSize: _noteFontSize.round()),
       success: controller.hasRelayTarget && !controller.isBleConnected
-          ? 'Note card delivered over relay.'
-          : 'Note card delivered.',
+          ? 'Note delivered over relay.'
+          : 'Note delivered.',
     );
-  }
-
-  void _showNotePreview() {
-    _notePreviewFuture ??= _buildNoteCardPayload();
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Note preview'),
-        content: FutureBuilder<CompanionImagePayload>(
-          future: _notePreviewFuture,
-          builder: (context, snapshot) {
-            final previewBytes = snapshot.data?.previewPng;
-            if (previewBytes == null) {
-              return const SizedBox(
-                width: 128,
-                height: 64,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            return FittedBox(
-              fit: BoxFit.contain,
-              child: Image.memory(
-                previewBytes,
-                width: 128,
-                height: 64,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.none,
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _boundedNoteText() {
-    final boundedNote =
-        _noteController.text.characters.take(kMaxNoteCharacters).toString();
-    return boundedNote;
-  }
-
-  Future<void> _pickCustomNoteFrame() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
-      withData: true,
-    );
-    final file = result?.files.singleOrNull;
-    final bytes = file?.bytes;
-    if (!mounted || bytes == null) {
-      return;
-    }
-
-    setState(() {
-      _customNoteFrameBytes = bytes;
-      _customNoteFrameName = file?.name;
-      _invalidateNotePreview();
-    });
-  }
-
-  Future<CompanionImagePayload> _buildNoteCardPayload() async {
-    final previewPng = await _capturePreviewPng();
-    return OledBitmapCodec.encodeImage(
-      sourceBytes: previewPng,
-      name: 'custom_note_card',
-      threshold: 100,
-      invert: true,
-    );
-  }
-
-  Future<Uint8List> _capturePreviewPng() async {
-    await WidgetsBinding.instance.endOfFrame;
-    final context = _notePreviewKey.currentContext;
-    final boundary = context?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) {
-      throw StateError('Note preview is not ready yet.');
-    }
-
-    final image = await boundary.toImage(pixelRatio: 4);
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      throw StateError('Could not capture note preview.');
-    }
-
-    return byteData.buffer.asUint8List();
   }
 
   Future<void> _sendBanner(DeskCompanionController controller) async {

@@ -336,11 +336,10 @@ void publishStatus() {
 
 void drawWrappedText(const String& text, int fontSize) {
   display.clearDisplay();
-  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 8, SH110X_WHITE);
   display.setTextColor(SH110X_WHITE);
-  const int safeFontSize = fontSize < 1 ? 1 : (fontSize > 2 ? 2 : fontSize);
-  const int horizontalPadding = 8;
-  const int maxLines = 6;
+  const int safeFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
+  const int horizontalPadding = 4;
+  const int maxLines = safeFontSize >= 3 ? 2 : (safeFontSize == 2 ? 4 : 6);
   const int lineHeight = (8 * safeFontSize) + 2;
   const int maxChars = (SCREEN_WIDTH - (horizontalPadding * 2)) / (6 * safeFontSize);
   String lines[maxLines];
@@ -373,8 +372,8 @@ void drawWrappedText(const String& text, int fontSize) {
 
   const int totalHeight = lineCount * lineHeight;
   int cursorY = (SCREEN_HEIGHT - totalHeight) / 2;
-  if (cursorY < 8) {
-    cursorY = 8;
+  if (cursorY < 2) {
+    cursorY = 2;
   }
 
   for (int i = 0; i < lineCount; i++) {
@@ -451,32 +450,44 @@ void renderCurrentMode() {
 
 // ─── EMO-style expression drawing helpers ───
 
-void drawEyeRect(int cx, int cy, int w, int h, int r) {
+// Draw a filled rounded-rect eye with a black pupil inside
+void drawEye(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy) {
   display.fillRoundRect(cx - w / 2, cy - h / 2, w, h, r, SH110X_WHITE);
+  // Black pupil cut-out
+  display.fillCircle(cx + pupilDx, cy + pupilDy, 4, SH110X_BLACK);
 }
 
+// Draw a closed/blink eye (thin horizontal slit)
+void drawBlinkEye(int cx, int cy, int w) {
+  display.fillRoundRect(cx - w / 2, cy - 2, w, 5, 2, SH110X_WHITE);
+}
+
+// Draw squinted happy-arc eyes (^^)
 void drawHappyArc(int cx, int cy, int w) {
   for (int t = 0; t < 4; t++) {
     int hw = w / 2;
-    display.drawLine(cx - hw, cy + 3 + t, cx, cy - 3 + t, SH110X_WHITE);
-    display.drawLine(cx, cy - 3 + t, cx + hw, cy + 3 + t, SH110X_WHITE);
+    display.drawLine(cx - hw, cy + 4 + t, cx, cy - 4 + t, SH110X_WHITE);
+    display.drawLine(cx, cy - 4 + t, cx + hw, cy + 4 + t, SH110X_WHITE);
   }
 }
 
-void drawThickSmile(int cx, int cy, int w) {
+// Thick U-shaped smile
+void drawSmile(int cx, int cy, int w) {
   for (int t = 0; t < 3; t++) {
     int hw = w / 2;
-    display.drawLine(cx - hw, cy + t, cx - hw / 3, cy + 5 + t, SH110X_WHITE);
-    display.drawLine(cx - hw / 3, cy + 5 + t, cx + hw / 3, cy + 5 + t, SH110X_WHITE);
-    display.drawLine(cx + hw / 3, cy + 5 + t, cx + hw, cy + t, SH110X_WHITE);
+    display.drawLine(cx - hw, cy + t, cx - hw / 3, cy + 6 + t, SH110X_WHITE);
+    display.drawLine(cx - hw / 3, cy + 6 + t, cx + hw / 3, cy + 6 + t, SH110X_WHITE);
+    display.drawLine(cx + hw / 3, cy + 6 + t, cx + hw, cy + t, SH110X_WHITE);
   }
 }
 
+// Puckered kiss lips
 void drawKissLips(int cx, int cy) {
-  display.fillCircle(cx, cy, 3, SH110X_WHITE);
-  display.fillCircle(cx, cy, 1, SH110X_BLACK);
+  display.fillCircle(cx, cy, 4, SH110X_WHITE);
+  display.fillCircle(cx, cy, 2, SH110X_BLACK);
 }
 
+// Filled heart shape
 void drawBigHeart(int cx, int cy, int s) {
   display.fillCircle(cx - s, cy - s / 3, s, SH110X_WHITE);
   display.fillCircle(cx + s, cy - s / 3, s, SH110X_WHITE);
@@ -488,66 +499,100 @@ void drawBigHeart(int cx, int cy, int s) {
   );
 }
 
+// Thick eyebrow line
+void drawBrow(int x1, int y1, int x2, int y2) {
+  for (int t = 0; t < 3; t++) {
+    display.drawLine(x1, y1 + t, x2, y2 + t, SH110X_WHITE);
+  }
+}
+
 void renderExpressionFrame() {
   display.clearDisplay();
 
-  const int LX = 38;
-  const int RX = 90;
-  const int EY = 24;
-  const int MY = 48;
+  const int LX = 38;   // left eye center X
+  const int RX = 90;   // right eye center X
+  const int EY = 22;   // eye center Y
+  const int MY = 50;   // mouth center Y
+  const int EW = 24;   // eye width
+  const int EH = 18;   // eye height
+  const int ER = 5;    // eye corner radius
 
+  // ── Heart: pulsing heart fills the whole screen ──
   if (currentExpression == "heart") {
-    static const int sizes[] = {7, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7};
-    int s = sizes[expressionPhase % 12];
+    static const int sizes[] = {6, 7, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8};
+    int s = sizes[expressionPhase % 16];
     drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 4, s);
     display.display();
     return;
   }
 
+  // ── Happy: open eyes with pupils, periodic blink, big smile ──
   if (currentExpression == "happy") {
-    bool blink = (expressionPhase % 12) >= 10;
+    int phase = expressionPhase % 16;
+    bool blink = (phase >= 12 && phase <= 13);
     if (blink) {
-      drawEyeRect(LX, EY, 22, 4, 2);
-      drawEyeRect(RX, EY, 22, 4, 2);
+      drawBlinkEye(LX, EY, EW);
+      drawBlinkEye(RX, EY, EW);
     } else {
-      drawEyeRect(LX, EY, 22, 16, 5);
-      drawEyeRect(RX, EY, 22, 16, 5);
+      // Little bounce in pupil Y for liveliness
+      int py = (phase < 4) ? -1 : ((phase < 8) ? 0 : 1);
+      drawEye(LX, EY, EW, EH, ER, 0, py);
+      drawEye(RX, EY, EW, EH, ER, 0, py);
     }
-    drawThickSmile(SCREEN_WIDTH / 2, MY, 20);
-  } else if (currentExpression == "smile") {
-    drawHappyArc(LX, EY, 22);
-    drawHappyArc(RX, EY, 22);
-    drawThickSmile(SCREEN_WIDTH / 2, MY, 16);
-  } else if (currentExpression == "confused") {
-    drawEyeRect(LX, EY - 2, 22, 18, 5);
-    drawEyeRect(RX, EY + 2, 18, 12, 4);
+    drawSmile(SCREEN_WIDTH / 2, MY, 22);
+  }
+  // ── Smile: squinted arc eyes + smile ──
+  else if (currentExpression == "smile") {
+    drawHappyArc(LX, EY, EW);
+    drawHappyArc(RX, EY, EW);
+    drawSmile(SCREEN_WIDTH / 2, MY, 18);
+  }
+  // ── Confused: asymmetric eyes, tilted brows, slanted mouth ──
+  else if (currentExpression == "confused") {
+    drawEye(LX, EY - 2, EW, EH + 2, ER, -2, 0);
+    drawEye(RX, EY + 2, EW - 4, EH - 4, ER - 1, 2, 0);
+    drawBrow(LX - 13, EY - 16, LX + 10, EY - 12);
+    drawBrow(RX - 8, EY - 10, RX + 13, EY - 14);
     for (int t = 0; t < 3; t++) {
-      display.drawLine(LX - 12, EY - 16 + t, LX + 8, EY - 12 + t, SH110X_WHITE);
-      display.drawLine(RX - 6, EY - 10 + t, RX + 12, EY - 14 + t, SH110X_WHITE);
+      display.drawLine(SCREEN_WIDTH / 2 - 10, MY + 3 + t, SCREEN_WIDTH / 2 + 10, MY - 1 + t, SH110X_WHITE);
     }
-    for (int t = 0; t < 2; t++) {
-      display.drawLine(SCREEN_WIDTH / 2 - 10, MY + 2 + t, SCREEN_WIDTH / 2 + 10, MY - 2 + t, SH110X_WHITE);
+  }
+  // ── Look around: pupils shift smoothly left/right ──
+  else if (currentExpression == "look_around") {
+    // Smoother 16-phase sinusoidal pupil path with vertical drift
+    static const int pxShifts[] = {0, 3, 5, 7, 8, 7, 5, 3, 0, -3, -5, -7, -8, -7, -5, -3};
+    static const int pyShifts[] = {0, -1, -1, 0, 1, 1, 0, -1, 0, -1, -1, 0, 1, 1, 0, -1};
+    int px = pxShifts[expressionPhase % 16];
+    int py = pyShifts[expressionPhase % 16];
+    drawEye(LX, EY, EW, EH, ER, px, py);
+    drawEye(RX, EY, EW, EH, ER, px, py);
+    // Neutral mouth
+    for (int t = 0; t < 3; t++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 8, MY + t, SCREEN_WIDTH / 2 + 8, MY + t, SH110X_WHITE);
     }
-  } else if (currentExpression == "look_around") {
-    static const int xShifts[] = {0, 2, 4, 6, 6, 4, 2, 0, -2, -4, -6, -4};
-    int dx = xShifts[expressionPhase % 12];
-    drawEyeRect(LX + dx, EY, 22, 16, 5);
-    drawEyeRect(RX + dx, EY, 22, 16, 5);
+  }
+  // ── Kiss: wink + open eye + lips + floating hearts ──
+  else if (currentExpression == "kiss") {
+    drawBlinkEye(LX, EY, EW);  // wink
+    drawEye(RX, EY, EW, EH, ER, 0, 0);  // open
+    drawKissLips(SCREEN_WIDTH / 2, MY);
+    // Floating hearts that rise and fade
+    static const int heartY[] = {0, -2, -4, -6, -8, -10, -13, -16, -19, -16, -10, -6, -3, -1, 0, 0};
+    int idx = expressionPhase % 16;
+    if (idx < 12) {
+      drawBigHeart(102, 28 + heartY[idx], 3);
+    }
+    if (idx > 4 && idx < 14) {
+      drawBigHeart(114, 34 + heartY[(idx + 8) % 16], 2);
+    }
+  }
+  // ── Default: neutral face with pupils ──
+  else {
+    drawEye(LX, EY, EW, EH, ER, 0, 0);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
     for (int t = 0; t < 2; t++) {
       display.drawLine(SCREEN_WIDTH / 2 - 6, MY + t, SCREEN_WIDTH / 2 + 6, MY + t, SH110X_WHITE);
     }
-  } else if (currentExpression == "kiss") {
-    drawEyeRect(LX, EY, 22, 4, 2);
-    drawEyeRect(RX, EY, 22, 16, 5);
-    drawKissLips(SCREEN_WIDTH / 2, MY);
-    static const int heartY[] = {0, -2, -4, -6, -8, -10, -12, -14, -12, -8, -4, -1};
-    drawBigHeart(100, 24 + heartY[expressionPhase % 12], 3);
-    if (expressionPhase % 12 > 3) {
-      drawBigHeart(112, 30 + heartY[(expressionPhase + 6) % 12], 2);
-    }
-  } else {
-    drawEyeRect(LX, EY, 22, 16, 5);
-    drawEyeRect(RX, EY, 22, 16, 5);
   }
 
   display.display();
@@ -562,7 +607,7 @@ void setIdleStatus(const String& value) {
 
 void setNote(const String& text, int fontSize) {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
-  const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 2 ? 2 : fontSize);
+  const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
 
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
@@ -1047,9 +1092,9 @@ void loop() {
 
   if (currentMode == MODE_EXPRESSION) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 120) {
+    if (now - lastExpressionTickMs >= 100) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 12;
+      expressionPhase = (expressionPhase + 1) % 16;
       renderExpressionFrame();
     }
   }
