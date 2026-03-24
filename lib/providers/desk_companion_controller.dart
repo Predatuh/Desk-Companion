@@ -264,10 +264,10 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> sendNote(String text) async {
+  Future<void> sendNote(String text, {required int fontSize}) async {
     await _runBusy(() async {
       if (hasRelayTarget) {
-        final sent = await _postRelay({'type': 'set_note', 'text': text});
+        final sent = await _postRelay({'type': 'set_note', 'text': text, 'fontSize': fontSize});
         if (sent) {
           _mode = 'note';
           _setStatus('Note queued through relay.');
@@ -275,7 +275,7 @@ class DeskCompanionController extends ChangeNotifier {
         }
         throw HttpException(_lastRelayError ?? 'Relay send failed.');
       }
-      await _sendBleCommand({'type': 'set_note', 'text': text});
+      await _sendBleCommand({'type': 'set_note', 'text': text, 'fontSize': fontSize});
       _mode = 'note';
       _setStatus('Note sent over BLE.');
     });

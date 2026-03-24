@@ -27,6 +27,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _noteController = TextEditingController();
   final _bannerController = TextEditingController(text: 'miss you already <3');
   String? _selectedWifiSsid;
+  double _noteFontSize = 1;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -298,6 +299,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   title: 'Sticky note',
                   subtitle: 'A centered message card on the OLED.',
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TextField(
                         controller: _noteController,
@@ -308,6 +310,26 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           labelText: 'Message',
                           hintText: 'good luck today, i packed snacks in your bag',
                           helperText: 'Up to 80 characters so the full note fits on screen.',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Font size: ${_noteFontSize.round()}x',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      Slider(
+                        min: 1,
+                        max: 2,
+                        divisions: 1,
+                        value: _noteFontSize,
+                        onChanged: (value) => setState(() => _noteFontSize = value),
+                      ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: controller.busy ? null : _showNotePreview,
+                          icon: const Icon(Icons.preview_outlined),
+                          label: const Text('Preview note'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -741,8 +763,30 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         boundedNote.length > kMaxNoteCharacters
             ? boundedNote.substring(0, kMaxNoteCharacters)
             : boundedNote,
+        fontSize: _noteFontSize.round(),
       ),
       success: 'Note delivered.',
+    );
+  }
+
+  void _showNotePreview() {
+    final boundedNote = _noteController.text.trim();
+    final previewText = boundedNote.length > kMaxNoteCharacters
+        ? boundedNote.substring(0, kMaxNoteCharacters)
+        : boundedNote;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Note preview'),
+        content: _NotePreview(text: previewText, fontSize: _noteFontSize.round()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -844,6 +888,77 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+    );
+  }
+}
+
+class _NotePreview extends StatelessWidget {
+  const _NotePreview({required this.text, required this.fontSize});
+
+  final String text;
+  final int fontSize;
+
+  List<String> _wrapLines(String source) {
+    final normalized = source.trim().isEmpty ? 'Your note will appear here.' : source.trim();
+    final maxChars = fontSize <= 1 ? 18 : 9;
+    final lines = <String>[];
+    var remaining = normalized;
+
+    while (remaining.isNotEmpty && lines.length < 5) {
+      var lineLength = remaining.length > maxChars ? maxChars : remaining.length;
+      if (lineLength < remaining.length) {
+        final split = remaining.lastIndexOf(' ', lineLength);
+        if (split > 0) {
+          lineLength = split;
+        }
+      }
+
+      final line = remaining.substring(0, lineLength).trim();
+      lines.add(line.isEmpty ? remaining.substring(0, maxChars) : line);
+      remaining = remaining.substring(lineLength).trimLeft();
+    }
+
+    return lines;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = _wrapLines(text);
+    final textStyle = TextStyle(
+      color: Colors.white,
+      fontFamily: 'monospace',
+      fontSize: fontSize <= 1 ? 12 : 22,
+      height: 1,
+    );
+
+    return AspectRatio(
+      aspectRatio: 2,
+      child: Container(
+        width: 256,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          border: Border.all(color: Colors.white),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: lines
+                .map(
+                  (line) => Padding(
+                    padding: EdgeInsets.only(bottom: fontSize <= 1 ? 4 : 6),
+                    child: Text(
+                      line,
+                      textAlign: TextAlign.center,
+                      style: textStyle,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ),
+      ),
     );
   }
 }

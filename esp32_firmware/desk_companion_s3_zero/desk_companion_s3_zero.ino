@@ -59,6 +59,7 @@ String currentSsid = "";
 String ipAddress = "";
 String relayUrl = "";
 String deviceToken = "";
+int currentNoteFontSize = 1;
 int bannerSpeed = 35;
 int bannerOffset = SCREEN_WIDTH;
 unsigned long lastBannerTickMs = 0;
@@ -77,6 +78,7 @@ bool imageTransferActive = false;
 
 // Note queue
 String noteQueue[NOTE_QUEUE_MAX];
+int noteFontSizeQueue[NOTE_QUEUE_MAX] = {0};
 int noteQueueCount = 0;
 int noteQueueIndex = 0;
 
@@ -92,13 +94,13 @@ bool beginHttpClient(HTTPClient& client, const String& url);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
-void drawWrappedText(const String& text);
+void drawWrappedText(const String& text, int fontSize);
 void renderBannerFrame();
 void renderImage();
 void renderIdle();
 void renderCurrentMode();
 void setIdleStatus(const String& value);
-void setNote(const String& text);
+void setNote(const String& text, int fontSize);
 void setBanner(const String& text, int speed);
 void setImageReady();
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
@@ -275,11 +277,17 @@ const char* modeName(DisplayMode mode) {
 }
 
 bool beginHttpClient(HTTPClient& client, const String& url) {
+  bool started = false;
   if (url.startsWith("https://")) {
     relayHttpsClient.setInsecure();
-    return client.begin(relayHttpsClient, url);
+    started = client.begin(relayHttpsClient, url);
+  } else {
+    started = client.begin(relayHttpClient, url);
   }
-  return client.begin(relayHttpClient, url);
+  if (started) {
+    client.setTimeout(150);
+  }
+  return started;
 }
 
 void clearImageBuffer() {
@@ -318,19 +326,21 @@ void publishStatus() {
   relayStatusDirty = true;
 }
 
-void drawWrappedText(const String& text) {
+void drawWrappedText(const String& text, int fontSize) {
   display.clearDisplay();
   display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 8, SH110X_WHITE);
-  display.drawCircle(10, 9, 2, SH110X_WHITE);
-  display.drawCircle(118, 9, 2, SH110X_WHITE);
   display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
-  display.setTextWrap(true);
-
-  const int maxChars = 20;
-  int cursorY = 14;
+  const int safeFontSize = fontSize < 1 ? 1 : (fontSize > 2 ? 2 : fontSize);
+  const int horizontalPadding = 8;
+  const int maxLines = 6;
+  const int lineHeight = (8 * safeFontSize) + 2;
+  const int maxChars = (SCREEN_WIDTH - (horizontalPadding * 2)) / (6 * safeFontSize);
+  String lines[maxLines];
+  int lineCount = 0;
   String remaining = text;
-  while (remaining.length() > 0 && cursorY <= 54) {
+  remaining.trim();
+
+  while (remaining.length() > 0 && lineCount < maxLines) {
     int lineLength = remaining.length() > maxChars ? maxChars : remaining.length();
     if (lineLength < remaining.length()) {
       const int split = remaining.lastIndexOf(' ', lineLength);
@@ -339,17 +349,35 @@ void drawWrappedText(const String& text) {
       }
     }
 
-    const String line = remaining.substring(0, lineLength);
+    String line = remaining.substring(0, lineLength);
+    line.trim();
+    if (line.isEmpty()) {
+      line = remaining.substring(0, maxChars);
+      lineLength = line.length();
+    }
+    lines[lineCount++] = line;
+    remaining = remaining.substring(lineLength);
+    remaining.trim();
+  }
+
+  display.setTextSize(safeFontSize);
+  display.setTextWrap(false);
+
+  const int totalHeight = lineCount * lineHeight;
+  int cursorY = (SCREEN_HEIGHT - totalHeight) / 2;
+  if (cursorY < 8) {
+    cursorY = 8;
+  }
+
+  for (int i = 0; i < lineCount; i++) {
     int16_t x1;
     int16_t y1;
     uint16_t width;
     uint16_t height;
-    display.getTextBounds(line, 0, 0, &x1, &y1, &width, &height);
+    display.getTextBounds(lines[i], 0, 0, &x1, &y1, &width, &height);
     display.setCursor((SCREEN_WIDTH - width) / 2, cursorY);
-    display.println(line);
-    remaining = remaining.substring(lineLength);
-    remaining.trim();
-    cursorY += 12;
+    display.print(lines[i]);
+    cursorY += lineHeight;
   }
 
   display.display();
@@ -360,7 +388,7 @@ void renderBannerFrame() {
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(2);
   display.setTextWrap(false);
-  display.setCursor(bannerOffset, 24);
+  display.setCursor(bannerOffset, 25);
   display.print(currentBanner);
   display.display();
 }
@@ -396,7 +424,7 @@ void renderIdle() {
 void renderCurrentMode() {
   switch (currentMode) {
     case MODE_NOTE:
-      drawWrappedText(currentNote);
+      drawWrappedText(currentNote, currentNoteFontSize);
       break;
     case MODE_BANNER:
       renderBannerFrame();
@@ -418,20 +446,25 @@ void setIdleStatus(const String& value) {
   publishStatus();
 }
 
-void setNote(const String& text) {
+void setNote(const String& text, int fontSize) {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
+  const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 2 ? 2 : fontSize);
 
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
     noteQueue[noteQueueCount++] = boundedText;
+    noteFontSizeQueue[noteQueueCount - 1] = boundedFontSize;
   } else {
     for (int i = 0; i < NOTE_QUEUE_MAX - 1; i++) noteQueue[i] = noteQueue[i + 1];
+    for (int i = 0; i < NOTE_QUEUE_MAX - 1; i++) noteFontSizeQueue[i] = noteFontSizeQueue[i + 1];
     noteQueue[NOTE_QUEUE_MAX - 1] = boundedText;
+    noteFontSizeQueue[NOTE_QUEUE_MAX - 1] = boundedFontSize;
     if (noteQueueIndex > 0) noteQueueIndex--;
   }
   // Display the newest note
   noteQueueIndex = noteQueueCount - 1;
   currentNote = noteQueue[noteQueueIndex];
+  currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
   currentMode = MODE_NOTE;
   statusText = "Showing note";
   renderCurrentMode();
@@ -511,11 +544,7 @@ bool connectToWifi(const String& ssid, const String& password) {
 }
 
 void scanWifiNetworks() {
-  WiFi.disconnect(false, false);
-  delay(250);
   WiFi.mode(WIFI_STA);
-  currentSsid = "";
-  ipAddress = "";
   statusText = "Scanning Wi-Fi";
   publishStatus();
 
@@ -583,7 +612,10 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_note") {
-    setNote(extractJsonStringField(body, "text"));
+    setNote(
+      extractJsonStringField(body, "text"),
+      extractJsonIntField(body, "fontSize", 1)
+    );
     return;
   }
 
@@ -703,7 +735,8 @@ void pollRelay() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
     return;
   }
-  if (millis() - lastRelayPollMs < 2500) {
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 2500UL;
+  if (millis() - lastRelayPollMs < pollInterval) {
     return;
   }
 
@@ -815,6 +848,7 @@ void handleButtons() {
     if (noteQueueCount > 1 && (now - btnNextDownMs) < 2000) {
       noteQueueIndex = (noteQueueIndex + 1) % noteQueueCount;
       currentNote = noteQueue[noteQueueIndex];
+      currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
       currentMode = MODE_NOTE;
       statusText = "Showing note";
       renderCurrentMode();
