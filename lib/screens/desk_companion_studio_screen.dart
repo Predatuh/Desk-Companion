@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -16,12 +15,50 @@ import '../widgets/note_card_preview.dart';
 import '../widgets/oled_drawing_pad.dart';
 
 const int kMaxNoteCharacters = 80;
+enum DeskExpression {
+  happy,
+  smile,
+  confused,
+  lookAround,
+  kiss,
+  heart,
+}
+
+extension DeskExpressionLabel on DeskExpression {
+  String get label => switch (this) {
+        DeskExpression.happy => 'Happy',
+        DeskExpression.smile => 'Smiling',
+        DeskExpression.confused => 'Confused',
+        DeskExpression.lookAround => 'Look around',
+        DeskExpression.kiss => 'Blow kisses',
+        DeskExpression.heart => 'Big heart',
+      };
+
+  String get command => switch (this) {
+        DeskExpression.happy => 'happy',
+        DeskExpression.smile => 'smile',
+        DeskExpression.confused => 'confused',
+        DeskExpression.lookAround => 'look_around',
+        DeskExpression.kiss => 'kiss',
+        DeskExpression.heart => 'heart',
+      };
+
+  String get subtitle => switch (this) {
+        DeskExpression.happy => 'Bright open eyes with a cheerful grin.',
+        DeskExpression.smile => 'Soft smile with relaxed eyes.',
+        DeskExpression.confused => 'Tilted brows and puzzled eyes.',
+        DeskExpression.lookAround => 'Pupils drift left and right like a desk bot.',
+        DeskExpression.kiss => 'One wink, one eye open, tiny floating hearts.',
+        DeskExpression.heart => 'A big heart that pulses on the whole screen.',
+      };
+}
 
 class DeskCompanionStudioScreen extends StatefulWidget {
   const DeskCompanionStudioScreen({super.key});
 
   @override
-  State<DeskCompanionStudioScreen> createState() => _DeskCompanionStudioScreenState();
+  State<DeskCompanionStudioScreen> createState() =>
+      _DeskCompanionStudioScreenState();
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
@@ -33,8 +70,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _bannerController = TextEditingController(text: 'miss you already <3');
   String? _selectedWifiSsid;
   double _noteFontSize = 1;
-  NoteBorderStyle _noteBorderStyle = NoteBorderStyle.classic;
-  final Set<NoteSticker> _noteStickers = {NoteSticker.heart, NoteSticker.dog};
+  NoteBorderStyle _noteBorderStyle = NoteBorderStyle.none;
+  final Set<NoteSticker> _noteStickers = <NoteSticker>{};
   Uint8List? _customNoteFrameBytes;
   String? _customNoteFrameName;
 
@@ -47,10 +84,20 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   bool _eraserMode = false;
   double _bannerSpeed = 35;
   double _brushSize = 2;
+  DeskExpression _selectedExpression = DeskExpression.happy;
   Timer? _liveSyncTimer;
+  Future<CompanionImagePayload>? _notePreviewFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _noteController.addListener(_handleNoteChanged);
+    _invalidateNotePreview();
+  }
 
   @override
   void dispose() {
+    _noteController.removeListener(_handleNoteChanged);
     _wifiPasswordController.dispose();
     _relayUrlController.dispose();
     _deviceTokenController.dispose();
@@ -58,6 +105,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _bannerController.dispose();
     _liveSyncTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleNoteChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() => _invalidateNotePreview());
+  }
+
+  void _invalidateNotePreview() {
+    _notePreviewFuture = _buildNoteCardPayload();
   }
 
   @override
@@ -118,6 +176,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                 ? 'Wi-Fi: not joined'
                                 : 'Wi-Fi: ${controller.connectedSsid}',
                           ),
+                          _ChipLabel(
+                            label: _relayStatusLabel(controller),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 14),
@@ -131,7 +192,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                       ? null
                                       : () => controller.scanAndConnect(),
                               icon: const Icon(Icons.bluetooth_searching),
-                              label: const Text('Connect device'),
+                              label: const Text('Connect BLE'),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -141,16 +202,35 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ? null
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
-                                      : () => _perform(
-                                            () => controller.refreshDeviceStatus(),
-                                            success: 'Device status refreshed.',
-                                          ),
-                              icon: Icon(controller.isBleConnected
-                                  ? Icons.link_off
-                                  : Icons.refresh),
-                              label: Text(controller.isBleConnected
-                                  ? 'Disconnect'
-                                  : 'Refresh status'),
+                                      : controller.hasRelayTarget
+                                          ? () => _perform(
+                                                () => controller
+                                                    .refreshDeviceStatus(),
+                                                success: controller
+                                                        .isRelayOnline
+                                                    ? 'Device is online over Wi-Fi.'
+                                                    : 'Wi-Fi status checked.',
+                                              )
+                                          : () => _perform(
+                                                () => controller
+                                                    .refreshDeviceStatus(),
+                                                success:
+                                                    'Device status refreshed.',
+                                              ),
+                              icon: Icon(
+                                controller.isBleConnected
+                                    ? Icons.link_off
+                                    : controller.hasRelayTarget
+                                        ? Icons.wifi
+                                        : Icons.refresh,
+                              ),
+                              label: Text(
+                                controller.isBleConnected
+                                    ? 'Disconnect'
+                                    : controller.hasRelayTarget
+                                        ? 'Connect Wi-Fi'
+                                        : 'Refresh status',
+                              ),
                             ),
                           ),
                         ],
@@ -158,8 +238,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       const SizedBox(height: 14),
                       Text(
                         canUseRelay
-                            ? 'This build uses BLE for setup and relay for remote delivery.'
-                            : 'Connect over BLE first, then save a relay URL and token for remote delivery.',
+                            ? 'BLE is only needed for setup. If the relay target is saved and the desk is online, you can connect and send over Wi-Fi directly.'
+                            : 'Connect over BLE once to save the relay URL and token to the device for future Wi-Fi use.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -168,7 +248,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Remote relay',
-                  subtitle: 'Use this when you want to send something even when the phone is not on the same Wi-Fi as the desk.',
+                  subtitle:
+                      'Use this when you want to send something even when the phone is not on the same Wi-Fi as the desk.',
                   child: Column(
                     children: [
                       TextField(
@@ -176,8 +257,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         onChanged: controller.updateRelayBaseUrl,
                         decoration: const InputDecoration(
                           labelText: 'Relay base URL',
-                          hintText: 'https://desk-companion-production.up.railway.app',
-                          helperText: 'Use the base domain only. Full paths like /v1/device/... are cleaned automatically.',
+                          hintText:
+                              'https://desk-companion-production.up.railway.app',
+                          helperText:
+                              'Use the base domain only. Full paths like /v1/device/... are cleaned automatically.',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -194,9 +277,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _saveRelay(controller),
+                              onPressed:
+                                  controller.busy || !controller.isBleConnected
+                                      ? null
+                                      : () => _saveRelay(controller),
                               icon: const Icon(Icons.cloud_done_outlined),
                               label: const Text('Save to device'),
                             ),
@@ -204,7 +288,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.hasRelayTarget
+                              onPressed: controller.busy ||
+                                      !controller.hasRelayTarget
                                   ? null
                                   : () => _perform(
                                         () => controller.refreshDeviceStatus(),
@@ -222,7 +307,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Wi-Fi setup',
-                  subtitle: 'Scan Wi-Fi from the device, pick a network, then send only the password.',
+                  subtitle:
+                      'Scan Wi-Fi from the device, pick a network, then send only the password.',
                   child: Column(
                     children: [
                       InputDecorator(
@@ -246,9 +332,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         selected: selectedWifiSsid == ssid,
-                                        onSelected: controller.busy || !controller.isBleConnected
+                                        onSelected: controller.busy ||
+                                                !controller.isBleConnected
                                             ? null
-                                            : (_) => setState(() => _selectedWifiSsid = ssid),
+                                            : (_) => setState(
+                                                () => _selectedWifiSsid = ssid),
                                       ),
                                     )
                                     .toList(growable: false),
@@ -258,22 +346,25 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       TextField(
                         controller: _wifiPasswordController,
                         obscureText: true,
-                        decoration: const InputDecoration(labelText: 'Wi-Fi password'),
+                        decoration:
+                            const InputDecoration(labelText: 'Wi-Fi password'),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
+                              onPressed: controller.busy ||
+                                      !controller.isBleConnected
                                   ? null
-                                    : () {
-                                        setState(() => _selectedWifiSsid = null);
-                                        _perform(
-                                          () => controller.scanWifiNetworks(),
-                                          success: 'Wi-Fi networks refreshed from device. Pick one from the list.',
-                                        );
-                                      },
+                                  : () {
+                                      setState(() => _selectedWifiSsid = null);
+                                      _perform(
+                                        () => controller.scanWifiNetworks(),
+                                        success:
+                                            'Wi-Fi networks refreshed from device. Pick one from the list.',
+                                      );
+                                    },
                               icon: const Icon(Icons.wifi_find_outlined),
                               label: const Text('Scan networks'),
                             ),
@@ -281,7 +372,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected || selectedWifiSsid == null
+                              onPressed: controller.busy ||
+                                      !controller.isBleConnected ||
+                                      selectedWifiSsid == null
                                   ? null
                                   : () => _sendWifi(controller),
                               icon: const Icon(Icons.wifi),
@@ -306,7 +399,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Sticky note',
-                  subtitle: 'Build an exact 128x64 note card with icons, borders, and custom frames.',
+                  subtitle:
+                      'Build an exact 128x64 note card with icons, borders, and custom frames.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -317,8 +411,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         maxLength: kMaxNoteCharacters,
                         decoration: const InputDecoration(
                           labelText: 'Message',
-                          hintText: 'good luck today, i packed snacks in your bag',
-                          helperText: 'Up to 80 characters so the full note fits on screen.',
+                          hintText:
+                              'good luck today, i packed snacks in your bag',
+                          helperText:
+                              'Up to 80 characters.',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -328,10 +424,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       Slider(
                         min: 1,
-                        max: 3,
-                        divisions: 2,
+                        max: 6,
+                        divisions: 5,
                         value: _noteFontSize,
-                        onChanged: (value) => setState(() => _noteFontSize = value),
+                        onChanged: (value) => setState(() {
+                          _noteFontSize = value;
+                          _invalidateNotePreview();
+                        }),
                       ),
                       Text(
                         'Border style',
@@ -348,7 +447,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                 selected: _noteBorderStyle == style,
                                 onSelected: controller.busy
                                     ? null
-                                    : (_) => setState(() => _noteBorderStyle = style),
+                                    : (_) => setState(() {
+                                          _noteBorderStyle = style;
+                                          _invalidateNotePreview();
+                                        }),
                               ),
                             )
                             .toList(growable: false),
@@ -375,6 +477,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                           } else {
                                             _noteStickers.add(sticker);
                                           }
+                                          _invalidateNotePreview();
                                         }),
                               ),
                             )
@@ -385,7 +488,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _pickCustomNoteFrame,
+                              onPressed:
+                                  controller.busy ? null : _pickCustomNoteFrame,
                               icon: const Icon(Icons.upload_file_outlined),
                               label: const Text('Upload frame'),
                             ),
@@ -393,11 +497,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy || _customNoteFrameBytes == null
+                              onPressed: controller.busy ||
+                                      _customNoteFrameBytes == null
                                   ? null
                                   : () => setState(() {
                                         _customNoteFrameBytes = null;
                                         _customNoteFrameName = null;
+                                        _invalidateNotePreview();
                                       }),
                               icon: const Icon(Icons.backspace_outlined),
                               label: const Text('Clear frame'),
@@ -426,17 +532,52 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: FittedBox(
-                              fit: BoxFit.contain,
-                              child: RepaintBoundary(
-                                key: _notePreviewKey,
-                                child: NoteCardPreview(
-                                  text: _boundedNoteText(),
-                                  fontSize: _noteFontSize.round(),
-                                  borderStyle: _noteBorderStyle,
-                                  stickers: _noteStickers,
-                                  customFrameBytes: _customNoteFrameBytes,
-                                ),
+                            child: SizedBox(
+                              width: 128,
+                              height: 64,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Opacity(
+                                    opacity: 0.01,
+                                    child: IgnorePointer(
+                                      child: RepaintBoundary(
+                                        key: _notePreviewKey,
+                                        child: NoteCardPreview(
+                                          text: _boundedNoteText(),
+                                          fontSize: _noteFontSize.round(),
+                                          borderStyle: _noteBorderStyle,
+                                          stickers: _noteStickers,
+                                          customFrameBytes:
+                                              _customNoteFrameBytes,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  FutureBuilder<CompanionImagePayload>(
+                                    future: _notePreviewFuture,
+                                    builder: (context, snapshot) {
+                                      final previewBytes =
+                                          snapshot.data?.previewPng;
+                                      if (previewBytes == null) {
+                                        return const Center(
+                                          child: SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          ),
+                                        );
+                                      }
+
+                                      return Image.memory(
+                                        previewBytes,
+                                        gaplessPlayback: true,
+                                        filterQuality: FilterQuality.none,
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -455,7 +596,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy ? null : () => _sendNote(controller),
+                              onPressed: controller.busy
+                                  ? null
+                                  : () => _sendNote(controller),
                               icon: const Icon(Icons.favorite_border),
                               label: const Text('Show note'),
                             ),
@@ -469,7 +612,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                         () => controller.clearDisplay(),
                                         success: 'Display cleared.',
                                       ),
-                              icon: const Icon(Icons.cleaning_services_outlined),
+                              icon:
+                                  const Icon(Icons.cleaning_services_outlined),
                               label: const Text('Clear'),
                             ),
                           ),
@@ -487,7 +631,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     children: [
                       TextField(
                         controller: _bannerController,
-                        decoration: const InputDecoration(labelText: 'Banner text'),
+                        decoration:
+                            const InputDecoration(labelText: 'Banner text'),
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -498,14 +643,61 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         min: 10,
                         max: 80,
                         value: _bannerSpeed,
-                        onChanged: (value) => setState(() => _bannerSpeed = value),
+                        onChanged: (value) =>
+                            setState(() => _bannerSpeed = value),
                       ),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: controller.busy ? null : () => _sendBanner(controller),
+                          onPressed: controller.busy
+                              ? null
+                              : () => _sendBanner(controller),
                           icon: const Icon(Icons.view_carousel_outlined),
                           label: const Text('Start banner'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Expressions',
+                  subtitle:
+                      'Animated desk eyes and moods that run directly on the device after you send them.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskExpression.values
+                            .map(
+                              (expression) => ChoiceChip(
+                                label: Text(expression.label),
+                                selected: _selectedExpression == expression,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedExpression = expression,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedExpression.subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy
+                              ? null
+                              : () => _sendExpression(controller),
+                          icon: const Icon(Icons.face_retouching_natural),
+                          label: Text('Show ${_selectedExpression.label}'),
                         ),
                       ),
                     ],
@@ -539,27 +731,32 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           FilterChip(
                             label: const Text('Draw mode'),
                             selected: _drawModeEnabled,
-                            onSelected: (_) => setState(() => _drawModeEnabled = !_drawModeEnabled),
+                            onSelected: (_) => setState(
+                                () => _drawModeEnabled = !_drawModeEnabled),
                           ),
                           FilterChip(
                             label: const Text('Pen'),
                             selected: !_eraserMode,
-                            onSelected: (_) => setState(() => _eraserMode = false),
+                            onSelected: (_) =>
+                                setState(() => _eraserMode = false),
                           ),
                           FilterChip(
                             label: const Text('Eraser'),
                             selected: _eraserMode,
-                            onSelected: (_) => setState(() => _eraserMode = true),
+                            onSelected: (_) =>
+                                setState(() => _eraserMode = true),
                           ),
                           FilterChip(
                             label: const Text('Grid'),
                             selected: _showGrid,
-                            onSelected: (_) => setState(() => _showGrid = !_showGrid),
+                            onSelected: (_) =>
+                                setState(() => _showGrid = !_showGrid),
                           ),
                           FilterChip(
                             label: const Text('Live push'),
                             selected: _liveDraw,
-                            onSelected: (_) => setState(() => _liveDraw = !_liveDraw),
+                            onSelected: (_) =>
+                                setState(() => _liveDraw = !_liveDraw),
                           ),
                         ],
                       ),
@@ -573,7 +770,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         max: 5,
                         divisions: 4,
                         value: _brushSize,
-                        onChanged: (value) => setState(() => _brushSize = value),
+                        onChanged: (value) =>
+                            setState(() => _brushSize = value),
                       ),
                       Row(
                         children: [
@@ -582,7 +780,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               onPressed: controller.busy
                                   ? null
                                   : () {
-                                      setState(() => _drawBitmap = Uint8List(OledBitmapCodec.byteLength));
+                                      setState(() => _drawBitmap = Uint8List(
+                                          OledBitmapCodec.byteLength));
                                       _queueLiveDraw();
                                     },
                               icon: const Icon(Icons.layers_clear_outlined),
@@ -604,7 +803,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _loadImageIntoCanvas,
+                              onPressed:
+                                  controller.busy ? null : _loadImageIntoCanvas,
                               icon: const Icon(Icons.move_down_outlined),
                               label: const Text('Use picked image'),
                             ),
@@ -612,7 +812,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy ? null : () => _sendCanvas(controller),
+                              onPressed: controller.busy
+                                  ? null
+                                  : () => _sendCanvas(controller),
                               icon: const Icon(Icons.draw_outlined),
                               label: const Text('Push drawing'),
                             ),
@@ -625,7 +827,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Image',
-                  subtitle: 'Any image is resized to 128×64 and converted to a 1-bit OLED bitmap.',
+                  subtitle:
+                      'Any image is resized to 128×64 and converted to a 1-bit OLED bitmap.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -678,7 +881,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Invert image while converting'),
                         value: _invertImage,
-                        onChanged: (value) => setState(() => _invertImage = value),
+                        onChanged: (value) =>
+                            setState(() => _invertImage = value),
                       ),
                       Row(
                         children: [
@@ -692,9 +896,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy || _selectedImage == null
-                                  ? null
-                                  : () => _sendImage(controller),
+                              onPressed:
+                                  controller.busy || _selectedImage == null
+                                      ? null
+                                      : () => _sendImage(controller),
                               icon: const Icon(Icons.send_outlined),
                               label: const Text('Send image'),
                             ),
@@ -780,7 +985,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   void _fillCanvas() {
     setState(() {
-      _drawBitmap = Uint8List.fromList(List<int>.filled(OledBitmapCodec.byteLength, 0xFF));
+      _drawBitmap = Uint8List.fromList(
+          List<int>.filled(OledBitmapCodec.byteLength, 0xFF));
     });
     _queueLiveDraw();
   }
@@ -806,7 +1012,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         return;
       }
       context.read<DeskCompanionController>().sendLiveBitmap(
-        _drawBitmap,
+            _drawBitmap,
           );
     });
   }
@@ -857,8 +1063,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  String? _resolveSelectedWifiSsid(List<String> availableWifiNetworks, String connectedSsid) {
-    if (_selectedWifiSsid != null && availableWifiNetworks.contains(_selectedWifiSsid)) {
+  String? _resolveSelectedWifiSsid(
+      List<String> availableWifiNetworks, String connectedSsid) {
+    if (_selectedWifiSsid != null &&
+        availableWifiNetworks.contains(_selectedWifiSsid)) {
       return _selectedWifiSsid;
     }
     return null;
@@ -875,41 +1083,46 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendNote(DeskCompanionController controller) async {
-    final relayOnly = !controller.isBleConnected && controller.hasRelayTarget;
-
     await _perform(
       () async {
-        if (relayOnly) {
-          await controller.sendNote(
-            _boundedNoteText(),
-            fontSize: _noteFontSize.round(),
-          );
-          return;
-        }
-
-        final payload = await _buildNoteCardPayload();
+        final payload = await (_notePreviewFuture ?? _buildNoteCardPayload());
         await controller.sendImage(payload);
       },
-      success: relayOnly
-          ? 'Note delivered over relay. Connect BLE for custom border and sticker styling.'
+      success: controller.hasRelayTarget && !controller.isBleConnected
+          ? 'Note card delivered over relay.'
           : 'Note card delivered.',
     );
   }
 
   void _showNotePreview() {
+    _notePreviewFuture ??= _buildNoteCardPayload();
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Note preview'),
-        content: FittedBox(
-          fit: BoxFit.contain,
-          child: NoteCardPreview(
-            text: _boundedNoteText(),
-            fontSize: _noteFontSize.round(),
-            borderStyle: _noteBorderStyle,
-            stickers: _noteStickers,
-            customFrameBytes: _customNoteFrameBytes,
-          ),
+        content: FutureBuilder<CompanionImagePayload>(
+          future: _notePreviewFuture,
+          builder: (context, snapshot) {
+            final previewBytes = snapshot.data?.previewPng;
+            if (previewBytes == null) {
+              return const SizedBox(
+                width: 128,
+                height: 64,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            return FittedBox(
+              fit: BoxFit.contain,
+              child: Image.memory(
+                previewBytes,
+                width: 128,
+                height: 64,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.none,
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -922,10 +1135,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   String _boundedNoteText() {
-    final boundedNote = _noteController.text.trim();
-    return boundedNote.length > kMaxNoteCharacters
-        ? boundedNote.substring(0, kMaxNoteCharacters)
-        : boundedNote;
+    final boundedNote =
+        _noteController.text.characters.take(kMaxNoteCharacters).toString();
+    return boundedNote;
   }
 
   Future<void> _pickCustomNoteFrame() async {
@@ -943,10 +1155,21 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     setState(() {
       _customNoteFrameBytes = bytes;
       _customNoteFrameName = file?.name;
+      _invalidateNotePreview();
     });
   }
 
   Future<CompanionImagePayload> _buildNoteCardPayload() async {
+    final previewPng = await _capturePreviewPng();
+    return OledBitmapCodec.encodeImage(
+      sourceBytes: previewPng,
+      name: 'custom_note_card',
+      threshold: 100,
+      invert: true,
+    );
+  }
+
+  Future<Uint8List> _capturePreviewPng() async {
     await WidgetsBinding.instance.endOfFrame;
     final context = _notePreviewKey.currentContext;
     final boundary = context?.findRenderObject() as RenderRepaintBoundary?;
@@ -954,18 +1177,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       throw StateError('Note preview is not ready yet.');
     }
 
-    final image = await boundary.toImage(pixelRatio: 1);
+    final image = await boundary.toImage(pixelRatio: 4);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
       throw StateError('Could not capture note preview.');
     }
 
-    return OledBitmapCodec.encodeImage(
-      sourceBytes: byteData.buffer.asUint8List(),
-      name: 'custom_note_card',
-      threshold: 150,
-      invert: true,
-    );
+    return byteData.buffer.asUint8List();
   }
 
   Future<void> _sendBanner(DeskCompanionController controller) async {
@@ -975,6 +1193,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         speed: _bannerSpeed.round(),
       ),
       success: 'Banner started.',
+    );
+  }
+
+  Future<void> _sendExpression(DeskCompanionController controller) async {
+    await _perform(
+      () => controller.sendExpression(_selectedExpression.command),
+      success: '${_selectedExpression.label} expression sent.',
     );
   }
 
@@ -1001,7 +1226,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  Future<void> _perform(Future<void> Function() action, {required String success}) async {
+  Future<void> _perform(Future<void> Function() action,
+      {required String success}) async {
     try {
       await action();
       if (!mounted) {
@@ -1017,7 +1243,29 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _relayStatusLabel(DeskCompanionController controller) {
+    if (!controller.hasRelayTarget) {
+      return 'Relay: not set';
+    }
+    if (!controller.relayStatusKnown) {
+      return 'Relay: checking';
+    }
+    if (controller.isRelayOnline) {
+      return 'Relay: online';
+    }
+    if (controller.relayLastSeenAt != null) {
+      final now = DateTime.now();
+      final minutes = now.difference(controller.relayLastSeenAt!).inMinutes;
+      if (minutes <= 0) {
+        return 'Relay: just seen';
+      }
+      return 'Relay: offline (${minutes}m ago)';
+    }
+    return 'Relay: offline';
   }
 }
 
@@ -1147,7 +1395,8 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
         ),
         Positioned.fill(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(12, 12, 12, _controlsVisible ? 150 : 12),
+            padding:
+                EdgeInsets.fromLTRB(12, 12, 12, _controlsVisible ? 150 : 12),
             child: Center(
               child: FractionallySizedBox(
                 widthFactor: 1,
@@ -1170,7 +1419,8 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
             child: Align(
               alignment: Alignment.topRight,
               child: IconButton.filledTonal(
-                onPressed: () => setState(() => _controlsVisible = !_controlsVisible),
+                onPressed: () =>
+                    setState(() => _controlsVisible = !_controlsVisible),
                 icon: Icon(_controlsVisible ? Icons.menu_open : Icons.tune),
                 tooltip: _controlsVisible ? 'Hide controls' : 'Show controls',
               ),
@@ -1228,7 +1478,8 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                         FilterChip(
                           label: const Text('Pen'),
                           selected: !_eraserMode,
-                          onSelected: (_) => setState(() => _eraserMode = false),
+                          onSelected: (_) =>
+                              setState(() => _eraserMode = false),
                         ),
                         FilterChip(
                           label: const Text('Eraser'),
@@ -1238,12 +1489,14 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                         FilterChip(
                           label: const Text('Grid'),
                           selected: _showGrid,
-                          onSelected: (_) => setState(() => _showGrid = !_showGrid),
+                          onSelected: (_) =>
+                              setState(() => _showGrid = !_showGrid),
                         ),
                         FilterChip(
                           label: const Text('Live push'),
                           selected: _liveDraw,
-                          onSelected: (_) => setState(() => _liveDraw = !_liveDraw),
+                          onSelected: (_) =>
+                              setState(() => _liveDraw = !_liveDraw),
                         ),
                       ],
                     ),
@@ -1266,7 +1519,8 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                             onPressed: controller.busy
                                 ? null
                                 : () {
-                                    setState(() => _bitmap = Uint8List(OledBitmapCodec.byteLength));
+                                    setState(() => _bitmap =
+                                        Uint8List(OledBitmapCodec.byteLength));
                                     _queueLiveDraw();
                                   },
                             icon: const Icon(Icons.layers_clear_outlined),

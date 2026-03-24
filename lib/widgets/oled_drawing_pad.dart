@@ -11,12 +11,14 @@ class OledDrawingPad extends StatefulWidget {
     required this.onPixel,
     this.showGrid = true,
     this.enabled = true,
+    this.showOutline = false,
   });
 
   final Uint8List bitmap;
   final OledPixelCallback onPixel;
   final bool showGrid;
   final bool enabled;
+  final bool showOutline;
 
   @override
   State<OledDrawingPad> createState() => _OledDrawingPadState();
@@ -119,6 +121,7 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
                     painter: _OledDrawingPadPainter(
                       bitmap: widget.bitmap,
                       showGrid: widget.showGrid,
+                      showOutline: widget.showOutline,
                     ),
                   ),
                 ),
@@ -155,10 +158,12 @@ class _OledDrawingPadPainter extends CustomPainter {
   const _OledDrawingPadPainter({
     required this.bitmap,
     required this.showGrid,
+    required this.showOutline,
   });
 
   final Uint8List bitmap;
   final bool showGrid;
+  final bool showOutline;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -206,18 +211,22 @@ class _OledDrawingPadPainter extends CustomPainter {
       }
     }
 
-    final borderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18)),
-      borderPaint,
-    );
+    if (showOutline) {
+      final borderPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18)),
+        borderPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _OledDrawingPadPainter oldDelegate) {
-    return oldDelegate.bitmap != bitmap || oldDelegate.showGrid != showGrid;
+    return oldDelegate.bitmap != bitmap ||
+        oldDelegate.showGrid != showGrid ||
+        oldDelegate.showOutline != showOutline;
   }
 }

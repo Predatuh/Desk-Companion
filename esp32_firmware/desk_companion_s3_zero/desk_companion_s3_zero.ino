@@ -49,6 +49,7 @@ enum DisplayMode {
   MODE_NOTE,
   MODE_BANNER,
   MODE_IMAGE,
+  MODE_EXPRESSION,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -59,15 +60,18 @@ String currentSsid = "";
 String ipAddress = "";
 String relayUrl = "";
 String deviceToken = "";
+String currentExpression = "happy";
 int currentNoteFontSize = 1;
 int bannerSpeed = 35;
 int bannerOffset = SCREEN_WIDTH;
 unsigned long lastBannerTickMs = 0;
 unsigned long lastDecorTickMs = 0;
+unsigned long lastExpressionTickMs = 0;
 unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
+uint8_t expressionPhase = 0;
 String availableWifiNetworks[10];
 int availableWifiNetworkCount = 0;
 
@@ -96,10 +100,12 @@ bool decodeBase64IntoImage(const String& input);
 void publishStatus();
 void drawWrappedText(const String& text, int fontSize);
 void renderBannerFrame();
+void renderExpressionFrame();
 void renderImage();
 void renderIdle();
 void renderCurrentMode();
 void setIdleStatus(const String& value);
+void setExpression(const String& expression);
 void setNote(const String& text, int fontSize);
 void setBanner(const String& text, int speed);
 void setImageReady();
@@ -270,6 +276,8 @@ const char* modeName(DisplayMode mode) {
       return "banner";
     case MODE_IMAGE:
       return "image";
+    case MODE_EXPRESSION:
+      return "expression";
     case MODE_IDLE:
     default:
       return "idle";
@@ -396,7 +404,6 @@ void renderBannerFrame() {
 void renderImage() {
   display.clearDisplay();
   display.drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SH110X_WHITE);
-  display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 6, SH110X_WHITE);
   display.display();
 }
 
@@ -432,11 +439,118 @@ void renderCurrentMode() {
     case MODE_IMAGE:
       renderImage();
       break;
+    case MODE_EXPRESSION:
+      renderExpressionFrame();
+      break;
     case MODE_IDLE:
     default:
       renderIdle();
       break;
   }
+}
+
+// ─── EMO-style expression drawing helpers ───
+
+void drawEyeRect(int cx, int cy, int w, int h, int r) {
+  display.fillRoundRect(cx - w / 2, cy - h / 2, w, h, r, SH110X_WHITE);
+}
+
+void drawHappyArc(int cx, int cy, int w) {
+  for (int t = 0; t < 4; t++) {
+    int hw = w / 2;
+    display.drawLine(cx - hw, cy + 3 + t, cx, cy - 3 + t, SH110X_WHITE);
+    display.drawLine(cx, cy - 3 + t, cx + hw, cy + 3 + t, SH110X_WHITE);
+  }
+}
+
+void drawThickSmile(int cx, int cy, int w) {
+  for (int t = 0; t < 3; t++) {
+    int hw = w / 2;
+    display.drawLine(cx - hw, cy + t, cx - hw / 3, cy + 5 + t, SH110X_WHITE);
+    display.drawLine(cx - hw / 3, cy + 5 + t, cx + hw / 3, cy + 5 + t, SH110X_WHITE);
+    display.drawLine(cx + hw / 3, cy + 5 + t, cx + hw, cy + t, SH110X_WHITE);
+  }
+}
+
+void drawKissLips(int cx, int cy) {
+  display.fillCircle(cx, cy, 3, SH110X_WHITE);
+  display.fillCircle(cx, cy, 1, SH110X_BLACK);
+}
+
+void drawBigHeart(int cx, int cy, int s) {
+  display.fillCircle(cx - s, cy - s / 3, s, SH110X_WHITE);
+  display.fillCircle(cx + s, cy - s / 3, s, SH110X_WHITE);
+  display.fillTriangle(
+    cx - s * 2, cy - s / 3 + 1,
+    cx + s * 2, cy - s / 3 + 1,
+    cx, cy + s * 2,
+    SH110X_WHITE
+  );
+}
+
+void renderExpressionFrame() {
+  display.clearDisplay();
+
+  const int LX = 38;
+  const int RX = 90;
+  const int EY = 24;
+  const int MY = 48;
+
+  if (currentExpression == "heart") {
+    static const int sizes[] = {7, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7};
+    int s = sizes[expressionPhase % 12];
+    drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 4, s);
+    display.display();
+    return;
+  }
+
+  if (currentExpression == "happy") {
+    bool blink = (expressionPhase % 12) >= 10;
+    if (blink) {
+      drawEyeRect(LX, EY, 22, 4, 2);
+      drawEyeRect(RX, EY, 22, 4, 2);
+    } else {
+      drawEyeRect(LX, EY, 22, 16, 5);
+      drawEyeRect(RX, EY, 22, 16, 5);
+    }
+    drawThickSmile(SCREEN_WIDTH / 2, MY, 20);
+  } else if (currentExpression == "smile") {
+    drawHappyArc(LX, EY, 22);
+    drawHappyArc(RX, EY, 22);
+    drawThickSmile(SCREEN_WIDTH / 2, MY, 16);
+  } else if (currentExpression == "confused") {
+    drawEyeRect(LX, EY - 2, 22, 18, 5);
+    drawEyeRect(RX, EY + 2, 18, 12, 4);
+    for (int t = 0; t < 3; t++) {
+      display.drawLine(LX - 12, EY - 16 + t, LX + 8, EY - 12 + t, SH110X_WHITE);
+      display.drawLine(RX - 6, EY - 10 + t, RX + 12, EY - 14 + t, SH110X_WHITE);
+    }
+    for (int t = 0; t < 2; t++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 10, MY + 2 + t, SCREEN_WIDTH / 2 + 10, MY - 2 + t, SH110X_WHITE);
+    }
+  } else if (currentExpression == "look_around") {
+    static const int xShifts[] = {0, 2, 4, 6, 6, 4, 2, 0, -2, -4, -6, -4};
+    int dx = xShifts[expressionPhase % 12];
+    drawEyeRect(LX + dx, EY, 22, 16, 5);
+    drawEyeRect(RX + dx, EY, 22, 16, 5);
+    for (int t = 0; t < 2; t++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 6, MY + t, SCREEN_WIDTH / 2 + 6, MY + t, SH110X_WHITE);
+    }
+  } else if (currentExpression == "kiss") {
+    drawEyeRect(LX, EY, 22, 4, 2);
+    drawEyeRect(RX, EY, 22, 16, 5);
+    drawKissLips(SCREEN_WIDTH / 2, MY);
+    static const int heartY[] = {0, -2, -4, -6, -8, -10, -12, -14, -12, -8, -4, -1};
+    drawBigHeart(100, 24 + heartY[expressionPhase % 12], 3);
+    if (expressionPhase % 12 > 3) {
+      drawBigHeart(112, 30 + heartY[(expressionPhase + 6) % 12], 2);
+    }
+  } else {
+    drawEyeRect(LX, EY, 22, 16, 5);
+    drawEyeRect(RX, EY, 22, 16, 5);
+  }
+
+  display.display();
 }
 
 void setIdleStatus(const String& value) {
@@ -477,6 +591,16 @@ void setBanner(const String& text, int speed) {
   bannerOffset = SCREEN_WIDTH;
   currentMode = MODE_BANNER;
   statusText = "Banner running";
+  renderCurrentMode();
+  publishStatus();
+}
+
+void setExpression(const String& expression) {
+  currentExpression = expression;
+  expressionPhase = 0;
+  lastExpressionTickMs = 0;
+  currentMode = MODE_EXPRESSION;
+  statusText = "Expression active";
   renderCurrentMode();
   publishStatus();
 }
@@ -623,6 +747,13 @@ void handleCommandJson(const String& body) {
     setBanner(
       extractJsonStringField(body, "text"),
       extractJsonIntField(body, "speed", 35)
+    );
+    return;
+  }
+
+  if (type == "set_expression") {
+    setExpression(
+      extractJsonStringField(body, "expression", "happy")
     );
     return;
   }
@@ -911,6 +1042,15 @@ void loop() {
         bannerOffset = SCREEN_WIDTH;
       }
       renderBannerFrame();
+    }
+  }
+
+  if (currentMode == MODE_EXPRESSION) {
+    const unsigned long now = millis();
+    if (now - lastExpressionTickMs >= 120) {
+      lastExpressionTickMs = now;
+      expressionPhase = (expressionPhase + 1) % 12;
+      renderExpressionFrame();
     }
   }
 

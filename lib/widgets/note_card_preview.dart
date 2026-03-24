@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 enum NoteBorderStyle {
+  none,
   classic,
   stitched,
   squiggle,
@@ -25,11 +26,12 @@ enum NoteSticker {
 
 extension NoteBorderStyleLabel on NoteBorderStyle {
   String get label => switch (this) {
-        NoteBorderStyle.classic => 'Classic',
+        NoteBorderStyle.none => 'None',
+        NoteBorderStyle.classic => 'Outline',
         NoteBorderStyle.stitched => 'Stitched',
         NoteBorderStyle.squiggle => 'Squiggle',
         NoteBorderStyle.scallop => 'Scallop',
-        NoteBorderStyle.flowers => 'Rose',
+        NoteBorderStyle.flowers => 'Flowers',
         NoteBorderStyle.hearts => 'Hearts',
       };
 }
@@ -37,7 +39,7 @@ extension NoteBorderStyleLabel on NoteBorderStyle {
 extension NoteStickerLabel on NoteSticker {
   String get label => switch (this) {
         NoteSticker.heart => 'Heart',
-    NoteSticker.flower => 'Rose',
+        NoteSticker.flower => 'Flower',
         NoteSticker.star => 'Star',
         NoteSticker.sparkle => 'Sparkle',
         NoteSticker.music => 'Music',
@@ -66,16 +68,24 @@ class NoteCardPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final noteText = text.trim().isEmpty ? 'Your note here' : text;
     final textStyle = TextStyle(
       color: Colors.white,
-      fontFamily: 'monospace',
       fontSize: switch (fontSize) {
-        3 => 12,
-        2 => 10,
-        _ => 8,
+        >= 6 => 38,
+        5 => 28,
+        4 => 18,
+        3 => 14,
+        2 => 11,
+        _ => 9,
       },
-      fontWeight: FontWeight.w600,
+      fontWeight: switch (fontSize) {
+        >= 5 => FontWeight.w700,
+        4 => FontWeight.w600,
+        _ => FontWeight.w500,
+      },
       height: 1.15,
+      letterSpacing: 0.1,
     );
 
     final stickerList = stickers.toList(growable: false);
@@ -95,7 +105,8 @@ class NoteCardPreview extends StatelessWidget {
               Positioned.fill(
                 child: IgnorePointer(
                   child: ColorFiltered(
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    colorFilter:
+                        const ColorFilter.mode(Colors.white, BlendMode.srcIn),
                     child: Image.memory(
                       customFrameBytes!,
                       fit: BoxFit.cover,
@@ -108,14 +119,17 @@ class NoteCardPreview extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               child: Column(
                 children: [
-                  if (topStickers.isNotEmpty) _StickerRow(stickers: topStickers),
+                  if (topStickers.isNotEmpty)
+                    _StickerRow(stickers: topStickers),
                   Expanded(
                     child: Center(
                       child: Text(
-                        text.trim().isEmpty ? 'Your note here' : text.trim(),
+                        noteText,
                         textAlign: TextAlign.center,
                         style: textStyle,
                         maxLines: switch (fontSize) {
+                          >= 5 => 1,
+                          4 => 1,
                           3 => 3,
                           2 => 4,
                           _ => 5,
@@ -124,7 +138,8 @@ class NoteCardPreview extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (bottomStickers.isNotEmpty) _StickerRow(stickers: bottomStickers),
+                  if (bottomStickers.isNotEmpty)
+                    _StickerRow(stickers: bottomStickers),
                 ],
               ),
             ),
@@ -163,16 +178,16 @@ class _StickerGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     if (sticker == NoteSticker.dog) {
       return const SizedBox(
-        width: 12,
-        height: 12,
+        width: 14,
+        height: 14,
         child: CustomPaint(painter: _AussieDogFacePainter()),
       );
     }
 
     if (sticker == NoteSticker.flower) {
       return const SizedBox(
-        width: 12,
-        height: 12,
+        width: 16,
+        height: 16,
         child: CustomPaint(painter: _RoseStickerPainter()),
       );
     }
@@ -189,7 +204,7 @@ class _StickerGlyph extends StatelessWidget {
       NoteSticker.dog => Icons.pets,
     };
 
-    return Icon(icon, size: 12, color: Colors.white);
+    return Icon(icon, size: 13, color: Colors.white);
   }
 }
 
@@ -207,22 +222,23 @@ class _NoteBorderPainter extends CustomPainter {
     final fill = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
-    final rect = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
-    final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(8));
-
-    canvas.drawRRect(rounded, stroke);
 
     switch (style) {
+      case NoteBorderStyle.none:
+        break;
       case NoteBorderStyle.classic:
+        _drawOutline(canvas, size, stroke);
         break;
       case NoteBorderStyle.stitched:
         for (double x = 8; x < size.width - 8; x += 6) {
           canvas.drawLine(Offset(x, 4), Offset(x + 2, 4), stroke);
-          canvas.drawLine(Offset(x, size.height - 4), Offset(x + 2, size.height - 4), stroke);
+          canvas.drawLine(Offset(x, size.height - 4),
+              Offset(x + 2, size.height - 4), stroke);
         }
         for (double y = 8; y < size.height - 8; y += 6) {
           canvas.drawLine(Offset(4, y), Offset(4, y + 2), stroke);
-          canvas.drawLine(Offset(size.width - 4, y), Offset(size.width - 4, y + 2), stroke);
+          canvas.drawLine(
+              Offset(size.width - 4, y), Offset(size.width - 4, y + 2), stroke);
         }
         break;
       case NoteBorderStyle.squiggle:
@@ -238,6 +254,12 @@ class _NoteBorderPainter extends CustomPainter {
         _drawHearts(canvas, size, fill);
         break;
     }
+  }
+
+  void _drawOutline(Canvas canvas, Size size, Paint paint) {
+    final rect = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
+    final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+    canvas.drawRRect(rounded, paint);
   }
 
   void _drawSquiggle(Canvas canvas, Size size, Paint paint) {
@@ -260,39 +282,63 @@ class _NoteBorderPainter extends CustomPainter {
 
   void _drawScallops(Canvas canvas, Size size, Paint paint) {
     for (double x = 8; x < size.width - 8; x += 8) {
-      canvas.drawArc(Rect.fromCircle(center: Offset(x + 4, 4), radius: 4), 3.14, 3.14, false, paint);
-      canvas.drawArc(Rect.fromCircle(center: Offset(x + 4, size.height - 4), radius: 4), 0, 3.14, false, paint);
+      canvas.drawArc(Rect.fromCircle(center: Offset(x + 4, 4), radius: 4), 3.14,
+          3.14, false, paint);
+      canvas.drawArc(
+          Rect.fromCircle(center: Offset(x + 4, size.height - 4), radius: 4),
+          0,
+          3.14,
+          false,
+          paint);
     }
   }
 
   void _drawRoses(Canvas canvas, Size size, Paint stroke, Paint fill) {
     for (final center in [
-      const Offset(10, 10),
-      Offset(size.width - 10, 10),
-      Offset(10, size.height - 10),
-      Offset(size.width - 10, size.height - 10),
+      const Offset(12, 12),
+      Offset(size.width - 12, 12),
+      Offset(12, size.height - 12),
+      Offset(size.width - 12, size.height - 12),
     ]) {
-      final rose = Path()
-        ..moveTo(center.dx - 2.8, center.dy + 1.6)
-        ..quadraticBezierTo(center.dx - 4.4, center.dy - 0.8, center.dx - 1.6, center.dy - 2.8)
-        ..quadraticBezierTo(center.dx, center.dy - 4.2, center.dx + 1.9, center.dy - 2.4)
-        ..quadraticBezierTo(center.dx + 4.5, center.dy - 0.6, center.dx + 2.2, center.dy + 2.2)
-        ..quadraticBezierTo(center.dx, center.dy + 4.2, center.dx - 2.8, center.dy + 1.6);
-      canvas.drawPath(rose, stroke);
-      canvas.drawArc(
-        Rect.fromCenter(center: center, width: 4.6, height: 4.6),
-        0.2,
-        4.4,
-        false,
-        stroke,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 3.2, center.dy + 2.4),
-        Offset(center.dx + 5.5, center.dy + 4.8),
-        stroke,
-      );
-      canvas.drawCircle(Offset(center.dx + 4.6, center.dy + 5.1), 0.5, fill);
+      _drawRose(canvas, center, stroke, fill, scale: 1.35);
     }
+  }
+
+  void _drawRose(
+    Canvas canvas,
+    Offset center,
+    Paint stroke,
+    Paint fill, {
+    double scale = 1,
+  }) {
+    final rose = Path()
+      ..moveTo(center.dx - (2.8 * scale), center.dy + (1.6 * scale))
+      ..quadraticBezierTo(center.dx - (4.4 * scale), center.dy - (0.8 * scale),
+          center.dx - (1.6 * scale), center.dy - (2.8 * scale))
+      ..quadraticBezierTo(center.dx, center.dy - (4.2 * scale),
+          center.dx + (1.9 * scale), center.dy - (2.4 * scale))
+      ..quadraticBezierTo(center.dx + (4.5 * scale), center.dy - (0.6 * scale),
+          center.dx + (2.2 * scale), center.dy + (2.2 * scale))
+      ..quadraticBezierTo(center.dx, center.dy + (4.2 * scale),
+          center.dx - (2.8 * scale), center.dy + (1.6 * scale));
+    canvas.drawPath(rose, stroke);
+    canvas.drawArc(
+      Rect.fromCenter(center: center, width: 4.6 * scale, height: 4.6 * scale),
+      0.2,
+      4.4,
+      false,
+      stroke,
+    );
+    canvas.drawLine(
+      Offset(center.dx + (3.2 * scale), center.dy + (2.4 * scale)),
+      Offset(center.dx + (5.5 * scale), center.dy + (4.8 * scale)),
+      stroke,
+    );
+    canvas.drawCircle(
+      Offset(center.dx + (4.6 * scale), center.dy + (5.1 * scale)),
+      0.5 * scale,
+      fill,
+    );
   }
 
   void _drawHearts(Canvas canvas, Size size, Paint fill) {
@@ -304,14 +350,17 @@ class _NoteBorderPainter extends CustomPainter {
     ]) {
       final path = Path()
         ..moveTo(center.dx, center.dy + 3)
-        ..cubicTo(center.dx - 5, center.dy - 1, center.dx - 3, center.dy - 5, center.dx, center.dy - 2)
-        ..cubicTo(center.dx + 3, center.dy - 5, center.dx + 5, center.dy - 1, center.dx, center.dy + 3);
+        ..cubicTo(center.dx - 5, center.dy - 1, center.dx - 3, center.dy - 5,
+            center.dx, center.dy - 2)
+        ..cubicTo(center.dx + 3, center.dy - 5, center.dx + 5, center.dy - 1,
+            center.dx, center.dy + 3);
       canvas.drawPath(path, fill);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _NoteBorderPainter oldDelegate) => oldDelegate.style != style;
+  bool shouldRepaint(covariant _NoteBorderPainter oldDelegate) =>
+      oldDelegate.style != style;
 }
 
 class _AussieDogFacePainter extends CustomPainter {
@@ -333,11 +382,14 @@ class _AussieDogFacePainter extends CustomPainter {
       ..moveTo(size.width * 0.18, size.height * 0.38)
       ..lineTo(size.width * 0.28, size.height * 0.12)
       ..lineTo(size.width * 0.42, size.height * 0.28)
-      ..quadraticBezierTo(size.width * 0.50, size.height * 0.18, size.width * 0.58, size.height * 0.28)
+      ..quadraticBezierTo(size.width * 0.50, size.height * 0.18,
+          size.width * 0.58, size.height * 0.28)
       ..lineTo(size.width * 0.72, size.height * 0.12)
       ..lineTo(size.width * 0.82, size.height * 0.38)
-      ..quadraticBezierTo(size.width * 0.77, size.height * 0.78, size.width * 0.50, size.height * 0.88)
-      ..quadraticBezierTo(size.width * 0.23, size.height * 0.78, size.width * 0.18, size.height * 0.38);
+      ..quadraticBezierTo(size.width * 0.77, size.height * 0.78,
+          size.width * 0.50, size.height * 0.88)
+      ..quadraticBezierTo(size.width * 0.23, size.height * 0.78,
+          size.width * 0.18, size.height * 0.38);
     canvas.drawPath(face, stroke);
 
     canvas.drawLine(
@@ -349,14 +401,20 @@ class _AussieDogFacePainter extends CustomPainter {
     canvas.drawCircle(Offset(size.width * 0.63, size.height * 0.46), 0.9, fill);
     canvas.drawCircle(Offset(size.width * 0.50, size.height * 0.66), 1.2, fill);
     canvas.drawArc(
-      Rect.fromCenter(center: Offset(size.width * 0.44, size.height * 0.73), width: 0.12 * size.width, height: 0.10 * size.height),
+      Rect.fromCenter(
+          center: Offset(size.width * 0.44, size.height * 0.73),
+          width: 0.12 * size.width,
+          height: 0.10 * size.height),
       0.2,
       2.2,
       false,
       stroke,
     );
     canvas.drawArc(
-      Rect.fromCenter(center: Offset(size.width * 0.56, size.height * 0.73), width: 0.12 * size.width, height: 0.10 * size.height),
+      Rect.fromCenter(
+          center: Offset(size.width * 0.56, size.height * 0.73),
+          width: 0.12 * size.width,
+          height: 0.10 * size.height),
       0.7,
       2.2,
       false,
@@ -380,16 +438,28 @@ class _RoseStickerPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final bloomCenter = Offset(size.width * 0.38, size.height * 0.38);
+    final bloomCenter = Offset(size.width * 0.34, size.height * 0.34);
+    final scale = size.shortestSide / 12;
     final bloom = Path()
-      ..moveTo(bloomCenter.dx - 2.8, bloomCenter.dy + 1.6)
-      ..quadraticBezierTo(bloomCenter.dx - 4.4, bloomCenter.dy - 0.8, bloomCenter.dx - 1.6, bloomCenter.dy - 2.8)
-      ..quadraticBezierTo(bloomCenter.dx, bloomCenter.dy - 4.2, bloomCenter.dx + 1.9, bloomCenter.dy - 2.4)
-      ..quadraticBezierTo(bloomCenter.dx + 4.5, bloomCenter.dy - 0.6, bloomCenter.dx + 2.2, bloomCenter.dy + 2.2)
-      ..quadraticBezierTo(bloomCenter.dx, bloomCenter.dy + 4.2, bloomCenter.dx - 2.8, bloomCenter.dy + 1.6);
+      ..moveTo(bloomCenter.dx - (2.8 * scale), bloomCenter.dy + (1.6 * scale))
+      ..quadraticBezierTo(
+          bloomCenter.dx - (4.4 * scale),
+          bloomCenter.dy - (0.8 * scale),
+          bloomCenter.dx - (1.6 * scale),
+          bloomCenter.dy - (2.8 * scale))
+      ..quadraticBezierTo(bloomCenter.dx, bloomCenter.dy - (4.2 * scale),
+          bloomCenter.dx + (1.9 * scale), bloomCenter.dy - (2.4 * scale))
+      ..quadraticBezierTo(
+          bloomCenter.dx + (4.5 * scale),
+          bloomCenter.dy - (0.6 * scale),
+          bloomCenter.dx + (2.2 * scale),
+          bloomCenter.dy + (2.2 * scale))
+      ..quadraticBezierTo(bloomCenter.dx, bloomCenter.dy + (4.2 * scale),
+          bloomCenter.dx - (2.8 * scale), bloomCenter.dy + (1.6 * scale));
     canvas.drawPath(bloom, stroke);
     canvas.drawArc(
-      Rect.fromCenter(center: bloomCenter, width: 4.4, height: 4.4),
+      Rect.fromCenter(
+          center: bloomCenter, width: 4.4 * scale, height: 4.4 * scale),
       0.2,
       4.6,
       false,
@@ -397,14 +467,16 @@ class _RoseStickerPainter extends CustomPainter {
     );
 
     canvas.drawLine(
-      Offset(size.width * 0.58, size.height * 0.52),
-      Offset(size.width * 0.85, size.height * 0.82),
+      Offset(size.width * 0.56, size.height * 0.54),
+      Offset(size.width * 0.84, size.height * 0.82),
       stroke,
     );
     final leaf = Path()
-      ..moveTo(size.width * 0.64, size.height * 0.62)
-      ..quadraticBezierTo(size.width * 0.76, size.height * 0.56, size.width * 0.76, size.height * 0.70)
-      ..quadraticBezierTo(size.width * 0.69, size.height * 0.72, size.width * 0.64, size.height * 0.62);
+      ..moveTo(size.width * 0.62, size.height * 0.62)
+      ..quadraticBezierTo(size.width * 0.77, size.height * 0.54,
+          size.width * 0.78, size.height * 0.72)
+      ..quadraticBezierTo(size.width * 0.69, size.height * 0.75,
+          size.width * 0.62, size.height * 0.62);
     canvas.drawPath(leaf, stroke);
   }
 
