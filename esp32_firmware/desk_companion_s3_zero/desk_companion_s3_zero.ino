@@ -71,6 +71,7 @@ unsigned long lastDecorTickMs = 0;
 unsigned long lastExpressionTickMs = 0;
 unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
+unsigned long lastWifiCheckMs = 0;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
@@ -969,6 +970,13 @@ void setNote(const String& text, int fontSize, int border, const String& icons) 
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
   currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);
   currentNoteIcons = icons;
+  // Persist so the note survives reboots
+  preferences.begin("desk-cfg", false);
+  preferences.putString("note_text", boundedText);
+  preferences.putInt("note_fs", boundedFontSize);
+  preferences.putInt("note_border", currentNoteBorder);
+  preferences.putString("note_icons", currentNoteIcons);
+  preferences.end();
 
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
@@ -1113,6 +1121,19 @@ void tryStoredWifi() {
   const String password = preferences.getString("pass", "");
   relayUrl = preferences.getString("relay_url", "");
   deviceToken = preferences.getString("device_token", "");
+  // Restore last note
+  const String savedNote = preferences.getString("note_text", "");
+  if (!savedNote.isEmpty()) {
+    currentNote = savedNote;
+    currentNoteFontSize = preferences.getInt("note_fs", 1);
+    currentNoteBorder = preferences.getInt("note_border", 0);
+    currentNoteIcons = preferences.getString("note_icons", "");
+    noteQueue[0] = currentNote;
+    noteFontSizeQueue[0] = currentNoteFontSize;
+    noteQueueCount = 1;
+    noteQueueIndex = 0;
+    currentMode = MODE_NOTE;
+  }
   preferences.end();
 
   if (!currentSsid.isEmpty()) {
@@ -1408,6 +1429,10 @@ void handleButtons() {
       noteQueueIndex = 0;
       currentMode = MODE_IDLE;
       currentNote = "";
+      // Clear persisted note
+      preferences.begin("desk-cfg", false);
+      preferences.remove("note_text");
+      preferences.end();
       setIdleStatus("Ready");
       renderCurrentMode();
       publishStatus();
@@ -1466,6 +1491,11 @@ void loop() {
     ipAddress = WiFi.localIP().toString();
   } else {
     ipAddress = "";
+    // If we have stored credentials, attempt reconnect every 30s
+    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 30000) {
+      lastWifiCheckMs = millis();
+      WiFi.reconnect();
+    }
   }
 
   if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {

@@ -50,6 +50,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   bool _liveSendInFlight = false;
   Uint8List? _queuedLiveBitmap;
+  bool _intentionalDisconnect = false;
 
   CompanionBleState get bleState => _bleState;
   String get statusMessage => _statusMessage;
@@ -602,14 +603,17 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    _intentionalDisconnect = true;
     await _scanSub?.cancel();
     await _notifySub?.cancel();
     await _connectionSub?.cancel();
     await _device?.disconnect();
     _handleDisconnection();
+    _intentionalDisconnect = false;
   }
 
   void _handleDisconnection() {
+    final wasConnected = _bleState == CompanionBleState.connected;
     _bleState = CompanionBleState.disconnected;
     _device = null;
     _commandCharacteristic = null;
@@ -617,6 +621,15 @@ class DeskCompanionController extends ChangeNotifier {
     _imageCharacteristic = null;
     _deviceName = '';
     notifyListeners();
+
+    if (wasConnected && !_intentionalDisconnect) {
+      _setStatus('BLE disconnected. Reconnecting in 5s...');
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_bleState == CompanionBleState.disconnected) {
+          scanAndConnect();
+        }
+      });
+    }
   }
 
   Future<void> _runBusy(Future<void> Function() action) async {

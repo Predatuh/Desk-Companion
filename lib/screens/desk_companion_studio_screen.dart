@@ -508,13 +508,20 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: NoteCardPreview(
-                              text: _noteController.text.characters
-                                  .take(kMaxNoteCharacters)
-                                  .toString(),
-                              fontSize: _noteFontSize.round(),
-                              border: _noteBorderStyle,
-                              icons: List.unmodifiable(_noteIcons),
+                            child: SizedBox(
+                              width: 128 * 3.0,
+                              height: 64 * 3.0,
+                              child: FittedBox(
+                                fit: BoxFit.fill,
+                                child: NoteCardPreview(
+                                  text: _noteController.text.characters
+                                      .take(kMaxNoteCharacters)
+                                      .toString(),
+                                  fontSize: _noteFontSize.round(),
+                                  border: _noteBorderStyle,
+                                  icons: List.unmodifiable(_noteIcons),
+                                ),
+                              ),
                             ),
                           ),
                         ),
