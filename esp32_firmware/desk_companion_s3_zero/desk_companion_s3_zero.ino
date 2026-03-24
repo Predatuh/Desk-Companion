@@ -504,6 +504,8 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
 
   display.display();
 }
+
+void renderBannerFrame() {
   display.clearDisplay();
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(2);
