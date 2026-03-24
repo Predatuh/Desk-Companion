@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import '../models/companion_image_payload.dart';
 import '../providers/desk_companion_controller.dart';
 import '../theme/companion_theme.dart';
 import '../utils/oled_bitmap_codec.dart';
+import '../widgets/note_card_preview.dart';
 import '../widgets/oled_drawing_pad.dart';
 
 const int kMaxNoteCharacters = 80;
@@ -21,6 +24,7 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
+  final _notePreviewKey = GlobalKey();
   final _wifiPasswordController = TextEditingController();
   final _relayUrlController = TextEditingController();
   final _deviceTokenController = TextEditingController();
@@ -28,6 +32,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _bannerController = TextEditingController(text: 'miss you already <3');
   String? _selectedWifiSsid;
   double _noteFontSize = 1;
+  NoteBorderStyle _noteBorderStyle = NoteBorderStyle.classic;
+  final Set<NoteSticker> _noteStickers = {NoteSticker.heart, NoteSticker.dog};
+  Uint8List? _customNoteFrameBytes;
+  String? _customNoteFrameName;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -297,7 +305,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Sticky note',
-                  subtitle: 'A centered message card on the OLED.',
+                  subtitle: 'Build an exact 128x64 note card with icons, borders, and custom frames.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -319,10 +327,119 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       Slider(
                         min: 1,
-                        max: 2,
-                        divisions: 1,
+                        max: 3,
+                        divisions: 2,
                         value: _noteFontSize,
                         onChanged: (value) => setState(() => _noteFontSize = value),
+                      ),
+                      Text(
+                        'Border style',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: NoteBorderStyle.values
+                            .map(
+                              (style) => ChoiceChip(
+                                label: Text(style.label),
+                                selected: _noteBorderStyle == style,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(() => _noteBorderStyle = style),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Sticker icons',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: NoteSticker.values
+                            .map(
+                              (sticker) => FilterChip(
+                                label: Text(sticker.label),
+                                selected: _noteStickers.contains(sticker),
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(() {
+                                          if (_noteStickers.contains(sticker)) {
+                                            _noteStickers.remove(sticker);
+                                          } else {
+                                            _noteStickers.add(sticker);
+                                          }
+                                        }),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy ? null : _pickCustomNoteFrame,
+                              icon: const Icon(Icons.upload_file_outlined),
+                              label: const Text('Upload frame'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy || _customNoteFrameBytes == null
+                                  ? null
+                                  : () => setState(() {
+                                        _customNoteFrameBytes = null;
+                                        _customNoteFrameName = null;
+                                      }),
+                              icon: const Icon(Icons.backspace_outlined),
+                              label: const Text('Clear frame'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_customNoteFrameName != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Custom frame: $_customNoteFrameName',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Exact OLED preview',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: CompanionTheme.ink,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: RepaintBoundary(
+                                key: _notePreviewKey,
+                                child: NoteCardPreview(
+                                  text: _boundedNoteText(),
+                                  fontSize: _noteFontSize.round(),
+                                  borderStyle: _noteBorderStyle,
+                                  stickers: _noteStickers,
+                                  customFrameBytes: _customNoteFrameBytes,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                       SizedBox(
                         width: double.infinity,
@@ -757,29 +874,30 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendNote(DeskCompanionController controller) async {
-    final boundedNote = _noteController.text.trim();
     await _perform(
-      () => controller.sendNote(
-        boundedNote.length > kMaxNoteCharacters
-            ? boundedNote.substring(0, kMaxNoteCharacters)
-            : boundedNote,
-        fontSize: _noteFontSize.round(),
-      ),
-      success: 'Note delivered.',
+      () async {
+        final payload = await _buildNoteCardPayload();
+        await controller.sendImage(payload);
+      },
+      success: 'Note card delivered.',
     );
   }
 
   void _showNotePreview() {
-    final boundedNote = _noteController.text.trim();
-    final previewText = boundedNote.length > kMaxNoteCharacters
-        ? boundedNote.substring(0, kMaxNoteCharacters)
-        : boundedNote;
-
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Note preview'),
-        content: _NotePreview(text: previewText, fontSize: _noteFontSize.round()),
+        content: FittedBox(
+          fit: BoxFit.contain,
+          child: NoteCardPreview(
+            text: _boundedNoteText(),
+            fontSize: _noteFontSize.round(),
+            borderStyle: _noteBorderStyle,
+            stickers: _noteStickers,
+            customFrameBytes: _customNoteFrameBytes,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -787,6 +905,52 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  String _boundedNoteText() {
+    final boundedNote = _noteController.text.trim();
+    return boundedNote.length > kMaxNoteCharacters
+        ? boundedNote.substring(0, kMaxNoteCharacters)
+        : boundedNote;
+  }
+
+  Future<void> _pickCustomNoteFrame() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
+    );
+    final file = result?.files.singleOrNull;
+    final bytes = file?.bytes;
+    if (!mounted || bytes == null) {
+      return;
+    }
+
+    setState(() {
+      _customNoteFrameBytes = bytes;
+      _customNoteFrameName = file?.name;
+    });
+  }
+
+  Future<CompanionImagePayload> _buildNoteCardPayload() async {
+    await WidgetsBinding.instance.endOfFrame;
+    final context = _notePreviewKey.currentContext;
+    final boundary = context?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      throw StateError('Note preview is not ready yet.');
+    }
+
+    final image = await boundary.toImage(pixelRatio: 1);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) {
+      throw StateError('Could not capture note preview.');
+    }
+
+    return OledBitmapCodec.encodeImage(
+      sourceBytes: byteData.buffer.asUint8List(),
+      name: 'custom_note_card',
+      threshold: 150,
     );
   }
 
@@ -888,77 +1052,6 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
-    );
-  }
-}
-
-class _NotePreview extends StatelessWidget {
-  const _NotePreview({required this.text, required this.fontSize});
-
-  final String text;
-  final int fontSize;
-
-  List<String> _wrapLines(String source) {
-    final normalized = source.trim().isEmpty ? 'Your note will appear here.' : source.trim();
-    final maxChars = fontSize <= 1 ? 18 : 9;
-    final lines = <String>[];
-    var remaining = normalized;
-
-    while (remaining.isNotEmpty && lines.length < 5) {
-      var lineLength = remaining.length > maxChars ? maxChars : remaining.length;
-      if (lineLength < remaining.length) {
-        final split = remaining.lastIndexOf(' ', lineLength);
-        if (split > 0) {
-          lineLength = split;
-        }
-      }
-
-      final line = remaining.substring(0, lineLength).trim();
-      lines.add(line.isEmpty ? remaining.substring(0, maxChars) : line);
-      remaining = remaining.substring(lineLength).trimLeft();
-    }
-
-    return lines;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = _wrapLines(text);
-    final textStyle = TextStyle(
-      color: Colors.white,
-      fontFamily: 'monospace',
-      fontSize: fontSize <= 1 ? 12 : 22,
-      height: 1,
-    );
-
-    return AspectRatio(
-      aspectRatio: 2,
-      child: Container(
-        width: 256,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.black,
-          border: Border.all(color: Colors.white),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: lines
-                .map(
-                  (line) => Padding(
-                    padding: EdgeInsets.only(bottom: fontSize <= 1 ? 4 : 6),
-                    child: Text(
-                      line,
-                      textAlign: TextAlign.center,
-                      style: textStyle,
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-        ),
-      ),
     );
   }
 }
