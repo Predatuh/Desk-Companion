@@ -952,6 +952,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       sourceBytes: byteData.buffer.asUint8List(),
       name: 'custom_note_card',
       threshold: 150,
+      invert: true,
     );
   }
 
