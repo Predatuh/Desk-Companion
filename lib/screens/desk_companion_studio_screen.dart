@@ -424,7 +424,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           hintText:
                               'good luck today, i packed snacks in your bag',
                           helperText:
-                              'Up to 80 characters.',
+                              'Up to 80 chars. Use <3 ♥  <*> ★  <~> ✿  <n> ♪  <m> ☾ inline!',
                         ),
                       ),
                       const SizedBox(height: 12),
