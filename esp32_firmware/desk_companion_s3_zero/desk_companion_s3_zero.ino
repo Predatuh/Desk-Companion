@@ -62,6 +62,8 @@ String relayUrl = "";
 String deviceToken = "";
 String currentExpression = "happy";
 int currentNoteFontSize = 1;
+int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
+String currentNoteIcons = "";   // comma-separated: heart,star,flower,note,moon
 int bannerSpeed = 35;
 int bannerOffset = SCREEN_WIDTH;
 unsigned long lastBannerTickMs = 0;
@@ -98,7 +100,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs =
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
-void drawWrappedText(const String& text, int fontSize);
+void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
 void renderBannerFrame();
 void renderExpressionFrame();
 void renderImage();
@@ -106,7 +108,7 @@ void renderIdle();
 void renderCurrentMode();
 void setIdleStatus(const String& value);
 void setExpression(const String& expression);
-void setNote(const String& text, int fontSize);
+void setNote(const String& text, int fontSize, int border, const String& icons);
 void setBanner(const String& text, int speed);
 void setImageReady();
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
@@ -334,13 +336,125 @@ void publishStatus() {
   relayStatusDirty = true;
 }
 
-void drawWrappedText(const String& text, int fontSize) {
+// ─── Native note decoration helpers ───
+
+void drawIconHeart(int cx, int cy, int s) {
+  display.fillCircle(cx - s, cy - s / 3, s, SH110X_WHITE);
+  display.fillCircle(cx + s, cy - s / 3, s, SH110X_WHITE);
+  display.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, SH110X_WHITE);
+}
+
+void drawIconStar(int cx, int cy, int r) {
+  // Simple 6-point approximation using lines through center
+  for (int i = 0; i < 6; i++) {
+    float angle = i * 3.14159f / 3.0f;
+    int x2 = cx + (int)(r * 0.97f * cos(angle));
+    int y2 = cy + (int)(r * 0.97f * sin(angle));
+    display.drawLine(cx, cy, x2, y2, SH110X_WHITE);
+  }
+  display.fillCircle(cx, cy, r / 3, SH110X_WHITE);
+}
+
+void drawIconFlower(int cx, int cy, int r) {
+  for (int i = 0; i < 5; i++) {
+    float angle = i * 3.14159f * 2.0f / 5.0f;
+    int px = cx + (int)(r * cos(angle));
+    int py = cy + (int)(r * sin(angle));
+    display.fillCircle(px, py, r / 2, SH110X_WHITE);
+  }
+  display.fillCircle(cx, cy, r / 2 + 1, SH110X_WHITE);
+}
+
+void drawIconNote(int cx, int cy, int s) {
+  display.fillCircle(cx - s / 2, cy + s - 1, s - 2, SH110X_WHITE);
+  display.drawLine(cx - s / 2 + s - 3, cy + s - 1, cx - s / 2 + s - 3, cy - s, SH110X_WHITE);
+  display.drawLine(cx - s / 2 + s - 3, cy - s, cx + s, cy - s + 2, SH110X_WHITE);
+}
+
+void drawIconMoon(int cx, int cy, int r) {
+  display.fillCircle(cx, cy, r, SH110X_WHITE);
+  display.fillCircle(cx + r / 2, cy - r / 3, r - 1, SH110X_BLACK);
+}
+
+void drawNoteBorder(int style) {
+  switch (style) {
+    case 1: // rounded outline
+      display.drawRoundRect(1, 1, SCREEN_WIDTH - 2, SCREEN_HEIGHT - 2, 8, SH110X_WHITE);
+      break;
+    case 2: // stitched dashes
+      for (int x = 6; x < SCREEN_WIDTH - 6; x += 7) {
+        display.drawLine(x, 3, x + 3, 3, SH110X_WHITE);
+        display.drawLine(x, SCREEN_HEIGHT - 4, x + 3, SCREEN_HEIGHT - 4, SH110X_WHITE);
+      }
+      for (int y = 6; y < SCREEN_HEIGHT - 6; y += 7) {
+        display.drawLine(3, y, 3, y + 3, SH110X_WHITE);
+        display.drawLine(SCREEN_WIDTH - 4, y, SCREEN_WIDTH - 4, y + 3, SH110X_WHITE);
+      }
+      break;
+    case 3: // small hearts in corners
+      drawIconHeart(9, 9, 3);
+      drawIconHeart(SCREEN_WIDTH - 9, 9, 3);
+      drawIconHeart(9, SCREEN_HEIGHT - 9, 3);
+      drawIconHeart(SCREEN_WIDTH - 9, SCREEN_HEIGHT - 9, 3);
+      break;
+    case 4: // dot border
+      for (int x = 5; x < SCREEN_WIDTH; x += 6) {
+        display.fillCircle(x, 3, 1, SH110X_WHITE);
+        display.fillCircle(x, SCREEN_HEIGHT - 4, 1, SH110X_WHITE);
+      }
+      for (int y = 9; y < SCREEN_HEIGHT - 6; y += 6) {
+        display.fillCircle(3, y, 1, SH110X_WHITE);
+        display.fillCircle(SCREEN_WIDTH - 4, y, 1, SH110X_WHITE);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void drawNoteIcons(const String& icons, int y, int count) {
+  // Draw up to `count` icons centered on the given y, spaced 16px apart
+  if (icons.length() == 0 || count == 0) return;
+  // Parse comma-separated list into icon names
+  String names[8];
+  int nameCount = 0;
+  String remaining = icons;
+  while (remaining.length() > 0 && nameCount < 8) {
+    int comma = remaining.indexOf(',');
+    if (comma < 0) {
+      names[nameCount++] = remaining;
+      break;
+    }
+    names[nameCount++] = remaining.substring(0, comma);
+    remaining = remaining.substring(comma + 1);
+  }
+  int drawCount = nameCount > count ? count : nameCount;
+  int totalW = drawCount * 14;
+  int startX = (SCREEN_WIDTH - totalW) / 2 + 7;
+  for (int i = 0; i < drawCount; i++) {
+    int cx = startX + i * 14;
+    const String& name = names[i];
+    if (name == "heart")  drawIconHeart(cx, y, 3);
+    else if (name == "star")   drawIconStar(cx, y, 5);
+    else if (name == "flower") drawIconFlower(cx, y, 4);
+    else if (name == "note")   drawIconNote(cx, y, 5);
+    else if (name == "moon")   drawIconMoon(cx, y, 4);
+  }
+}
+
+void drawWrappedText(const String& text, int fontSize, int border, const String& icons) {
   display.clearDisplay();
+  drawNoteBorder(border);
   display.setTextColor(SH110X_WHITE);
   const int safeFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
-  const int horizontalPadding = 4;
-  const int maxLines = safeFontSize >= 3 ? 2 : (safeFontSize == 2 ? 4 : 6);
+  // Reserve top row for icons if any are provided
+  const bool hasIcons = icons.length() > 0;
+  const int iconRowH = hasIcons ? 12 : 0;
+  const int topPad = hasIcons ? 14 : 4;
+  const int horizontalPadding = (border > 0) ? 8 : 4;
+  const int availH = SCREEN_HEIGHT - topPad - 4;
   const int lineHeight = (8 * safeFontSize) + 2;
+  const int maxLines = availH / lineHeight;
   const int maxChars = (SCREEN_WIDTH - (horizontalPadding * 2)) / (6 * safeFontSize);
   String lines[maxLines];
   int lineCount = 0;
@@ -371,10 +485,8 @@ void drawWrappedText(const String& text, int fontSize) {
   display.setTextWrap(false);
 
   const int totalHeight = lineCount * lineHeight;
-  int cursorY = (SCREEN_HEIGHT - totalHeight) / 2;
-  if (cursorY < 2) {
-    cursorY = 2;
-  }
+  int cursorY = topPad + (availH - totalHeight) / 2;
+  if (cursorY < topPad) cursorY = topPad;
 
   for (int i = 0; i < lineCount; i++) {
     int16_t x1;
@@ -387,10 +499,11 @@ void drawWrappedText(const String& text, int fontSize) {
     cursorY += lineHeight;
   }
 
+  // Draw icons row centered at top
+  if (hasIcons) drawNoteIcons(icons, 7, 7);
+
   display.display();
 }
-
-void renderBannerFrame() {
   display.clearDisplay();
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(2);
@@ -430,7 +543,7 @@ void renderIdle() {
 void renderCurrentMode() {
   switch (currentMode) {
     case MODE_NOTE:
-      drawWrappedText(currentNote, currentNoteFontSize);
+      drawWrappedText(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons);
       break;
     case MODE_BANNER:
       renderBannerFrame();
@@ -453,16 +566,22 @@ void renderCurrentMode() {
 // Draw a filled rounded-rect eye with a black pupil inside
 void drawEye(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy) {
   display.fillRoundRect(cx - w / 2, cy - h / 2, w, h, r, SH110X_WHITE);
-  // Black pupil cut-out
   display.fillCircle(cx + pupilDx, cy + pupilDy, 4, SH110X_BLACK);
 }
 
-// Draw a closed/blink eye (thin horizontal slit)
+// Squash/stretch version: animates eye height
+void drawEyeSqueeze(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy) {
+  int clampedH = h < 3 ? 3 : h;
+  display.fillRoundRect(cx - w / 2, cy - clampedH / 2, w, clampedH, r, SH110X_WHITE);
+  if (clampedH >= 8) {
+    display.fillCircle(cx + pupilDx, cy + pupilDy, 4, SH110X_BLACK);
+  }
+}
+
 void drawBlinkEye(int cx, int cy, int w) {
   display.fillRoundRect(cx - w / 2, cy - 2, w, 5, 2, SH110X_WHITE);
 }
 
-// Draw squinted happy-arc eyes (^^)
 void drawHappyArc(int cx, int cy, int w) {
   for (int t = 0; t < 4; t++) {
     int hw = w / 2;
@@ -471,7 +590,14 @@ void drawHappyArc(int cx, int cy, int w) {
   }
 }
 
-// Thick U-shaped smile
+void drawSadArc(int cx, int cy, int w) {
+  for (int t = 0; t < 3; t++) {
+    int hw = w / 2;
+    display.drawLine(cx - hw, cy - 2 + t, cx, cy + 4 + t, SH110X_WHITE);
+    display.drawLine(cx, cy + 4 + t, cx + hw, cy - 2 + t, SH110X_WHITE);
+  }
+}
+
 void drawSmile(int cx, int cy, int w) {
   for (int t = 0; t < 3; t++) {
     int hw = w / 2;
@@ -481,13 +607,17 @@ void drawSmile(int cx, int cy, int w) {
   }
 }
 
-// Puckered kiss lips
-void drawKissLips(int cx, int cy) {
-  display.fillCircle(cx, cy, 4, SH110X_WHITE);
-  display.fillCircle(cx, cy, 2, SH110X_BLACK);
+void drawOvalMouth(int cx, int cy, int rw, int rh) {
+  for (int t = 0; t < 2; t++) {
+    display.drawRoundRect(cx - rw, cy - rh + t, rw * 2, rh * 2, rh, SH110X_WHITE);
+  }
 }
 
-// Filled heart shape
+void drawKissLips(int cx, int cy) {
+  display.fillCircle(cx, cy, 5, SH110X_WHITE);
+  display.fillCircle(cx, cy, 3, SH110X_BLACK);
+}
+
 void drawBigHeart(int cx, int cy, int s) {
   display.fillCircle(cx - s, cy - s / 3, s, SH110X_WHITE);
   display.fillCircle(cx + s, cy - s / 3, s, SH110X_WHITE);
@@ -499,45 +629,164 @@ void drawBigHeart(int cx, int cy, int s) {
   );
 }
 
-// Thick eyebrow line
+void drawTear(int cx, int cy) {
+  display.fillCircle(cx, cy, 2, SH110X_WHITE);
+  display.fillTriangle(cx - 2, cy, cx + 2, cy, cx, cy + 5, SH110X_WHITE);
+}
+
 void drawBrow(int x1, int y1, int x2, int y2) {
   for (int t = 0; t < 3; t++) {
     display.drawLine(x1, y1 + t, x2, y2 + t, SH110X_WHITE);
   }
 }
 
+void drawZzz(int x, int y, uint8_t phase) {
+  // three Z letters growing and fading based on phase
+  int p = phase % 16;
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  if (p >= 2)  { display.setCursor(x,     y);     display.print('Z'); }
+  if (p >= 6)  { display.setCursor(x + 6, y - 5); display.print('Z'); }
+  if (p >= 10) { display.setCursor(x + 13, y - 10); display.print('Z'); }
+}
+
 void renderExpressionFrame() {
   display.clearDisplay();
 
-  const int LX = 38;   // left eye center X
-  const int RX = 90;   // right eye center X
-  const int EY = 22;   // eye center Y
-  const int MY = 50;   // mouth center Y
-  const int EW = 24;   // eye width
-  const int EH = 18;   // eye height
-  const int ER = 5;    // eye corner radius
+  const int LX = 38;
+  const int RX = 90;
+  const int EY = 22;
+  const int MY = 50;
+  const int EW = 24;
+  const int EH = 18;
+  const int ER = 5;
+  int ph = expressionPhase % 16;
 
   // ── Heart: pulsing heart fills the whole screen ──
   if (currentExpression == "heart") {
-    static const int sizes[] = {6, 7, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8};
-    int s = sizes[expressionPhase % 16];
-    drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 4, s);
+    static const int sizes[] = {7,8,9,10,11,12,13,13,12,11,10,9,8,7,8,9};
+    drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 4, sizes[ph]);
     display.display();
     return;
   }
 
-  // ── Happy: open eyes with pupils, periodic blink, big smile ──
+  // ── Love: heart pupils, big smile, floating hearts ──
+  if (currentExpression == "love") {
+    // Heart-shaped eyes (small heart where pupil would be)
+    display.fillRoundRect(LX - EW/2, EY - EH/2, EW, EH, ER, SH110X_WHITE);
+    drawBigHeart(LX, EY, 4);
+    display.fillRoundRect(RX - EW/2, EY - EH/2, EW, EH, ER, SH110X_WHITE);
+    drawBigHeart(RX, EY, 4);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
+    // Floating sparkle/hearts
+    static const int hY[] = {0,-2,-4,-6,-8,-10,-12,-14,-12,-10,-8,-4,-2,0,0,0};
+    if (ph < 13) drawBigHeart(18, 18 + hY[ph], 3);
+    if (ph > 3 && ph < 15) drawBigHeart(110, 20 + hY[(ph+8)%16], 2);
+    display.display();
+    return;
+  }
+
+  // ── Surprised: giant round eyes, open-O mouth ──
+  if (currentExpression == "surprised") {
+    // Eyes grow and shrink
+    static const int eyeH[] = {18,20,22,24,24,24,22,20,18,16,18,20,22,24,22,20};
+    int eh = eyeH[ph];
+    drawEye(LX, EY, EW + 2, eh, ER + 1, 0, 0);
+    drawEye(RX, EY, EW + 2, eh, ER + 1, 0, 0);
+    // Raised brows
+    drawBrow(LX - 12, EY - 16, LX + 12, EY - 16);
+    drawBrow(RX - 12, EY - 16, RX + 12, EY - 16);
+    drawOvalMouth(SCREEN_WIDTH / 2, MY + 1, 7, 5);
+    display.display();
+    return;
+  }
+
+  // ── Angry: eyes angled inward + angled brows + tight line mouth ──
+  if (currentExpression == "angry") {
+    // Eyes squeeze rhythmically
+    static const int eyeH[] = {16,14,12,10,12,14,16,18,16,14,12,10,12,14,16,18};
+    int eh = eyeH[ph];
+    drawEyeSqueeze(LX, EY, EW, eh, ER, 0, 0);
+    drawEyeSqueeze(RX, EY, EW, eh, ER, 0, 0);
+    // Angry inward-slanting brows
+    drawBrow(LX - 12, EY - 11, LX + 8, EY - 17);
+    drawBrow(RX + 12, EY - 11, RX - 8, EY - 17);
+    // Tight frown
+    for (int t = 0; t < 3; t++) {
+      display.drawLine(SCREEN_WIDTH/2 - 10, MY + t, SCREEN_WIDTH/2 + 10, MY + t, SH110X_WHITE);
+    }
+    display.display();
+    return;
+  }
+
+  // ── Sad: droopy eyes + frown + tears ──
+  if (currentExpression == "sad") {
+    // Pupils at bottom of eye = droopy look
+    drawEye(LX, EY + 2, EW, EH - 2, ER, 0, 3);
+    drawEye(RX, EY + 2, EW, EH - 2, ER, 0, 3);
+    // Sad angled brows (outer corners raised)
+    drawBrow(LX - 12, EY - 9, LX + 8, EY - 15);
+    drawBrow(RX + 12, EY - 9, RX - 8, EY - 15);
+    drawSadArc(SCREEN_WIDTH / 2, MY, 14);
+    // Tears that drip every other cycle
+    if (ph >= 8) {
+      static const int tearDropY[] = {0,0,0,0,0,0,0,0,2,4,6,8,10,12,14,16};
+      drawTear(LX + 8, EY + 12 + tearDropY[ph]);
+    }
+    display.display();
+    return;
+  }
+
+  // ── Sleepy: half-closed eyes, ZZZ, slow blink ──
+  if (currentExpression == "sleepy") {
+    // Eye height cycles slowly between half-open and closed
+    static const int eyeH[] = {10,8,6,4,3,4,6,8,10,12,10,8,6,4,6,8};
+    int eh = eyeH[ph];
+    drawEyeSqueeze(LX, EY, EW, eh, ER, 0, 0);
+    drawEyeSqueeze(RX, EY, EW, eh, ER, 0, 0);
+    // Neutral flat mouth
+    for (int t = 0; t < 2; t++) {
+      display.drawLine(SCREEN_WIDTH/2 - 8, MY + t, SCREEN_WIDTH/2 + 8, MY + t, SH110X_WHITE);
+    }
+    drawZzz(96, 8, expressionPhase);
+    display.display();
+    return;
+  }
+
+  // ── Thinking: one squinted eye, one normal, look up-right ──
+  if (currentExpression == "thinking") {
+    static const int pxS[] = {0,1,2,3,4,4,4,3,2,1,0,0,0,1,2,3};
+    static const int pyS[] = {0,-1,-2,-3,-4,-4,-3,-2,-1,0,0,-1,-2,-1,0,0};
+    int px = pxS[ph]; int py = pyS[ph];
+    drawEyeSqueeze(LX, EY, EW - 4, 10, ER, px, py); // squinted
+    drawEye(RX, EY, EW, EH, ER, px, py);             // normal
+    // Thought bubble dots upper-right
+    int bx = 112, by = 8;
+    int bsize = (ph % 8) < 4 ? 2 : 3;
+    display.fillCircle(bx,      by + 14, bsize - 1, SH110X_WHITE);
+    display.fillCircle(bx + 4,  by + 7,  bsize,     SH110X_WHITE);
+    display.fillCircle(bx + 7,  by,      bsize + 1, SH110X_WHITE);
+    // Neutral-ish mouth, slight tilt
+    for (int t = 0; t < 2; t++) {
+      display.drawLine(SCREEN_WIDTH/2 - 8, MY + 2 + t, SCREEN_WIDTH/2 + 8, MY + t, SH110X_WHITE);
+    }
+    display.display();
+    return;
+  }
+
+  // ── Happy: open eyes with pupils, periodic blink + squish ──
   if (currentExpression == "happy") {
-    int phase = expressionPhase % 16;
-    bool blink = (phase >= 12 && phase <= 13);
+    bool blink = (ph >= 12 && ph <= 13);
+    // Squish: eyes squeeze briefly on phase 14-15 after blink
+    static const int eyeH[] = {18,18,18,18,18,18,18,18,18,18,18,18,4,4,12,18};
     if (blink) {
       drawBlinkEye(LX, EY, EW);
       drawBlinkEye(RX, EY, EW);
     } else {
-      // Little bounce in pupil Y for liveliness
-      int py = (phase < 4) ? -1 : ((phase < 8) ? 0 : 1);
-      drawEye(LX, EY, EW, EH, ER, 0, py);
-      drawEye(RX, EY, EW, EH, ER, 0, py);
+      int eh = eyeH[ph];
+      int py = (ph < 4) ? -1 : ((ph < 8) ? 0 : 1);
+      drawEyeSqueeze(LX, EY, EW, eh, ER, 0, py);
+      drawEyeSqueeze(RX, EY, EW, eh, ER, 0, py);
     }
     drawSmile(SCREEN_WIDTH / 2, MY, 22);
   }
@@ -559,31 +808,32 @@ void renderExpressionFrame() {
   }
   // ── Look around: pupils shift smoothly left/right ──
   else if (currentExpression == "look_around") {
-    // Smoother 16-phase sinusoidal pupil path with vertical drift
-    static const int pxShifts[] = {0, 3, 5, 7, 8, 7, 5, 3, 0, -3, -5, -7, -8, -7, -5, -3};
-    static const int pyShifts[] = {0, -1, -1, 0, 1, 1, 0, -1, 0, -1, -1, 0, 1, 1, 0, -1};
-    int px = pxShifts[expressionPhase % 16];
-    int py = pyShifts[expressionPhase % 16];
+    static const int pxShifts[] = {0,3,5,7,8,7,5,3,0,-3,-5,-7,-8,-7,-5,-3};
+    static const int pyShifts[] = {0,-1,-1,0,1,1,0,-1,0,-1,-1,0,1,1,0,-1};
+    int px = pxShifts[ph];
+    int py = pyShifts[ph];
     drawEye(LX, EY, EW, EH, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
-    // Neutral mouth
     for (int t = 0; t < 3; t++) {
       display.drawLine(SCREEN_WIDTH / 2 - 8, MY + t, SCREEN_WIDTH / 2 + 8, MY + t, SH110X_WHITE);
     }
   }
-  // ── Kiss: wink + open eye + lips + floating hearts ──
+  // ── Kiss: wink + open eye + lips + hearts rising FROM mouth ──
   else if (currentExpression == "kiss") {
-    drawBlinkEye(LX, EY, EW);  // wink
-    drawEye(RX, EY, EW, EH, ER, 0, 0);  // open
+    drawBlinkEye(LX, EY, EW);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawKissLips(SCREEN_WIDTH / 2, MY);
-    // Floating hearts that rise and fade
-    static const int heartY[] = {0, -2, -4, -6, -8, -10, -13, -16, -19, -16, -10, -6, -3, -1, 0, 0};
-    int idx = expressionPhase % 16;
-    if (idx < 12) {
-      drawBigHeart(102, 28 + heartY[idx], 3);
+    // Hearts rise from mouth position upward
+    static const int heartOffY[] = {0,-3,-6,-9,-12,-16,-20,-24,-28,-24,-18,-12,-7,-3,0,0};
+    int idx = ph;
+    if (idx < 14) {
+      // heart 1: center, rises straight up
+      drawBigHeart(SCREEN_WIDTH / 2, MY - 8 + heartOffY[idx], 3);
     }
-    if (idx > 4 && idx < 14) {
-      drawBigHeart(114, 34 + heartY[(idx + 8) % 16], 2);
+    if (idx > 3 && idx < 15) {
+      // heart 2: offset right, staggered
+      int idx2 = (idx - 4 < 0) ? 0 : (idx - 4);
+      drawBigHeart(SCREEN_WIDTH / 2 + 14, MY - 5 + heartOffY[idx2 % 16], 2);
     }
   }
   // ── Default: neutral face with pupils ──
@@ -605,9 +855,11 @@ void setIdleStatus(const String& value) {
   publishStatus();
 }
 
-void setNote(const String& text, int fontSize) {
+void setNote(const String& text, int fontSize, int border, const String& icons) {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
+  currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);
+  currentNoteIcons = icons;
 
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
@@ -783,7 +1035,9 @@ void handleCommandJson(const String& body) {
   if (type == "set_note") {
     setNote(
       extractJsonStringField(body, "text"),
-      extractJsonIntField(body, "fontSize", 1)
+      extractJsonIntField(body, "fontSize", 1),
+      extractJsonIntField(body, "border", 0),
+      extractJsonStringField(body, "icons", "")
     );
     return;
   }

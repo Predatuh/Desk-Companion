@@ -20,6 +20,12 @@ enum DeskExpression {
   lookAround,
   kiss,
   heart,
+  sad,
+  angry,
+  surprised,
+  sleepy,
+  love,
+  thinking,
 }
 
 extension DeskExpressionLabel on DeskExpression {
@@ -30,6 +36,12 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.lookAround => 'Look around',
         DeskExpression.kiss => 'Blow kisses',
         DeskExpression.heart => 'Big heart',
+        DeskExpression.sad => 'Sad',
+        DeskExpression.angry => 'Angry',
+        DeskExpression.surprised => 'Surprised',
+        DeskExpression.sleepy => 'Sleepy',
+        DeskExpression.love => 'In love',
+        DeskExpression.thinking => 'Thinking',
       };
 
   String get command => switch (this) {
@@ -39,15 +51,27 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.lookAround => 'look_around',
         DeskExpression.kiss => 'kiss',
         DeskExpression.heart => 'heart',
+        DeskExpression.sad => 'sad',
+        DeskExpression.angry => 'angry',
+        DeskExpression.surprised => 'surprised',
+        DeskExpression.sleepy => 'sleepy',
+        DeskExpression.love => 'love',
+        DeskExpression.thinking => 'thinking',
       };
 
   String get subtitle => switch (this) {
         DeskExpression.happy => 'Bright open eyes with a cheerful grin.',
-        DeskExpression.smile => 'Soft smile with relaxed eyes.',
-        DeskExpression.confused => 'Tilted brows and puzzled eyes.',
-        DeskExpression.lookAround => 'Pupils drift left and right like a desk bot.',
-        DeskExpression.kiss => 'One wink, one eye open, tiny floating hearts.',
-        DeskExpression.heart => 'A big heart that pulses on the whole screen.',
+        DeskExpression.smile => 'Soft smile with squinted arc eyes.',
+        DeskExpression.confused => 'Asymmetric brows and a tilted puzzled mouth.',
+        DeskExpression.lookAround => 'Pupils drift left and right like a curious bot.',
+        DeskExpression.kiss => 'One wink, hearts float up from the lips.',
+        DeskExpression.heart => 'A big pulsing heart that fills the screen.',
+        DeskExpression.sad => 'Droopy eyes, frown, a single falling tear.',
+        DeskExpression.angry => 'Angled brows, squinting eyes, tight flat mouth.',
+        DeskExpression.surprised => 'Huge eyes that grow wide, open-O mouth.',
+        DeskExpression.sleepy => 'Half-closed eyes slowly blinking, ZZZ rising.',
+        DeskExpression.love => 'Heart-shaped pupils and a giant grin.',
+        DeskExpression.thinking => 'One squinted eye, gaze up, thought bubble.',
       };
 }
 
@@ -67,6 +91,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _bannerController = TextEditingController(text: 'miss you already <3');
   String? _selectedWifiSsid;
   double _noteFontSize = 1;
+  int _noteBorderStyle = 0;
+  final List<String> _noteIcons = [];
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -417,6 +443,59 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
+                        'Border',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final (idx, label) in [
+                            (0, 'None'),
+                            (1, 'Outline'),
+                            (2, 'Stitched'),
+                            (3, 'Hearts'),
+                            (4, 'Dots'),
+                          ])
+                            ChoiceChip(
+                              label: Text(label),
+                              selected: _noteBorderStyle == idx,
+                              onSelected: (_) =>
+                                  setState(() => _noteBorderStyle = idx),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Decorations',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final (name, label) in [
+                            ('heart', '♥ Heart'),
+                            ('star',  '★ Star'),
+                            ('flower','✿ Flower'),
+                            ('note',  '♪ Note'),
+                            ('moon',  '☾ Moon'),
+                          ])
+                            FilterChip(
+                              label: Text(label),
+                              selected: _noteIcons.contains(name),
+                              onSelected: (on) => setState(() {
+                                on
+                                    ? _noteIcons.add(name)
+                                    : _noteIcons.remove(name);
+                              }),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
                         'Preview',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
@@ -434,6 +513,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   .take(kMaxNoteCharacters)
                                   .toString(),
                               fontSize: _noteFontSize.round(),
+                              border: _noteBorderStyle,
+                              icons: List.unmodifiable(_noteIcons),
                             ),
                           ),
                         ),
@@ -936,7 +1017,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         .trim();
     if (text.isEmpty) return;
     await _perform(
-      () => controller.sendNote(text, fontSize: _noteFontSize.round()),
+      () => controller.sendNote(
+        text,
+        fontSize: _noteFontSize.round(),
+        border: _noteBorderStyle,
+        icons: _noteIcons.join(','),
+      ),
       success: controller.hasRelayTarget && !controller.isBleConnected
           ? 'Note delivered over relay.'
           : 'Note delivered.',
