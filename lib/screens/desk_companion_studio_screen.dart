@@ -875,12 +875,24 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendNote(DeskCompanionController controller) async {
+    final relayOnly = !controller.isBleConnected && controller.hasRelayTarget;
+
     await _perform(
       () async {
+        if (relayOnly) {
+          await controller.sendNote(
+            _boundedNoteText(),
+            fontSize: _noteFontSize.round(),
+          );
+          return;
+        }
+
         final payload = await _buildNoteCardPayload();
         await controller.sendImage(payload);
       },
-      success: 'Note card delivered.',
+      success: relayOnly
+          ? 'Note delivered over relay. Connect BLE for custom border and sticker styling.'
+          : 'Note card delivered.',
     );
   }
 

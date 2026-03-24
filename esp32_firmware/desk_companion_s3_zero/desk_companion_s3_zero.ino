@@ -90,7 +90,7 @@ unsigned long btnNextDownMs = 0;
 unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
-bool beginHttpClient(HTTPClient& client, const String& url);
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 150);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
@@ -276,7 +276,7 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-bool beginHttpClient(HTTPClient& client, const String& url) {
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
   if (url.startsWith("https://")) {
     relayHttpsClient.setInsecure();
@@ -285,7 +285,7 @@ bool beginHttpClient(HTTPClient& client, const String& url) {
     started = client.begin(relayHttpClient, url);
   }
   if (started) {
-    client.setTimeout(150);
+    client.setTimeout(timeoutMs);
   }
   return started;
 }
@@ -743,7 +743,7 @@ void pollRelay() {
   lastRelayPollMs = millis();
 
   HTTPClient client;
-  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/pull")) {
+  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/pull", 1200)) {
     return;
   }
 
