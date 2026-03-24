@@ -447,7 +447,9 @@ class DeskCompanionController extends ChangeNotifier {
     required bool allowRelay,
     required bool silent,
   }) async {
-    if (allowRelay && hasRelayTarget) {
+    final canSendOverBle = isBleConnected && _imageCharacteristic != null && _commandCharacteristic != null;
+
+    if (!canSendOverBle && allowRelay && hasRelayTarget) {
       if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
         _mode = 'image';
         if (!silent) {
@@ -456,6 +458,10 @@ class DeskCompanionController extends ChangeNotifier {
         return;
       }
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
+    }
+
+    if (!canSendOverBle) {
+      throw HttpException('BLE is not connected and relay image send is unavailable.');
     }
 
     await _sendBleCommand({
