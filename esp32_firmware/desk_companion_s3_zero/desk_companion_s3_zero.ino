@@ -781,21 +781,24 @@ void renderExpressionFrame() {
     return;
   }
 
-  // ── Angry: squinting eyes pulsing, hard-angled brows, tight mouth ──
+  // ── Angry: V-brows, flat squinting eyes, rigid trembling mouth ──
   if (currentExpression == "angry") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int eh = EH - 6 - (int)(wave * 6.0f); // 10→16→10
-    drawEye(LX, EY, EW, eh, ER, 0, 0);
-    drawEye(RX, EY, EW, eh, ER, 0, 0);
-    // Brows angle inward aggressively, twitch with wave
+    // Eyes stay wide but FLAT — top half clipped by thick V-brows
+    drawEye(LX, EY + 2, EW, EH - 2, ER, 0, 2);
+    drawEye(RX, EY + 2, EW, EH - 2, ER, 0, 2);
+    // Black-fill the top portion of each eye to simulate angry lids
+    int lidH = 4 + (int)(wave * 3.0f);
+    display.fillRect(LX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
+    display.fillRect(RX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
+    // V-shaped brows: inner ends LOW (near nose), outer ends HIGH
     int twitch = (int)(wave * 2.0f);
-    drawBrow(LX - 14, EY - 8 + twitch, LX + 10, EY - 18);
-    drawBrow(RX + 14, EY - 8 + twitch, RX - 10, EY - 18);
-    // Tight jagged mouth line
-    int mw = 10 + (int)(wave * 3.0f);
+    drawBrow(LX - 14, EY - 16, LX + 8, EY - 6 - twitch);   // left: outer-high, inner-low
+    drawBrow(RX + 14, EY - 16, RX - 8, EY - 6 - twitch);   // right: outer-high, inner-low
+    // Small tight straight mouth with tremble
+    int mShift = (int)(sin(t * 3.14159f * 6.0f) * 2.0f);
     for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - mw, MY + tt, SCREEN_WIDTH/2, MY - 2 + tt, SH110X_WHITE);
-      display.drawLine(SCREEN_WIDTH/2, MY - 2 + tt, SCREEN_WIDTH/2 + mw, MY + tt, SH110X_WHITE);
+      display.drawLine(SCREEN_WIDTH/2 - 10, MY + tt + mShift, SCREEN_WIDTH/2 + 10, MY + tt + mShift, SH110X_WHITE);
     }
     display.display();
     return;
