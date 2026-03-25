@@ -393,6 +393,27 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.isBleConnected
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedWifiSsid = null;
+                                    _wifiPasswordController.clear();
+                                  });
+                                  _perform(
+                                    () => controller.forgetWifi(),
+                                    success: 'Wi-Fi credentials cleared on device.',
+                                  );
+                                },
+                          icon: const Icon(Icons.wifi_off, size: 18),
+                          label: const Text('Forget Wi-Fi'),
+                        ),
+                      ),
                       if (availableWifiNetworks.isEmpty) ...[
                         const SizedBox(height: 10),
                         Align(

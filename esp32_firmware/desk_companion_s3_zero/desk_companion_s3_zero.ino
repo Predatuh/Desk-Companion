@@ -1205,6 +1205,23 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "forget_wifi") {
+    WiFi.disconnect(true, true);  // disconnect + erase SDK credentials
+    WiFi.setAutoReconnect(false);
+    currentSsid = "";
+    ipAddress = "";
+    wifiWasConnected = false;
+    availableWifiNetworkCount = 0;
+    // Clear stored credentials from NVS
+    preferences.begin("desk-cfg", false);
+    preferences.remove("ssid");
+    preferences.remove("pass");
+    preferences.end();
+    statusText = "Wi-Fi forgotten";
+    publishStatus();
+    return;
+  }
+
   if (type == "set_note") {
     setNote(
       extractJsonStringField(body, "text"),

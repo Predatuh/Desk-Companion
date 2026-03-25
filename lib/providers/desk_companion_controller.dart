@@ -299,6 +299,16 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> forgetWifi() async {
+    await _runBusy(() async {
+      await _sendBleCommand({'type': 'forget_wifi'});
+      _connectedSsid = '';
+      _deviceIp = '';
+      _availableWifiNetworks = const [];
+      _setStatus('Wi-Fi credentials cleared on device.');
+    });
+  }
+
   Future<void> configureRelay({
     required String relayUrl,
     required String token,
