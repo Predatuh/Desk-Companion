@@ -403,6 +403,21 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                         ),
                       ],
+                      if (controller.wifiScanning || controller.wifiConnecting) ...[
+                        const SizedBox(height: 12),
+                        Column(
+                          children: [
+                            const LinearProgressIndicator(),
+                            const SizedBox(height: 6),
+                            Text(
+                              controller.statusMessage,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -82,6 +82,9 @@ int availableWifiNetworkCount = 0;
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
 String pendingWifiPass = "";
+bool wifiScanPending = false;
+bool wifiScanInProgress = false;
+bool wifiWasConnected = false;
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -1067,22 +1070,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   ipAddress = "";
   publishStatus();
 
-  const unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
-    delay(200);
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-    statusText = "Wi-Fi connecting...";
-    ipAddress = "";
-    publishStatus();
-    return false;
-  }
-
-  currentSsid = ssid;
-  ipAddress = WiFi.localIP().toString();
-  statusText = "Wi-Fi connected";
-  publishStatus();
+  // No blocking wait — loop() will detect WL_CONNECTED and publishStatus()
   return true;
 }
 
@@ -1094,30 +1082,9 @@ void scanWifiNetworks() {
   WiFi.scanDelete();
   availableWifiNetworkCount = 0;
 
-  const int foundNetworks = WiFi.scanNetworks();
-  for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
-    const String ssid = WiFi.SSID(i);
-    if (ssid.isEmpty()) {
-      continue;
-    }
-
-    bool duplicate = false;
-    for (int existing = 0; existing < availableWifiNetworkCount; existing++) {
-      if (availableWifiNetworks[existing] == ssid) {
-        duplicate = true;
-        break;
-      }
-    }
-    if (duplicate) {
-      continue;
-    }
-
-    availableWifiNetworks[availableWifiNetworkCount++] = ssid;
-  }
-
-  WiFi.scanDelete();
-  statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
-  publishStatus();
+  // Start async scan — results collected in loop()
+  WiFi.scanNetworks(true);  // true = async
+  wifiScanInProgress = true;
 }
 
 void tryStoredWifi() {
@@ -1165,7 +1132,10 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "scan_wifi") {
-    scanWifiNetworks();
+    // Defer scan to loop() so BLE callback returns immediately
+    wifiScanPending = true;
+    statusText = "Scan queued";
+    publishStatus();
     return;
   }
 
@@ -1494,14 +1464,58 @@ void loop() {
     }
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
+  // --- WiFi status tracking ---
+  const bool wifiNow = WiFi.status() == WL_CONNECTED;
+  if (wifiNow) {
     ipAddress = WiFi.localIP().toString();
+    if (!wifiWasConnected) {
+      // Just connected — notify app
+      wifiWasConnected = true;
+      statusText = "Wi-Fi connected";
+      publishStatus();
+    }
   } else {
     ipAddress = "";
+    if (wifiWasConnected) {
+      // Just lost connection — notify app
+      wifiWasConnected = false;
+      statusText = "Wi-Fi disconnected";
+      publishStatus();
+    }
     // If we have stored credentials, attempt reconnect every 30s
     if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 30000) {
       lastWifiCheckMs = millis();
       WiFi.reconnect();
+    }
+  }
+
+  // Handle deferred WiFi scan (from BLE callback)
+  if (wifiScanPending) {
+    wifiScanPending = false;
+    scanWifiNetworks();
+  }
+
+  // Collect async scan results
+  if (wifiScanInProgress) {
+    int16_t result = WiFi.scanComplete();
+    if (result >= 0) {
+      wifiScanInProgress = false;
+      for (int i = 0; i < result && availableWifiNetworkCount < 10; i++) {
+        const String ssid = WiFi.SSID(i);
+        if (ssid.isEmpty()) continue;
+        bool dup = false;
+        for (int e = 0; e < availableWifiNetworkCount; e++) {
+          if (availableWifiNetworks[e] == ssid) { dup = true; break; }
+        }
+        if (!dup) availableWifiNetworks[availableWifiNetworkCount++] = ssid;
+      }
+      WiFi.scanDelete();
+      statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+      publishStatus();
+    } else if (result == WIFI_SCAN_FAILED) {
+      wifiScanInProgress = false;
+      statusText = "Wi-Fi scan failed";
+      publishStatus();
     }
   }
 

@@ -66,6 +66,11 @@ class DeskCompanionController extends ChangeNotifier {
   bool get relayStatusKnown => _relayStatusKnown;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
+  bool get wifiConnecting => _statusMessage == 'Joining Wi-Fi' ||
+      _statusMessage == 'Wi-Fi queued' ||
+      _statusMessage == 'Wi-Fi connecting...';
+  bool get wifiScanning => _statusMessage == 'Scanning Wi-Fi' ||
+      _statusMessage == 'Scan queued';
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
