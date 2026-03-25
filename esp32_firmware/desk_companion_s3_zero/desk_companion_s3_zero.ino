@@ -85,6 +85,7 @@ String pendingWifiPass = "";
 bool wifiScanPending = false;
 bool wifiScanInProgress = false;
 bool wifiWasConnected = false;
+String storedWifiPass = "";  // kept for boot WiFi connect in setup()
 
 // BLE disconnect → WiFi reconnect (ESP32-S3 radio coexistence recovery)
 bool wifiReconnectAfterBle = false;
@@ -1158,7 +1159,7 @@ void scanWifiNetworks() {
 void tryStoredWifi() {
   preferences.begin("desk-cfg", true);
   currentSsid = preferences.getString("ssid", "");
-  const String password = preferences.getString("pass", "");
+  storedWifiPass = preferences.getString("pass", "");
   relayUrl = preferences.getString("relay_url", "");
   deviceToken = preferences.getString("device_token", "");
   // Restore last note
@@ -1175,17 +1176,7 @@ void tryStoredWifi() {
     currentMode = MODE_NOTE;
   }
   preferences.end();
-
-  if (!currentSsid.isEmpty()) {
-    // Boot-specific path: don't call WiFi.disconnect() on cold boot — it
-    // confuses the ESP32-S3 driver and prevents connection (status 6).
-    // WiFi.mode(WIFI_STA) and WiFi.persistent(true) are already set in setup().
-    Serial.println("[boot] WiFi.begin with stored creds");
-    WiFi.begin(currentSsid.c_str(), password.c_str());
-    WiFi.setAutoReconnect(true);
-    statusText = "Joining Wi-Fi";
-    ipAddress = "";
-  }
+  // WiFi.begin() is called by setup() after this returns
 }
 
 void handleCommandJson(const String& body) {
@@ -1541,74 +1532,58 @@ void setup() {
   setupButtons();
   clearImageBuffer();
 
-  // Show boot diagnostics on OLED
+  // Load stored credentials from NVS first (before touching radio)
+  tryStoredWifi();
+
+  // Show what NVS had
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0);
-  display.println("Booting...");
-  display.display();
-
-  // Force a clean radio state before doing anything WiFi-related.
-  // On ESP32-S3, calling WiFi.begin() too soon after boot or with stale
-  // driver state causes WL_DISCONNECTED (status 6).
-  WiFi.mode(WIFI_OFF);
-  delay(200);
-  WiFi.mode(WIFI_STA);
-  delay(200);
-  WiFi.setAutoReconnect(true);
-
-  // Load stored credentials and attempt WiFi
-  tryStoredWifi();
-
-  // Show what we loaded
-  display.clearDisplay();
-  display.setCursor(0, 0);
   display.println(String("SSID: ") + (currentSsid.isEmpty() ? "(none)" : currentSsid));
-  display.println(String("Relay: ") + (relayUrl.isEmpty() ? "(none)" : "set"));
+  display.println(String("Pass len: ") + String(storedWifiPass.length()));
   display.println(String("Token: ") + (deviceToken.isEmpty() ? "(none)" : deviceToken));
   display.println("WiFi: connecting...");
   display.display();
-  Serial.println(String("Stored SSID: [") + currentSsid + "]");
-  Serial.println(String("Stored relay: [") + relayUrl + "]");
-  Serial.println(String("Stored token: [") + deviceToken + "]");
 
-  // Wait up to 10s for WiFi to connect at boot
-  unsigned long bootWifiStart = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - bootWifiStart < 10000) {
-    delay(250);
-    Serial.print(".");
+  // Now connect WiFi — simple as possible
+  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    WiFi.setAutoReconnect(true);
+
+    // Wait up to 15s
+    unsigned long t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+      delay(500);
+      Serial.print(String(WiFi.status()) + " ");
+    }
+    Serial.println();
   }
-  Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
     ipAddress = WiFi.localIP().toString();
     wifiWasConnected = true;
-    Serial.println(String("WiFi connected: ") + ipAddress);
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("WiFi: OK");
     display.println(String("IP: ") + ipAddress);
-    display.println("Pushing relay status...");
     display.display();
-    // Immediately push status to relay
     pushRelayStatus();
-    Serial.println("Relay push done");
   } else {
-    Serial.println(String("WiFi FAILED at boot. Status: ") + String(WiFi.status()));
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("WiFi: FAILED");
     display.println(String("Status: ") + String(WiFi.status()));
-    display.println("Will retry in loop");
+    display.println(String("SSID: ") + currentSsid);
+    display.println(String("Pass len: ") + String(storedWifiPass.length()));
     display.display();
   }
 
-  delay(2000);  // Show boot diagnostics for 2s
+  delay(3000);
   setupBle();
   renderCurrentMode();
   publishStatus();
-  Serial.println("=== Boot complete ===");
 }
 
 void loop() {
