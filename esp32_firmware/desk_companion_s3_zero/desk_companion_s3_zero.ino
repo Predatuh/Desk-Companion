@@ -1114,16 +1114,43 @@ bool connectToWifi(const String& ssid, const String& password) {
 }
 
 void scanWifiNetworks() {
-  WiFi.mode(WIFI_STA);
   statusText = "Scanning Wi-Fi";
   publishStatus();
 
+  // Must disconnect to scan reliably on ESP32
+  const bool wasConnected = WiFi.status() == WL_CONNECTED;
+  if (wasConnected) {
+    WiFi.disconnect(false, false);
+    delay(300);
+  }
+
+  WiFi.mode(WIFI_STA);
   WiFi.scanDelete();
   availableWifiNetworkCount = 0;
 
-  // Start async scan — results collected in loop()
-  WiFi.scanNetworks(true);  // true = async
-  wifiScanInProgress = true;
+  const int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+  for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.isEmpty()) continue;
+    bool dup = false;
+    for (int e = 0; e < availableWifiNetworkCount; e++) {
+      if (availableWifiNetworks[e] == ssid) { dup = true; break; }
+    }
+    if (!dup) availableWifiNetworks[availableWifiNetworkCount++] = ssid;
+  }
+  WiFi.scanDelete();
+
+  // Reconnect if we were connected before
+  if (wasConnected && !currentSsid.isEmpty()) {
+    preferences.begin("desk-cfg", true);
+    const String storedPass = preferences.getString("pass", "");
+    preferences.end();
+    WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+    WiFi.setAutoReconnect(true);
+  }
+
+  statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+  publishStatusWithNetworks();
 }
 
 void tryStoredWifi() {
@@ -1533,30 +1560,6 @@ void loop() {
   if (wifiScanPending) {
     wifiScanPending = false;
     scanWifiNetworks();
-  }
-
-  // Collect async scan results
-  if (wifiScanInProgress) {
-    int16_t result = WiFi.scanComplete();
-    if (result >= 0) {
-      wifiScanInProgress = false;
-      for (int i = 0; i < result && availableWifiNetworkCount < 10; i++) {
-        const String ssid = WiFi.SSID(i);
-        if (ssid.isEmpty()) continue;
-        bool dup = false;
-        for (int e = 0; e < availableWifiNetworkCount; e++) {
-          if (availableWifiNetworks[e] == ssid) { dup = true; break; }
-        }
-        if (!dup) availableWifiNetworks[availableWifiNetworkCount++] = ssid;
-      }
-      WiFi.scanDelete();
-      statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
-      publishStatusWithNetworks();
-    } else if (result == WIFI_SCAN_FAILED) {
-      wifiScanInProgress = false;
-      statusText = "Wi-Fi scan failed";
-      publishStatus();
-    }
   }
 
   // Handle deferred WiFi connect (from BLE callback)
