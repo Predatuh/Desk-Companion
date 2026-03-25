@@ -179,7 +179,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                           _ChipLabel(
                             label: controller.deviceIp.isEmpty
-                                ? 'IP: waiting'
+                                ? 'IP: no connection'
                                 : 'IP: ${controller.deviceIp}',
                           ),
                           _ChipLabel(

@@ -593,9 +593,11 @@ class DeskCompanionController extends ChangeNotifier {
       if (lastStatus is Map<String, dynamic>) {
         _applyStatusMap(lastStatus);
       } else {
-        _setStatus(_relayOnline
-            ? 'Device is online over Wi-Fi.'
-            : 'Relay reachable, device looks offline.');
+        // Relay has no cached device status — the device hasn't pushed yet.
+        // Keep any previously cached SSID/IP from SharedPreferences.
+        if (!_relayOnline) {
+          _setStatus('Device is not pushing to relay — is it on Wi-Fi?');
+        }
       }
     } catch (error) {
       _relayOnline = false;
@@ -764,7 +766,9 @@ class DeskCompanionController extends ChangeNotifier {
     _scanSub?.cancel();
     _notifySub?.cancel();
     _connectionSub?.cancel();
-    _device?.disconnect();
+    // Do NOT call _device?.disconnect() here — let the BLE connection time out
+    // naturally.  An explicit disconnect on ESP32-S3 disrupts the shared radio
+    // and kills WiFi.  A timeout disconnect is much gentler.
     super.dispose();
   }
 

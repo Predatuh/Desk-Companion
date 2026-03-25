@@ -1344,15 +1344,22 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
 
 void pushRelayStatus() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    Serial.println("[relay-push] SKIP: wifi=" + String(WiFi.status()) + " url=[" + relayUrl + "] token=[" + deviceToken + "]");
     return;
   }
 
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
+  Serial.println("[relay-push] POST " + url);
   HTTPClient client;
-  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/status")) {
+  if (!beginHttpClient(client, url)) {
+    Serial.println("[relay-push] beginHttpClient FAILED");
     return;
   }
   client.addHeader("Content-Type", "application/json");
-  client.POST(buildStatusJson());
+  const String body = buildStatusJson();
+  Serial.println("[relay-push] body=" + body.substring(0, min((int)body.length(), 200)));
+  int code = client.POST(body);
+  Serial.println("[relay-push] response=" + String(code));
   client.end();
 
   relayStatusDirty = false;
@@ -1370,14 +1377,20 @@ void pollRelay() {
 
   lastRelayPollMs = millis();
 
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  Serial.println("[relay-poll] GET " + url);
   HTTPClient client;
-  if (!beginHttpClient(client, relayUrl + "/v1/device/" + deviceToken + "/pull", 1200)) {
+  if (!beginHttpClient(client, url, 1200)) {
+    Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }
 
   const int code = client.GET();
+  Serial.println("[relay-poll] response=" + String(code));
   if (code == 200) {
-    handleCommandJson(client.getString());
+    const String cmd = client.getString();
+    Serial.println("[relay-poll] command=" + cmd);
+    handleCommandJson(cmd);
   }
   client.end();
 }
@@ -1515,15 +1528,76 @@ void handleButtons() {
 
 void setup() {
   Serial.begin(115200);
+  delay(500);
+  Serial.println("\n=== Desk Companion S3 boot ===");
   setupDisplay();
   setupButtons();
   clearImageBuffer();
+
+  // Show boot diagnostics on OLED
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 0);
+  display.println("Booting...");
+  display.display();
+
   // WiFi MUST be initialised before BLE on ESP32 for coexistence to work
   WiFi.mode(WIFI_STA);
+  WiFi.persistent(true);  // Let the SDK persist credentials too
+  WiFi.setAutoReconnect(true);
+
+  // Load stored credentials and attempt WiFi
   tryStoredWifi();
+
+  // Show what we loaded
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("SSID: " + (currentSsid.isEmpty() ? "(none)" : currentSsid));
+  display.println("Relay: " + (relayUrl.isEmpty() ? "(none)" : "set"));
+  display.println("Token: " + (deviceToken.isEmpty() ? "(none)" : deviceToken));
+  display.println("WiFi: connecting...");
+  display.display();
+  Serial.println("Stored SSID: [" + currentSsid + "]");
+  Serial.println("Stored relay: [" + relayUrl + "]");
+  Serial.println("Stored token: [" + deviceToken + "]");
+
+  // Wait up to 10s for WiFi to connect at boot
+  unsigned long bootWifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - bootWifiStart < 10000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    ipAddress = WiFi.localIP().toString();
+    wifiWasConnected = true;
+    Serial.println("WiFi connected: " + ipAddress);
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("WiFi: OK");
+    display.println("IP: " + ipAddress);
+    display.println("Pushing relay status...");
+    display.display();
+    // Immediately push status to relay
+    pushRelayStatus();
+    Serial.println("Relay push done");
+  } else {
+    Serial.println("WiFi FAILED at boot. Status: " + String(WiFi.status()));
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("WiFi: FAILED");
+    display.println("Status: " + String(WiFi.status()));
+    display.println("Will retry in loop");
+    display.display();
+  }
+
+  delay(2000);  // Show boot diagnostics for 2s
   setupBle();
   renderCurrentMode();
   publishStatus();
+  Serial.println("=== Boot complete ===");
 }
 
 void loop() {
@@ -1566,6 +1640,7 @@ void loop() {
       // Just connected — notify app
       wifiWasConnected = true;
       statusText = "Wi-Fi connected";
+      Serial.println("[wifi] CONNECTED ip=" + ipAddress);
       publishStatus();
     }
   } else {
@@ -1574,18 +1649,21 @@ void loop() {
       wifiWasConnected = false;
       wifiReconnectAttempts = 0;
       statusText = "Wi-Fi reconnecting";
+      Serial.println("[wifi] DISCONNECTED — will retry every 5s");
       publishStatus();
     }
     // Retry every 5 s — fast enough to recover from BLE-induced radio glitches
     if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 5000) {
       lastWifiCheckMs = millis();
       wifiReconnectAttempts++;
+      Serial.println("[wifi] reconnect attempt #" + String(wifiReconnectAttempts) + " ssid=[" + currentSsid + "]");
       WiFi.mode(WIFI_STA);
       WiFi.setAutoReconnect(true);
       if (wifiReconnectAttempts <= 3) {
         WiFi.reconnect();
       } else {
         // Quick reconnect failed — do a full begin from stored credentials
+        Serial.println("[wifi] full re-init from NVS");
         preferences.begin("desk-cfg", true);
         const String storedPass = preferences.getString("pass", "");
         preferences.end();

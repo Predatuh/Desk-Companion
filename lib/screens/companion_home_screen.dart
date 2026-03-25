@@ -91,7 +91,7 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
                           ),
                           _ChipLabel(
                             label: provider.deviceIp.isEmpty
-                                ? 'IP: waiting'
+                                ? 'IP: no connection'
                                 : 'IP: ${provider.deviceIp}',
                           ),
                           _ChipLabel(
