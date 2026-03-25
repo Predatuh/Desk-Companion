@@ -1349,7 +1349,7 @@ void pushRelayStatus() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
   Serial.println(String("[relay-push] POST ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url)) {
+  if (!beginHttpClient(client, url, 5000)) {
     Serial.println("[relay-push] beginHttpClient FAILED");
     return;
   }
@@ -1607,56 +1607,40 @@ void loop() {
   }
 
   // --- WiFi status tracking ---
+  // WiFi.setAutoReconnect(true) handles reconnection at the driver level.
+  // We only track state changes here and do a last-resort reconnect after 60s.
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {
     ipAddress = WiFi.localIP().toString();
     if (!wifiWasConnected) {
-      // Just connected — notify app
       wifiWasConnected = true;
+      wifiReconnectAttempts = 0;
       statusText = "Wi-Fi connected";
       Serial.println(String("[wifi] CONNECTED ip=") + ipAddress);
       publishStatus();
     }
+    lastWifiCheckMs = millis();  // reset timer while connected
   } else {
     ipAddress = "";
     if (wifiWasConnected) {
       wifiWasConnected = false;
-      wifiReconnectAttempts = 0;
       statusText = "Wi-Fi reconnecting";
-      Serial.println("[wifi] DISCONNECTED — will retry every 5s");
+      Serial.println("[wifi] DISCONNECTED — auto-reconnect active");
+      lastWifiCheckMs = millis();  // start 60s countdown
       publishStatus();
     }
-    // Retry every 5 s — fast enough to recover from BLE-induced radio glitches
-    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 5000) {
+    // Last-resort: if auto-reconnect hasn't worked after 60s, do one manual begin
+    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 60000) {
       lastWifiCheckMs = millis();
-      wifiReconnectAttempts++;
-      Serial.println(String("[wifi] reconnect attempt #") + String(wifiReconnectAttempts) + " ssid=[" + currentSsid + "]");
+      Serial.println("[wifi] 60s without connection — manual re-init");
+      preferences.begin("desk-cfg", true);
+      const String storedPass = preferences.getString("pass", "");
+      preferences.end();
+      WiFi.disconnect(true, false);
+      delay(200);
       WiFi.mode(WIFI_STA);
+      WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
-      if (wifiReconnectAttempts <= 3) {
-        WiFi.reconnect();
-      } else {
-        // Quick reconnect failed — do a full begin from stored credentials
-        Serial.println("[wifi] full re-init from NVS");
-        preferences.begin("desk-cfg", true);
-        const String storedPass = preferences.getString("pass", "");
-        preferences.end();
-        WiFi.disconnect(false, false);
-        delay(100);
-        WiFi.begin(currentSsid.c_str(), storedPass.c_str());
-        wifiReconnectAttempts = 0;
-      }
-    }
-  }
-
-  // Handle WiFi reconnect after BLE disconnect (let radio settle 500ms)
-  if (wifiReconnectAfterBle && millis() - wifiReconnectAfterBleMs >= 500) {
-    wifiReconnectAfterBle = false;
-    if (!currentSsid.isEmpty() && WiFi.status() != WL_CONNECTED) {
-      WiFi.mode(WIFI_STA);
-      WiFi.setAutoReconnect(true);
-      WiFi.reconnect();
-      lastWifiCheckMs = millis();
     }
   }
 
