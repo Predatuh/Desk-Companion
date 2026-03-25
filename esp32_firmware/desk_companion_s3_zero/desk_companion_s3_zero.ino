@@ -86,6 +86,11 @@ bool wifiScanPending = false;
 bool wifiScanInProgress = false;
 bool wifiWasConnected = false;
 
+// BLE disconnect → WiFi reconnect (ESP32-S3 radio coexistence recovery)
+bool wifiReconnectAfterBle = false;
+unsigned long wifiReconnectAfterBleMs = 0;
+int wifiReconnectAttempts = 0;
+
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
 size_t receivedImageBytes = 0;
@@ -1304,6 +1309,12 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* server) override {
     (void)server;
     BLEDevice::startAdvertising();
+    // BLE state change on ESP32-S3 can disrupt the shared radio and drop WiFi.
+    // Schedule a reconnect attempt in loop() after the radio settles.
+    if (!currentSsid.isEmpty()) {
+      wifiReconnectAfterBle = true;
+      wifiReconnectAfterBleMs = millis();
+    }
   }
 };
 
@@ -1560,15 +1571,40 @@ void loop() {
   } else {
     ipAddress = "";
     if (wifiWasConnected) {
-      // Just lost connection — notify app
       wifiWasConnected = false;
-      statusText = "Wi-Fi disconnected";
+      wifiReconnectAttempts = 0;
+      statusText = "Wi-Fi reconnecting";
       publishStatus();
     }
-    // If we have stored credentials, attempt reconnect every 30s
-    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 30000) {
+    // Retry every 5 s — fast enough to recover from BLE-induced radio glitches
+    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 5000) {
       lastWifiCheckMs = millis();
+      wifiReconnectAttempts++;
+      WiFi.mode(WIFI_STA);
+      WiFi.setAutoReconnect(true);
+      if (wifiReconnectAttempts <= 3) {
+        WiFi.reconnect();
+      } else {
+        // Quick reconnect failed — do a full begin from stored credentials
+        preferences.begin("desk-cfg", true);
+        const String storedPass = preferences.getString("pass", "");
+        preferences.end();
+        WiFi.disconnect(false, false);
+        delay(100);
+        WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+        wifiReconnectAttempts = 0;
+      }
+    }
+  }
+
+  // Handle WiFi reconnect after BLE disconnect (let radio settle 500ms)
+  if (wifiReconnectAfterBle && millis() - wifiReconnectAfterBleMs >= 500) {
+    wifiReconnectAfterBle = false;
+    if (!currentSsid.isEmpty() && WiFi.status() != WL_CONNECTED) {
+      WiFi.mode(WIFI_STA);
+      WiFi.setAutoReconnect(true);
       WiFi.reconnect();
+      lastWifiCheckMs = millis();
     }
   }
 

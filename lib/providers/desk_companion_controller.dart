@@ -51,6 +51,7 @@ class DeskCompanionController extends ChangeNotifier {
   bool _liveSendInFlight = false;
   Uint8List? _queuedLiveBitmap;
   bool _intentionalDisconnect = false;
+  Timer? _relayPollTimer;
 
   CompanionBleState get bleState => _bleState;
   String get statusMessage => _statusMessage;
@@ -149,6 +150,7 @@ class DeskCompanionController extends ChangeNotifier {
       } catch (_) {
         // Keep the app usable even if relay probing fails at startup.
       }
+      _startRelayPollTimer();
       return;
     }
 
@@ -730,10 +732,21 @@ class DeskCompanionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _relayPollTimer?.cancel();
     _scanSub?.cancel();
     _notifySub?.cancel();
     _connectionSub?.cancel();
     _device?.disconnect();
     super.dispose();
+  }
+
+  void _startRelayPollTimer() {
+    _relayPollTimer?.cancel();
+    _relayPollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      // Only poll relay when BLE is not connected and relay is configured
+      if (!isBleConnected && hasRelayTarget && !_busy) {
+        unawaited(_fetchRelayStatus());
+      }
+    });
   }
 }
