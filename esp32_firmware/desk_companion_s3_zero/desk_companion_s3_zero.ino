@@ -1177,7 +1177,14 @@ void tryStoredWifi() {
   preferences.end();
 
   if (!currentSsid.isEmpty()) {
-    connectToWifi(currentSsid, password);
+    // Boot-specific path: don't call WiFi.disconnect() on cold boot — it
+    // confuses the ESP32-S3 driver and prevents connection (status 6).
+    // WiFi.mode(WIFI_STA) and WiFi.persistent(true) are already set in setup().
+    Serial.println("[boot] WiFi.begin with stored creds");
+    WiFi.begin(currentSsid.c_str(), password.c_str());
+    WiFi.setAutoReconnect(true);
+    statusText = "Joining Wi-Fi";
+    ipAddress = "";
   }
 }
 
