@@ -1528,66 +1528,26 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println("\n=== Desk Companion S3 boot ===");
+
+  WiFi.persistent(false);  // never let SDK cache credentials to flash
+
   setupDisplay();
   setupButtons();
   clearImageBuffer();
 
-  // Load stored credentials from NVS first (before touching radio)
+  // Load stored credentials from NVS
   tryStoredWifi();
 
-  // Show what NVS had
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0);
-  display.println(String("SSID: ") + (currentSsid.isEmpty() ? "(none)" : currentSsid));
-  display.println(String("Pass len: ") + String(storedWifiPass.length()));
-  display.println(String("Token: ") + (deviceToken.isEmpty() ? "(none)" : deviceToken));
-  display.println("WiFi: connecting...");
-  display.display();
-
-  // Now connect WiFi
-  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
-    // Nuke any corrupted SDK-internal WiFi state (from WiFi.persistent(true)
-    // that was briefly enabled in an earlier firmware flash).
-    // true,true = disconnect + erase SDK flash credentials.
-    WiFi.disconnect(true, true);
-    delay(500);
-    WiFi.mode(WIFI_STA);
-    delay(100);
-    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
-    WiFi.setAutoReconnect(true);
-
-    // Wait up to 15s, print status each tick
-    unsigned long t = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
-      delay(500);
-      Serial.print(String(WiFi.status()) + " ");
-    }
-    Serial.println();
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    ipAddress = WiFi.localIP().toString();
-    wifiWasConnected = true;
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("WiFi: OK");
-    display.println(String("IP: ") + ipAddress);
-    display.display();
-    pushRelayStatus();
-  } else {
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("WiFi: FAILED");
-    display.println(String("Status: ") + String(WiFi.status()));
-    display.println(String("SSID: ") + currentSsid);
-    display.println(String("Pass len: ") + String(storedWifiPass.length()));
-    display.display();
-  }
-
-  delay(3000);
+  // BLE first — initialises the shared radio properly
   setupBle();
+
+  // Queue boot WiFi connect through the SAME path BLE uses (runs in loop)
+  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
+    pendingWifiSsid = currentSsid;
+    pendingWifiPass = storedWifiPass;
+    wifiConnectPending = true;
+  }
+
   renderCurrentMode();
   publishStatus();
 }
