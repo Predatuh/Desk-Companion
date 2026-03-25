@@ -109,6 +109,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs =
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
+void publishStatusWithNetworks();
 void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
 void renderBannerFrame();
 void renderExpressionFrame();
@@ -260,6 +261,7 @@ int extractJsonIntField(const String& body, const char* key, int fallback = 0) {
 }
 
 String buildStatusJson() {
+  // Full status for relay push (includes everything)
   String json = "{";
   json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
@@ -272,6 +274,34 @@ String buildStatusJson() {
     if (i > 0) {
       json += ",";
     }
+    json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
+  }
+  json += "]";
+  json += "}";
+  return json;
+}
+
+String buildBleStatusJson() {
+  // Compact status for BLE notify (fits in MTU)
+  String json = "{";
+  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\"";
+  json += "}";
+  return json;
+}
+
+String buildBleStatusWithNetworksJson() {
+  // BLE status with wifi networks included (after scan)
+  String json = "{";
+  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"wifiNetworks\":[";
+  for (int i = 0; i < availableWifiNetworkCount; i++) {
+    if (i > 0) json += ",";
     json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
   }
   json += "]";
@@ -337,7 +367,16 @@ bool decodeBase64IntoImage(const String& input) {
 }
 
 void publishStatus() {
-  const String payload = buildStatusJson();
+  const String payload = buildBleStatusJson();
+  if (statusCharacteristic != nullptr) {
+    statusCharacteristic->setValue(payload.c_str());
+    statusCharacteristic->notify();
+  }
+  relayStatusDirty = true;
+}
+
+void publishStatusWithNetworks() {
+  const String payload = buildBleStatusWithNetworksJson();
   if (statusCharacteristic != nullptr) {
     statusCharacteristic->setValue(payload.c_str());
     statusCharacteristic->notify();
@@ -1293,6 +1332,7 @@ void pollRelay() {
 
 void setupBle() {
   BLEDevice::init(DEVICE_NAME);
+  BLEDevice::setMTU(517);  // Request max MTU for larger payloads
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());
 
@@ -1511,7 +1551,7 @@ void loop() {
       }
       WiFi.scanDelete();
       statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
-      publishStatus();
+      publishStatusWithNetworks();
     } else if (result == WIFI_SCAN_FAILED) {
       wifiScanInProgress = false;
       statusText = "Wi-Fi scan failed";

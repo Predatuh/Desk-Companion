@@ -215,6 +215,11 @@ class DeskCompanionController extends ChangeNotifier {
       _deviceName =
           device.platformName.isEmpty ? targetName : device.platformName;
 
+      // Request higher MTU for larger status payloads (wifi networks list)
+      if (Platform.isAndroid) {
+        await device.requestMtu(512);
+      }
+
       _connectionSub = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected) {
           _handleDisconnection();
@@ -314,6 +319,11 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> refreshDeviceStatus() async {
     await _runBusy(() async {
+      // Always prefer BLE when connected — it's faster and more reliable
+      if (isBleConnected) {
+        await _sendBleCommand({'type': 'status'});
+        return;
+      }
       if (hasRelayTarget) {
         await _fetchRelayStatus();
         return;
