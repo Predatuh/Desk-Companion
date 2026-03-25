@@ -1067,7 +1067,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         icons: _noteIcons.join(','),
       ),
       success: controller.hasRelayTarget && !controller.isBleConnected
-          ? 'Note delivered over relay.'
+          ? 'Note sent via relay — check the status chip for delivery confirmation.'
           : 'Note delivered.',
     );
   }

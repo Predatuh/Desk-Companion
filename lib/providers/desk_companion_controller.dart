@@ -357,7 +357,7 @@ class DeskCompanionController extends ChangeNotifier {
       final sent = await _postRelay(payload);
       if (sent) {
         _mode = mode;
-        _setStatus(relayLabel);
+        _scheduleRelayDeliveryCheck();
         return;
       }
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
@@ -450,6 +450,30 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  void _scheduleRelayDeliveryCheck() {
+    _setStatus('Sent via relay — confirming delivery…');
+    Future.delayed(const Duration(seconds: 6), () async {
+      if (isBleConnected) return;
+      final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
+      final token = _deviceToken.trim();
+      if (base.isEmpty || token.isEmpty) return;
+      try {
+        final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode < 200 || response.statusCode >= 300) return;
+        final payload = jsonDecode(response.body);
+        if (payload is! Map<String, dynamic>) return;
+        final pending = (payload['pending'] as int?) ?? 0;
+        if (pending == 0) {
+          _setStatus('Delivered — device picked up the command.');
+        } else {
+          _setStatus('Not yet received — is the device online?');
+        }
+        notifyListeners();
+      } catch (_) {}
+    });
+  }
+
   Future<bool> _postRelay(Map<String, dynamic> command) async {
     final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
     final token = _deviceToken.trim();
@@ -469,7 +493,6 @@ class DeskCompanionController extends ChangeNotifier {
       );
       debugPrint('[relay] POST response: ${response.statusCode}');
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        _setStatus('Queued through relay.');
         return true;
       }
       _lastRelayError = 'Relay $url → ${response.statusCode}';
@@ -576,7 +599,7 @@ class DeskCompanionController extends ChangeNotifier {
           {'type': 'set_image', 'data': base64Encode(bitmap)})) {
         _mode = 'image';
         if (!silent) {
-          _setStatus('Image queued through relay.');
+          _scheduleRelayDeliveryCheck();
         }
         return;
       }

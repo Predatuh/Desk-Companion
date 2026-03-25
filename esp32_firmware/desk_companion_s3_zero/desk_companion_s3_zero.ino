@@ -105,7 +105,7 @@ unsigned long btnNextDownMs = 0;
 unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 150);
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
