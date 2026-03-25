@@ -74,7 +74,10 @@ class DeskCompanionController extends ChangeNotifier {
   // Allow control whenever the relay is reachable (status known), even if the
   // device's last-seen timestamp is stale.  Commands queue on the relay and the
   // device picks them up on the next poll.
-  bool get canControlDevice => isBleConnected || (hasRelayTarget && _relayStatusKnown);
+  bool get canControlDevice =>
+      isBleConnected ||
+      (_deviceIp.isNotEmpty && _deviceIp != 'no connection') ||
+      (hasRelayTarget && _relayStatusKnown);
   bool get wifiConnecting => _statusMessage == 'Joining Wi-Fi' ||
       _statusMessage == 'Wi-Fi queued' ||
       _statusMessage == 'Wi-Fi connecting...';
@@ -381,6 +384,11 @@ class DeskCompanionController extends ChangeNotifier {
         await _sendBleCommand({'type': 'status'});
         return;
       }
+      // Try direct HTTP to device IP first
+      if (_deviceIp.isNotEmpty && _deviceIp != 'no connection') {
+        final ok = await _fetchDirectStatus();
+        if (ok) return;
+      }
       if (hasRelayTarget) {
         await _fetchRelayStatus();
         return;
@@ -389,7 +397,7 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  /// Send a command: prefer BLE when connected, fall back to relay.
+  /// Send a command: prefer BLE → direct IP → relay.
   Future<void> _sendCommand(Map<String, dynamic> payload,
       {required String mode, required String bleLabel, required String relayLabel}) async {
     // Try BLE first if connected
@@ -398,6 +406,15 @@ class DeskCompanionController extends ChangeNotifier {
       _mode = mode;
       _setStatus(bleLabel);
       return;
+    }
+    // Try direct HTTP to device IP (same WiFi)
+    if (_deviceIp.isNotEmpty && _deviceIp != 'no connection') {
+      final directOk = await _postDirectHttp(payload);
+      if (directOk) {
+        _mode = mode;
+        _setStatus('$bleLabel (via local Wi-Fi)');
+        return;
+      }
     }
     // Fall back to relay
     if (hasRelayTarget) {
@@ -519,6 +536,63 @@ class DeskCompanionController extends ChangeNotifier {
         notifyListeners();
       } catch (_) {}
     });
+  }
+
+  Future<bool> _postDirectHttp(Map<String, dynamic> command) async {
+    final ip = _deviceIp.trim();
+    if (ip.isEmpty || ip == 'no connection') return false;
+    final url = 'http://$ip/command';
+    debugPrint('[direct] POST $url');
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode(command),
+          )
+          .timeout(const Duration(seconds: 3));
+      debugPrint('[direct] POST response: ${response.statusCode}');
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        // Update local state from device response
+        try {
+          final status = jsonDecode(response.body);
+          if (status is Map<String, dynamic>) {
+            _applyStatusMap(status);
+          }
+        } catch (_) {}
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[direct] POST failed: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _fetchDirectStatus() async {
+    final ip = _deviceIp.trim();
+    if (ip.isEmpty || ip == 'no connection') return false;
+    final url = 'http://$ip/status';
+    debugPrint('[direct] GET $url');
+    try {
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        final status = jsonDecode(response.body);
+        if (status is Map<String, dynamic>) {
+          _applyStatusMap(status);
+          _relayOnline = true;
+          _relayStatusKnown = true;
+          _relayLastSeenAt = DateTime.now();
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[direct] GET status failed: $e');
+      return false;
+    }
   }
 
   Future<bool> _postRelay(Map<String, dynamic> command) async {
