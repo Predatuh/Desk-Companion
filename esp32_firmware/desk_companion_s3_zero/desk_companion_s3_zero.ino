@@ -1546,13 +1546,19 @@ void setup() {
   display.println("WiFi: connecting...");
   display.display();
 
-  // Now connect WiFi — simple as possible
+  // Now connect WiFi
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
+    // Nuke any corrupted SDK-internal WiFi state (from WiFi.persistent(true)
+    // that was briefly enabled in an earlier firmware flash).
+    // true,true = disconnect + erase SDK flash credentials.
+    WiFi.disconnect(true, true);
+    delay(500);
     WiFi.mode(WIFI_STA);
+    delay(100);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
     WiFi.setAutoReconnect(true);
 
-    // Wait up to 15s
+    // Wait up to 15s, print status each tick
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
       delay(500);
