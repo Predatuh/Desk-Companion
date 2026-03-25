@@ -45,6 +45,7 @@ BLECharacteristic* imageCharacteristic = nullptr;
 WiFiClient relayHttpClient;
 
 WebServer localServer(80);
+bool localServerRunning = false;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -93,6 +94,7 @@ String storedWifiPass = "";  // kept for boot WiFi connect in setup()
 bool wifiReconnectAfterBle = false;
 unsigned long wifiReconnectAfterBleMs = 0;
 int wifiReconnectAttempts = 0;
+unsigned long lastRelayAttemptMs = 0;
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -1354,10 +1356,16 @@ void pushRelayStatus() {
     return;
   }
 
+  if (localServerRunning && millis() - lastRelayAttemptMs < 120000UL) {
+    return;
+  }
+
+  lastRelayAttemptMs = millis();
+
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
   Serial.println(String("[relay-push] POST ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
+  if (!beginHttpClient(client, url, 800)) {
     Serial.println("[relay-push] beginHttpClient FAILED");
     return;
   }
@@ -1376,6 +1384,11 @@ void pollRelay() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
     return;
   }
+
+  if (localServerRunning) {
+    return;
+  }
+
   const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 2500UL;
   if (millis() - lastRelayPollMs < pollInterval) {
     return;
@@ -1386,7 +1399,7 @@ void pollRelay() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
   Serial.println(String("[relay-poll] GET ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
+  if (!beginHttpClient(client, url, 800)) {
     Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }
@@ -1400,8 +1413,6 @@ void pollRelay() {
   }
   client.end();
 }
-
-bool localServerRunning = false;
 
 void setupLocalServer() {
   if (localServerRunning) return;
@@ -1692,11 +1703,14 @@ void loop() {
     pendingWifiPass = "";
   }
 
+  if (localServerRunning) {
+    localServer.handleClient();
+  }
+
   if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
     pushRelayStatus();
   }
   pollRelay();
-  if (localServerRunning) localServer.handleClient();
   handleButtons();
 
   delay(1);
