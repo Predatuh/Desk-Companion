@@ -136,6 +136,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       availableWifiNetworks,
       controller.connectedSsid,
     );
+    final canReachDevice = controller.canControlDevice;
 
     _syncController(_relayUrlController, controller.relayBaseUrl);
     _syncController(_deviceTokenController, controller.deviceToken);
@@ -342,8 +343,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         selected: selectedWifiSsid == ssid,
-                                        onSelected: controller.busy ||
-                                                !controller.isBleConnected
+                                        onSelected: controller.busy
                                             ? null
                                             : (_) => setState(
                                                 () => _selectedWifiSsid = ssid),
@@ -364,15 +364,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy ||
-                                      !controller.isBleConnected
+                              onPressed: controller.busy || !canReachDevice
                                   ? null
                                   : () {
                                       setState(() => _selectedWifiSsid = null);
                                       _perform(
                                         () => controller.scanWifiNetworks(),
                                         success:
-                                            'Wi-Fi networks refreshed from device. Pick one from the list.',
+                                            controller.isBleConnected
+                                                ? 'Wi-Fi networks refreshed from device. Pick one from the list.'
+                                                : 'Wi-Fi scan requested over relay. Wait a moment for the list to refresh.',
                                       );
                                     },
                               icon: const Icon(Icons.wifi_find_outlined),
@@ -383,7 +384,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: controller.busy ||
-                                      !controller.isBleConnected ||
+                                      !canReachDevice ||
                                       selectedWifiSsid == null
                                   ? null
                                   : () => _sendWifi(controller),
@@ -397,8 +398,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.isBleConnected
+                          onPressed: controller.busy || !canReachDevice
                               ? null
                               : () {
                                   setState(() {
@@ -1030,7 +1030,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         ssid: selectedWifiSsid,
         password: _wifiPasswordController.text,
       ),
-      success: 'Wi-Fi credentials sent. Use refresh once the display joins.',
+      success: controller.isBleConnected
+          ? 'Wi-Fi credentials sent. Use refresh once the display joins.'
+          : 'Wi-Fi credentials sent over relay. Watch the status chip for delivery confirmation.',
     );
   }
 
@@ -1039,6 +1041,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (_selectedWifiSsid != null &&
         availableWifiNetworks.contains(_selectedWifiSsid)) {
       return _selectedWifiSsid;
+    }
+    if (connectedSsid.trim().isNotEmpty) {
+      return connectedSsid.trim();
     }
     return null;
   }

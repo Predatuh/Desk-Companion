@@ -66,6 +66,7 @@ class DeskCompanionController extends ChangeNotifier {
   bool get relayStatusKnown => _relayStatusKnown;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
+  bool get canControlDevice => isBleConnected || isRelayOnline;
   bool get wifiConnecting => _statusMessage == 'Joining Wi-Fi' ||
       _statusMessage == 'Wi-Fi queued' ||
       _statusMessage == 'Wi-Fi connecting...';
@@ -283,25 +284,38 @@ class DeskCompanionController extends ChangeNotifier {
     required String password,
   }) async {
     await _runBusy(() async {
-      await _sendBleCommand({
-        'type': 'connect_wifi',
-        'ssid': ssid,
-        'password': password,
-      });
-      _setStatus('Sent Wi-Fi credentials over BLE.');
+      await _sendCommand(
+        {
+          'type': 'connect_wifi',
+          'ssid': ssid,
+          'password': password,
+        },
+        mode: _mode,
+        bleLabel: 'Sent Wi-Fi credentials over BLE.',
+        relayLabel: 'Sent Wi-Fi credentials over relay.',
+      );
     });
   }
 
   Future<void> scanWifiNetworks() async {
     await _runBusy(() async {
-      await _sendBleCommand({'type': 'scan_wifi'});
-      _setStatus('Requested Wi-Fi scan from device.');
+      await _sendCommand(
+        {'type': 'scan_wifi'},
+        mode: _mode,
+        bleLabel: 'Requested Wi-Fi scan over BLE.',
+        relayLabel: 'Requested Wi-Fi scan over relay.',
+      );
     });
   }
 
   Future<void> forgetWifi() async {
     await _runBusy(() async {
-      await _sendBleCommand({'type': 'forget_wifi'});
+      await _sendCommand(
+        {'type': 'forget_wifi'},
+        mode: _mode,
+        bleLabel: 'Wi-Fi credentials cleared over BLE.',
+        relayLabel: 'Wi-Fi clear sent over relay.',
+      );
       _connectedSsid = '';
       _deviceIp = '';
       _availableWifiNetworks = const [];
