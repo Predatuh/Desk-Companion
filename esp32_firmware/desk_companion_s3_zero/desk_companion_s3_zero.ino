@@ -1549,9 +1549,13 @@ void setup() {
   display.println("Booting...");
   display.display();
 
-  // WiFi MUST be initialised before BLE on ESP32 for coexistence to work
+  // Force a clean radio state before doing anything WiFi-related.
+  // On ESP32-S3, calling WiFi.begin() too soon after boot or with stale
+  // driver state causes WL_DISCONNECTED (status 6).
+  WiFi.mode(WIFI_OFF);
+  delay(200);
   WiFi.mode(WIFI_STA);
-  WiFi.persistent(true);  // Let the SDK persist credentials too
+  delay(200);
   WiFi.setAutoReconnect(true);
 
   // Load stored credentials and attempt WiFi
