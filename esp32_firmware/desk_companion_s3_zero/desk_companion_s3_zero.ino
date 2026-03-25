@@ -1085,12 +1085,9 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  const bool switchingNetworks = currentSsid != ssid;
-
-  if (WiFi.status() == WL_CONNECTED || switchingNetworks) {
-    WiFi.disconnect(false, false);
-    delay(250);
-  }
+  // Always disconnect cleanly before connecting (required on cold boot too)
+  WiFi.disconnect(false, false);
+  delay(100);
 
   // Save credentials BEFORE attempting connect so they survive reboot
   preferences.begin("desk-cfg", false);
@@ -1510,8 +1507,10 @@ void setup() {
   setupDisplay();
   setupButtons();
   clearImageBuffer();
-  setupBle();
+  // WiFi MUST be initialised before BLE on ESP32 for coexistence to work
+  WiFi.mode(WIFI_STA);
   tryStoredWifi();
+  setupBle();
   renderCurrentMode();
   publishStatus();
 }
