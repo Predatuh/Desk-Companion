@@ -317,6 +317,29 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  /// Send a command: prefer BLE when connected, fall back to relay.
+  Future<void> _sendCommand(Map<String, dynamic> payload,
+      {required String mode, required String bleLabel, required String relayLabel}) async {
+    // Try BLE first if connected
+    if (isBleConnected) {
+      await _sendBleCommand(payload);
+      _mode = mode;
+      _setStatus(bleLabel);
+      return;
+    }
+    // Fall back to relay
+    if (hasRelayTarget) {
+      final sent = await _postRelay(payload);
+      if (sent) {
+        _mode = mode;
+        _setStatus(relayLabel);
+        return;
+      }
+      throw HttpException(_lastRelayError ?? 'Relay send failed.');
+    }
+    throw const HttpException('Not connected — pair via BLE or configure relay.');
+  }
+
   Future<void> sendNote(String text,
       {required int fontSize, int border = 0, String icons = ''}) async {
     await _runBusy(() async {
@@ -327,18 +350,10 @@ class DeskCompanionController extends ChangeNotifier {
         'border': border,
         if (icons.isNotEmpty) 'icons': icons,
       };
-      if (hasRelayTarget) {
-        final sent = await _postRelay(payload);
-        if (sent) {
-          _mode = 'note';
-          _setStatus('Note queued through relay.');
-          return;
-        }
-        throw HttpException(_lastRelayError ?? 'Relay send failed.');
-      }
-      await _sendBleCommand(payload);
-      _mode = 'note';
-      _setStatus('Note sent over BLE.');
+      await _sendCommand(payload,
+          mode: 'note',
+          bleLabel: 'Note sent over BLE.',
+          relayLabel: 'Note queued through relay.');
     });
   }
 
@@ -347,20 +362,12 @@ class DeskCompanionController extends ChangeNotifier {
     required int speed,
   }) async {
     await _runBusy(() async {
-      if (hasRelayTarget) {
-        final sent = await _postRelay(
-            {'type': 'set_banner', 'text': text, 'speed': speed});
-        if (sent) {
-          _mode = 'banner';
-          _setStatus('Banner queued through relay.');
-          return;
-        }
-        throw HttpException(_lastRelayError ?? 'Relay send failed.');
-      }
-      await _sendBleCommand(
-          {'type': 'set_banner', 'text': text, 'speed': speed});
-      _mode = 'banner';
-      _setStatus('Banner sent over BLE.');
+      await _sendCommand(
+        {'type': 'set_banner', 'text': text, 'speed': speed},
+        mode: 'banner',
+        bleLabel: 'Banner sent over BLE.',
+        relayLabel: 'Banner queued through relay.',
+      );
     });
   }
 
@@ -376,19 +383,12 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendExpression(String expression) async {
     await _runBusy(() async {
-      final command = {'type': 'set_expression', 'expression': expression};
-      if (hasRelayTarget) {
-        final sent = await _postRelay(command);
-        if (sent) {
-          _mode = 'expression';
-          _setStatus('Expression queued through relay.');
-          return;
-        }
-        throw HttpException(_lastRelayError ?? 'Relay send failed.');
-      }
-      await _sendBleCommand(command);
-      _mode = 'expression';
-      _setStatus('Expression sent over BLE.');
+      await _sendCommand(
+        {'type': 'set_expression', 'expression': expression},
+        mode: 'expression',
+        bleLabel: 'Expression sent over BLE.',
+        relayLabel: 'Expression queued through relay.',
+      );
     });
   }
 
@@ -416,18 +416,12 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> clearDisplay() async {
     await _runBusy(() async {
-      if (hasRelayTarget) {
-        final sent = await _postRelay({'type': 'clear'});
-        if (sent) {
-          _mode = 'idle';
-          _setStatus('Display clear queued through relay.');
-          return;
-        }
-        throw HttpException(_lastRelayError ?? 'Relay send failed.');
-      }
-      await _sendBleCommand({'type': 'clear'});
-      _mode = 'idle';
-      _setStatus('Display cleared over BLE.');
+      await _sendCommand(
+        {'type': 'clear'},
+        mode: 'idle',
+        bleLabel: 'Display cleared over BLE.',
+        relayLabel: 'Display clear queued through relay.',
+      );
     });
   }
 

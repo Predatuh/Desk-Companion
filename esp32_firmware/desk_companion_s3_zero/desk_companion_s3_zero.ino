@@ -78,6 +78,11 @@ uint8_t expressionPhase = 0;
 String availableWifiNetworks[10];
 int availableWifiNetworkCount = 0;
 
+// Pending WiFi connect (non-blocking from BLE callback)
+bool wifiConnectPending = false;
+String pendingWifiSsid = "";
+String pendingWifiPass = "";
+
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
 size_t receivedImageBytes = 0;
@@ -1045,8 +1050,16 @@ bool connectToWifi(const String& ssid, const String& password) {
     delay(250);
   }
 
+  // Save credentials BEFORE attempting connect so they survive reboot
+  preferences.begin("desk-cfg", false);
+  preferences.putString("ssid", ssid);
+  preferences.putString("pass", password);
+  preferences.putString("relay_url", relayUrl);
+  preferences.putString("device_token", deviceToken);
+  preferences.end();
+
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(false);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   statusText = "Joining Wi-Fi";
@@ -1060,7 +1073,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    statusText = "Wi-Fi failed";
+    statusText = "Wi-Fi connecting...";
     ipAddress = "";
     publishStatus();
     return false;
@@ -1068,14 +1081,6 @@ bool connectToWifi(const String& ssid, const String& password) {
 
   currentSsid = ssid;
   ipAddress = WiFi.localIP().toString();
-  WiFi.setAutoReconnect(true);
-  preferences.begin("desk-cfg", false);
-  preferences.putString("ssid", ssid);
-  preferences.putString("pass", password);
-  preferences.putString("relay_url", relayUrl);
-  preferences.putString("device_token", deviceToken);
-  preferences.end();
-
   statusText = "Wi-Fi connected";
   publishStatus();
   return true;
@@ -1150,10 +1155,12 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "connect_wifi") {
-    connectToWifi(
-      extractJsonStringField(body, "ssid"),
-      extractJsonStringField(body, "password")
-    );
+    // Don't block BLE callback — defer to loop()
+    pendingWifiSsid = extractJsonStringField(body, "ssid");
+    pendingWifiPass = extractJsonStringField(body, "password");
+    wifiConnectPending = true;
+    statusText = "Wi-Fi queued";
+    publishStatus();
     return;
   }
 
@@ -1496,6 +1503,14 @@ void loop() {
       lastWifiCheckMs = millis();
       WiFi.reconnect();
     }
+  }
+
+  // Handle deferred WiFi connect (from BLE callback)
+  if (wifiConnectPending) {
+    wifiConnectPending = false;
+    connectToWifi(pendingWifiSsid, pendingWifiPass);
+    pendingWifiSsid = "";
+    pendingWifiPass = "";
   }
 
   if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
