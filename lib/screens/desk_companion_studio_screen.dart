@@ -419,7 +419,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'No scanned networks yet. Connect over BLE and tap Scan networks.',
+                            'No networks yet — tap Scan networks to load them from the device.',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),

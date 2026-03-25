@@ -66,7 +66,10 @@ class DeskCompanionController extends ChangeNotifier {
   bool get relayStatusKnown => _relayStatusKnown;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
-  bool get canControlDevice => isBleConnected || isRelayOnline;
+  // Allow control whenever the relay is reachable (status known), even if the
+  // device's last-seen timestamp is stale.  Commands queue on the relay and the
+  // device picks them up on the next poll.
+  bool get canControlDevice => isBleConnected || (hasRelayTarget && _relayStatusKnown);
   bool get wifiConnecting => _statusMessage == 'Joining Wi-Fi' ||
       _statusMessage == 'Wi-Fi queued' ||
       _statusMessage == 'Wi-Fi connecting...';
@@ -588,12 +591,23 @@ class DeskCompanionController extends ChangeNotifier {
     }
     final wifiNetworks = payload['wifiNetworks'];
     if (wifiNetworks is List) {
-      _availableWifiNetworks = wifiNetworks
+      final incoming = wifiNetworks
           .whereType<String>()
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
+          .map((v) => v.trim())
+          .where((v) => v.isNotEmpty)
           .toSet()
           .toList(growable: false);
+      // Only overwrite the list when we actually received networks — never
+      // clear a previously scanned list with an empty one from relay status.
+      if (incoming.isNotEmpty) {
+        _availableWifiNetworks = incoming;
+      }
+    }
+    // Ensure the device's currently connected SSID is always in the picker so
+    // the user can reconnect it without needing a fresh BLE scan.
+    if (_connectedSsid.isNotEmpty &&
+        !_availableWifiNetworks.contains(_connectedSsid)) {
+      _availableWifiNetworks = [_connectedSsid, ..._availableWifiNetworks];
     }
     unawaited(_persistRelayPreferences());
     notifyListeners();
