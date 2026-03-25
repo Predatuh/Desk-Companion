@@ -1541,11 +1541,30 @@ void setup() {
   // BLE first — initialises the shared radio properly
   setupBle();
 
-  // Queue boot WiFi connect through the SAME path BLE uses (runs in loop)
+  // Boot WiFi: direct begin AFTER BLE init, no disconnect, blocking wait
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
-    pendingWifiSsid = currentSsid;
-    pendingWifiPass = storedWifiPass;
-    wifiConnectPending = true;
+    Serial.println(String("[boot-wifi] ssid=[") + currentSsid + "] pass_len=" + String(storedWifiPass.length()));
+    Serial.println(String("[boot-wifi] relay=[") + relayUrl + "] token=[" + deviceToken + "]");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    WiFi.setAutoReconnect(true);
+
+    unsigned long t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+      delay(500);
+      Serial.print(String(WiFi.status()) + " ");
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+      ipAddress = WiFi.localIP().toString();
+      wifiWasConnected = true;
+      statusText = "Wi-Fi connected";
+      Serial.println(String("[boot-wifi] OK ip=") + ipAddress);
+      pushRelayStatus();
+    } else {
+      Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
+    }
   }
 
   renderCurrentMode();
