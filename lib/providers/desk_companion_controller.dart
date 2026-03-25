@@ -602,7 +602,12 @@ class DeskCompanionController extends ChangeNotifier {
     } catch (error) {
       _relayOnline = false;
       _relayStatusKnown = true;
-      _setStatus('Relay $url → $error');
+      final msg = error.toString();
+      if (msg.contains('host lookup') || msg.contains('SocketException')) {
+        _setStatus('Cannot reach relay — check your internet connection.');
+      } else {
+        _setStatus('Relay error — $msg');
+      }
     }
   }
 
