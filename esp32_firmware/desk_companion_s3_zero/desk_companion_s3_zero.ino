@@ -1378,7 +1378,7 @@ void pollRelay() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
   Serial.println(String("[relay-poll] GET ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 1200)) {
+  if (!beginHttpClient(client, url, 5000)) {
     Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }
@@ -1566,6 +1566,9 @@ void setup() {
       Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
     }
   }
+
+  // Prevent loop() reconnect from firing immediately after boot
+  lastWifiCheckMs = millis();
 
   renderCurrentMode();
   publishStatus();
