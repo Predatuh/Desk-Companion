@@ -23,6 +23,10 @@ class DeskCompanionController extends ChangeNotifier {
   static const String targetName = 'Desk Companion S3';
   static const String _relayBaseUrlKey = 'relayBaseUrl';
   static const String _deviceTokenKey = 'deviceToken';
+  static const String _connectedSsidKey = 'lastSsid';
+  static const String _deviceIpKey = 'lastIp';
+  static const String _modeKey = 'lastMode';
+  static const String _wifiNetworksKey = 'lastWifiNetworks';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -142,8 +146,26 @@ class DeskCompanionController extends ChangeNotifier {
     );
     _deviceToken = (prefs.getString(_deviceTokenKey) ?? _deviceToken).trim();
 
+    // Restore last-known device state so the UI is correct immediately
+    _connectedSsid = (prefs.getString(_connectedSsidKey) ?? '').trim();
+    _deviceIp = (prefs.getString(_deviceIpKey) ?? '').trim();
+    _mode = (prefs.getString(_modeKey) ?? _mode).trim();
+    final savedNetworks = prefs.getStringList(_wifiNetworksKey);
+    if (savedNetworks != null && savedNetworks.isNotEmpty) {
+      _availableWifiNetworks = savedNetworks;
+    }
+    // Ensure the connected SSID is in the picker
+    if (_connectedSsid.isNotEmpty &&
+        !_availableWifiNetworks.contains(_connectedSsid)) {
+      _availableWifiNetworks = [_connectedSsid, ..._availableWifiNetworks];
+    }
+
     if (hasRelayTarget) {
-      _statusMessage = 'Checking Wi-Fi connection...';
+      // Mark relay as known with cached data so buttons are enabled immediately
+      _relayStatusKnown = true;
+      _statusMessage = _connectedSsid.isNotEmpty
+          ? 'Last known Wi-Fi: $_connectedSsid'
+          : 'Checking Wi-Fi connection...';
       notifyListeners();
       try {
         await refreshDeviceStatus();
@@ -161,6 +183,12 @@ class DeskCompanionController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_relayBaseUrlKey, _relayBaseUrl);
     await prefs.setString(_deviceTokenKey, _deviceToken);
+    await prefs.setString(_connectedSsidKey, _connectedSsid);
+    await prefs.setString(_deviceIpKey, _deviceIp);
+    await prefs.setString(_modeKey, _mode);
+    if (_availableWifiNetworks.isNotEmpty) {
+      await prefs.setStringList(_wifiNetworksKey, _availableWifiNetworks);
+    }
   }
 
   Future<void> scanAndConnect() async {
