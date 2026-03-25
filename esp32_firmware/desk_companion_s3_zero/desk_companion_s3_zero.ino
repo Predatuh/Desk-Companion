@@ -116,6 +116,7 @@ unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
+String relayTransportUrl(const String& url);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
@@ -338,21 +339,31 @@ const char* modeName(DisplayMode mode) {
 
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
-  if (url.startsWith("https://")) {
+  const String transportUrl = relayTransportUrl(url);
+  if (transportUrl.startsWith("https://")) {
     // Fresh TLS client each call — reusing a global WiFiClientSecure
     // corrupts TLS state on ESP32 when shared across push/poll.
     static WiFiClientSecure* secureClient = nullptr;
     if (secureClient) { secureClient->stop(); delete secureClient; }
     secureClient = new WiFiClientSecure();
     secureClient->setInsecure();
-    started = client.begin(*secureClient, url);
+    started = client.begin(*secureClient, transportUrl);
   } else {
-    started = client.begin(relayHttpClient, url);
+    started = client.begin(relayHttpClient, transportUrl);
   }
   if (started) {
+    client.setReuse(false);
+    client.useHTTP10(true);
     client.setTimeout(timeoutMs);
   }
   return started;
+}
+
+String relayTransportUrl(const String& url) {
+  if (url.startsWith("https://") && url.indexOf(".railway.app") != -1) {
+    return String("http://") + url.substring(8);
+  }
+  return url;
 }
 
 void clearImageBuffer() {
@@ -1356,16 +1367,12 @@ void pushRelayStatus() {
     return;
   }
 
-  if (localServerRunning && millis() - lastRelayAttemptMs < 120000UL) {
-    return;
-  }
-
   lastRelayAttemptMs = millis();
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
   Serial.println(String("[relay-push] POST ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 800)) {
+  if (!beginHttpClient(client, url, 2500)) {
     Serial.println("[relay-push] beginHttpClient FAILED");
     return;
   }
@@ -1385,10 +1392,6 @@ void pollRelay() {
     return;
   }
 
-  if (localServerRunning) {
-    return;
-  }
-
   const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 2500UL;
   if (millis() - lastRelayPollMs < pollInterval) {
     return;
@@ -1399,7 +1402,7 @@ void pollRelay() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
   Serial.println(String("[relay-poll] GET ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 800)) {
+  if (!beginHttpClient(client, url, 2500)) {
     Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }

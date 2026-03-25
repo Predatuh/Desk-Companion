@@ -415,8 +415,6 @@ class DeskCompanionController extends ChangeNotifier {
         _setStatus('$bleLabel (via local Wi-Fi)');
         return;
       }
-
-      throw const HttpException('Device did not respond on local Wi-Fi.');
     }
 
     // Fall back to relay
