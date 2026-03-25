@@ -42,7 +42,6 @@ BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
 WiFiClient relayHttpClient;
-WiFiClientSecure relayHttpsClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -334,8 +333,13 @@ const char* modeName(DisplayMode mode) {
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
   if (url.startsWith("https://")) {
-    relayHttpsClient.setInsecure();
-    started = client.begin(relayHttpsClient, url);
+    // Fresh TLS client each call — reusing a global WiFiClientSecure
+    // corrupts TLS state on ESP32 when shared across push/poll.
+    static WiFiClientSecure* secureClient = nullptr;
+    if (secureClient) { secureClient->stop(); delete secureClient; }
+    secureClient = new WiFiClientSecure();
+    secureClient->setInsecure();
+    started = client.begin(*secureClient, url);
   } else {
     started = client.begin(relayHttpClient, url);
   }
