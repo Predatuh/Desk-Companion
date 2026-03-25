@@ -1344,12 +1344,12 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
 
 void pushRelayStatus() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
-    Serial.println("[relay-push] SKIP: wifi=" + String(WiFi.status()) + " url=[" + relayUrl + "] token=[" + deviceToken + "]");
+    Serial.println(String("[relay-push] SKIP: wifi=") + String(WiFi.status()) + " url=[" + relayUrl + "] token=[" + deviceToken + "]");
     return;
   }
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
-  Serial.println("[relay-push] POST " + url);
+  Serial.println(String("[relay-push] POST ") + url);
   HTTPClient client;
   if (!beginHttpClient(client, url)) {
     Serial.println("[relay-push] beginHttpClient FAILED");
@@ -1357,9 +1357,9 @@ void pushRelayStatus() {
   }
   client.addHeader("Content-Type", "application/json");
   const String body = buildStatusJson();
-  Serial.println("[relay-push] body=" + body.substring(0, min((int)body.length(), 200)));
+  Serial.println(String("[relay-push] body=") + body.substring(0, min((int)body.length(), 200)));
   int code = client.POST(body);
-  Serial.println("[relay-push] response=" + String(code));
+  Serial.println(String("[relay-push] response=") + String(code));
   client.end();
 
   relayStatusDirty = false;
@@ -1378,7 +1378,7 @@ void pollRelay() {
   lastRelayPollMs = millis();
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
-  Serial.println("[relay-poll] GET " + url);
+  Serial.println(String("[relay-poll] GET ") + url);
   HTTPClient client;
   if (!beginHttpClient(client, url, 1200)) {
     Serial.println("[relay-poll] beginHttpClient FAILED");
@@ -1386,10 +1386,10 @@ void pollRelay() {
   }
 
   const int code = client.GET();
-  Serial.println("[relay-poll] response=" + String(code));
+  Serial.println(String("[relay-poll] response=") + String(code));
   if (code == 200) {
     const String cmd = client.getString();
-    Serial.println("[relay-poll] command=" + cmd);
+    Serial.println(String("[relay-poll] command=") + cmd);
     handleCommandJson(cmd);
   }
   client.end();
@@ -1553,14 +1553,14 @@ void setup() {
   // Show what we loaded
   display.clearDisplay();
   display.setCursor(0, 0);
-  display.println("SSID: " + (currentSsid.isEmpty() ? "(none)" : currentSsid));
-  display.println("Relay: " + (relayUrl.isEmpty() ? "(none)" : "set"));
-  display.println("Token: " + (deviceToken.isEmpty() ? "(none)" : deviceToken));
+  display.println(String("SSID: ") + (currentSsid.isEmpty() ? "(none)" : currentSsid));
+  display.println(String("Relay: ") + (relayUrl.isEmpty() ? "(none)" : "set"));
+  display.println(String("Token: ") + (deviceToken.isEmpty() ? "(none)" : deviceToken));
   display.println("WiFi: connecting...");
   display.display();
-  Serial.println("Stored SSID: [" + currentSsid + "]");
-  Serial.println("Stored relay: [" + relayUrl + "]");
-  Serial.println("Stored token: [" + deviceToken + "]");
+  Serial.println(String("Stored SSID: [") + currentSsid + "]");
+  Serial.println(String("Stored relay: [") + relayUrl + "]");
+  Serial.println(String("Stored token: [") + deviceToken + "]");
 
   // Wait up to 10s for WiFi to connect at boot
   unsigned long bootWifiStart = millis();
@@ -1573,22 +1573,22 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     ipAddress = WiFi.localIP().toString();
     wifiWasConnected = true;
-    Serial.println("WiFi connected: " + ipAddress);
+    Serial.println(String("WiFi connected: ") + ipAddress);
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("WiFi: OK");
-    display.println("IP: " + ipAddress);
+    display.println(String("IP: ") + ipAddress);
     display.println("Pushing relay status...");
     display.display();
     // Immediately push status to relay
     pushRelayStatus();
     Serial.println("Relay push done");
   } else {
-    Serial.println("WiFi FAILED at boot. Status: " + String(WiFi.status()));
+    Serial.println(String("WiFi FAILED at boot. Status: ") + String(WiFi.status()));
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("WiFi: FAILED");
-    display.println("Status: " + String(WiFi.status()));
+    display.println(String("Status: ") + String(WiFi.status()));
     display.println("Will retry in loop");
     display.display();
   }
@@ -1640,7 +1640,7 @@ void loop() {
       // Just connected — notify app
       wifiWasConnected = true;
       statusText = "Wi-Fi connected";
-      Serial.println("[wifi] CONNECTED ip=" + ipAddress);
+      Serial.println(String("[wifi] CONNECTED ip=") + ipAddress);
       publishStatus();
     }
   } else {
@@ -1656,7 +1656,7 @@ void loop() {
     if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 5000) {
       lastWifiCheckMs = millis();
       wifiReconnectAttempts++;
-      Serial.println("[wifi] reconnect attempt #" + String(wifiReconnectAttempts) + " ssid=[" + currentSsid + "]");
+      Serial.println(String("[wifi] reconnect attempt #") + String(wifiReconnectAttempts) + " ssid=[" + currentSsid + "]");
       WiFi.mode(WIFI_STA);
       WiFi.setAutoReconnect(true);
       if (wifiReconnectAttempts <= 3) {
