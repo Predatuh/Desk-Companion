@@ -1624,14 +1624,35 @@ void setup() {
   // BLE init — shared radio, coexistence manager handles BT+WiFi together
   setupBle();
 
-  // Defer boot WiFi to loop() so it uses the exact same connectToWifi()
-  // code path that works when triggered via BLE.  This also gives the
-  // BLE stack time to fully settle before we touch the shared radio.
+  // Boot WiFi: direct begin AFTER BLE init, no disconnect, blocking wait
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
-    Serial.println(String("[boot] deferring wifi join for ssid=[") + currentSsid + "]");
-    pendingWifiSsid = currentSsid;
-    pendingWifiPass = storedWifiPass;
-    wifiConnectPending = true;
+    Serial.println(String("[boot-wifi] ssid=[") + currentSsid + "] pass_len=" + String(storedWifiPass.length()));
+    Serial.println(String("[boot-wifi] relay=[") + relayUrl + "] token=[" + deviceToken + "]");
+    WiFi.mode(WIFI_STA);
+    delay(100);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    markWifiJoinStarted();
+
+    Serial.print("[boot-wifi] waiting: ");
+    unsigned long t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+      delay(500);
+      Serial.print(String(WiFi.status()) + " ");
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+      ipAddress = WiFi.localIP().toString();
+      wifiWasConnected = true;
+      markWifiJoinFinished();
+      statusText = "Wi-Fi connected";
+      Serial.println(String("[boot-wifi] OK ip=") + ipAddress);
+      pushRelayStatus();
+    } else {
+      markWifiJoinFinished();
+      Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
+    }
   }
 
   // Prevent loop() reconnect tracker from firing before the deferred join
