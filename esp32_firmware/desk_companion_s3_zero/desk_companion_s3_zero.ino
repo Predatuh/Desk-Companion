@@ -116,7 +116,6 @@ unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
-String relayTransportUrl(const String& url);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
@@ -339,31 +338,27 @@ const char* modeName(DisplayMode mode) {
 
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
-  const String transportUrl = relayTransportUrl(url);
-  if (transportUrl.startsWith("https://")) {
-    // Fresh TLS client each call — reusing a global WiFiClientSecure
-    // corrupts TLS state on ESP32 when shared across push/poll.
-    static WiFiClientSecure* secureClient = nullptr;
-    if (secureClient) { secureClient->stop(); delete secureClient; }
-    secureClient = new WiFiClientSecure();
-    secureClient->setInsecure();
-    started = client.begin(*secureClient, transportUrl);
-  } else {
-    started = client.begin(relayHttpClient, transportUrl);
+  
+  // We keep a single persistent WiFiClientSecure to maintain the TLS session via Keep-Alive
+  // This prevents the ~2.5s TLS handshake penalty on every single poll!
+  static WiFiClientSecure secureClient;
+  static bool secureInited = false;
+  if (!secureInited) {
+    secureClient.setInsecure();
+    secureInited = true;
   }
+
+  if (url.startsWith("https://")) {
+    started = client.begin(secureClient, url);
+  } else {
+    started = client.begin(relayHttpClient, url);
+  }
+  
   if (started) {
-    client.setReuse(false);
-    client.useHTTP10(true);
+    client.setReuse(true); // MUST be true for Keep-Alive
     client.setTimeout(timeoutMs);
   }
   return started;
-}
-
-String relayTransportUrl(const String& url) {
-  if (url.startsWith("https://") && url.indexOf(".railway.app") != -1) {
-    return String("http://") + url.substring(8);
-  }
-  return url;
 }
 
 void clearImageBuffer() {
@@ -1377,10 +1372,19 @@ void pushRelayStatus() {
     return;
   }
   client.addHeader("Content-Type", "application/json");
+  // Keep-alive header ensures the connection isn't closed by the server
+  client.addHeader("Connection", "keep-alive");
+  
   const String body = buildStatusJson();
   Serial.println(String("[relay-push] body=") + body.substring(0, min((int)body.length(), 200)));
   int code = client.POST(body);
   Serial.println(String("[relay-push] response=") + String(code));
+  
+  // MUST read the response to clear the socket buffer for the next request
+  if (code > 0) {
+    client.getString();
+  }
+  
   client.end();
 
   relayStatusDirty = false;
@@ -1406,6 +1410,7 @@ void pollRelay() {
     Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }
+  client.addHeader("Connection", "keep-alive");
 
   const int code = client.GET();
   Serial.println(String("[relay-poll] response=") + String(code));
@@ -1413,6 +1418,9 @@ void pollRelay() {
     const String cmd = client.getString();
     Serial.println(String("[relay-poll] command=") + cmd);
     handleCommandJson(cmd);
+  } else if (code > 0) {
+    // MUST read response to keep the socket alive!
+    client.getString();
   }
   client.end();
 }
