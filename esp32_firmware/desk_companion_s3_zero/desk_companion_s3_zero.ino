@@ -1608,6 +1608,10 @@ void setup() {
   Serial.println("\n=== Desk Companion S3 boot ===");
 
   WiFi.persistent(false);  // never let SDK cache credentials to flash
+  // Put WiFi in STA mode once, before BLE init.  Must be done here so the
+  // WiFi stack is initialised; calling WiFi.mode() later (after BLE is up)
+  // disrupts the coexistence manager and causes WL_DISCONNECTED (status 6).
+  WiFi.mode(WIFI_STA);
 
   setupDisplay();
   setupButtons();
@@ -1616,7 +1620,7 @@ void setup() {
   // Load stored credentials from NVS
   tryStoredWifi();
 
-  // BLE first — initialises the shared radio properly
+  // BLE init — shared radio, coexistence manager handles BT+WiFi together
   setupBle();
 
   // Defer boot WiFi to loop() so it uses the exact same connectToWifi()
