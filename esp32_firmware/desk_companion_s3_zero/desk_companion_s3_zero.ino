@@ -5,10 +5,7 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <HTTPClient.h>
 #include <Preferences.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -41,8 +38,6 @@ BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
-WiFiClient relayHttpClient;
-WiFiClientSecure relaySecureClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -56,10 +51,6 @@ DisplayMode currentMode = MODE_IDLE;
 String statusText = "Booting";
 String currentNote = "hi honey";
 String currentBanner = "hello from your desk buddy";
-String currentSsid = "";
-String ipAddress = "";
-String relayUrl = "";
-String deviceToken = "";
 String currentExpression = "happy";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -69,27 +60,8 @@ int bannerOffset = SCREEN_WIDTH;
 unsigned long lastBannerTickMs = 0;
 unsigned long lastDecorTickMs = 0;
 unsigned long lastExpressionTickMs = 0;
-unsigned long lastRelayPollMs = 0;
-unsigned long lastRelayStatusPushMs = 0;
-unsigned long lastWifiCheckMs = 0;
-unsigned long lastWifiBeginMs = 0;
-bool wifiJoinActive = false;
-bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
-String availableWifiNetworks[10];
-int availableWifiNetworkCount = 0;
-
-// Pending WiFi connect (non-blocking from BLE callback)
-bool wifiConnectPending = false;
-String pendingWifiSsid = "";
-String pendingWifiPass = "";
-bool wifiScanPending = false;
-bool wifiScanInProgress = false;
-bool wifiWasConnected = false;
-String storedWifiPass = "";  // kept for boot WiFi connect in setup()
-int wifiReconnectAttempts = 0;
-unsigned long lastRelayAttemptMs = 0;
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -110,11 +82,9 @@ unsigned long btnNextDownMs = 0;
 unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
-void publishStatusWithNetworks();
 void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
 void renderBannerFrame();
 void renderExpressionFrame();
@@ -126,16 +96,8 @@ void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons);
 void setBanner(const String& text, int speed);
 void setImageReady();
-void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
-bool connectToWifi(const String& ssid, const String& password);
-bool wifiJoinInProgress();
-void markWifiJoinStarted();
-void markWifiJoinFinished();
-void scanWifiNetworks();
-void tryStoredWifi();
+void tryStoredPrefs();
 void handleCommandJson(const String& body);
-void pushRelayStatus();
-void pollRelay();
 void setupBle();
 void setupDisplay();
 void setupButtons();
@@ -268,43 +230,10 @@ int extractJsonIntField(const String& body, const char* key, int fallback = 0) {
   return foundDigit ? static_cast<int>(value * sign) : fallback;
 }
 
-String buildStatusJson() {
-  // Status for relay push and HTTP GET (keep compact for TLS memory safety)
-  String json = "{";
-  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
-  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
-  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
-  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
-  json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
-  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\"";
-  json += "}";
-  return json;
-}
-
 String buildBleStatusJson() {
-  // Compact status for BLE notify (fits in MTU)
   String json = "{";
   json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
-  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
-  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
-  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\"";
-  json += "}";
-  return json;
-}
-
-String buildBleStatusWithNetworksJson() {
-  // BLE status with wifi networks included (after scan)
-  String json = "{";
-  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
-  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
-  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
-  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
-  json += "\"wifiNetworks\":[";
-  for (int i = 0; i < availableWifiNetworkCount; i++) {
-    if (i > 0) json += ",";
-    json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
-  }
-  json += "]";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\"";
   json += "}";
   return json;
 }
@@ -323,37 +252,6 @@ const char* modeName(DisplayMode mode) {
     default:
       return "idle";
   }
-}
-
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
-  bool started = false;
-  
-  static bool secureInited = false;
-  if (!secureInited) {
-    relaySecureClient.setInsecure();
-    secureInited = true;
-  }
-  
-  String finalUrl = url;
-  if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
-    finalUrl = "https://" + finalUrl.substring(7);
-  }
-
-  Serial.println(String("[http] begin url=") + finalUrl + " heap=" + String(ESP.getFreeHeap()));
-
-  if (finalUrl.startsWith("https://")) {
-    started = client.begin(relaySecureClient, finalUrl);
-  } else {
-    started = client.begin(relayHttpClient, finalUrl);
-  }
-  
-  if (started) {
-    client.setReuse(true); // MUST be true for Keep-Alive
-    client.setTimeout(timeoutMs);
-  } else {
-    Serial.println("[http] client.begin returned false!");
-  }
-  return started;
 }
 
 void clearImageBuffer() {
@@ -389,16 +287,6 @@ void publishStatus() {
     statusCharacteristic->setValue(payload.c_str());
     statusCharacteristic->notify();
   }
-  relayStatusDirty = true;
-}
-
-void publishStatusWithNetworks() {
-  const String payload = buildBleStatusWithNetworksJson();
-  if (statusCharacteristic != nullptr) {
-    statusCharacteristic->setValue(payload.c_str());
-    statusCharacteristic->notify();
-  }
-  relayStatusDirty = true;
 }
 
 // ─── Native note decoration helpers ───
@@ -642,10 +530,8 @@ void renderIdle() {
   display.setCursor(12, 7);
   display.println("Desk Companion");
   display.drawLine(10, 17, SCREEN_WIDTH - 11, 17, SH110X_WHITE);
-  display.setCursor(12, 24);
-  display.println(ipAddress.isEmpty() ? "Waiting for Wi-Fi" : ipAddress);
   display.setCursor(12, 38);
-  display.println("Use app or website");
+  display.println("Use the app");
   display.setCursor(12, 50);
   display.println("to interact");
 
@@ -1090,140 +976,8 @@ void setImageReady() {
   publishStatus();
 }
 
-void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken) {
-  relayUrl = nextRelayUrl;
-  deviceToken = nextDeviceToken;
-  preferences.begin("desk-cfg", false);
-  preferences.putString("relay_url", relayUrl);
-  preferences.putString("device_token", deviceToken);
-  preferences.end();
-  statusText = relayUrl.isEmpty() ? "Relay cleared" : "Relay configured";
-  Serial.println(String("[relay-cfg] url=[") + relayUrl + "] token=[" + deviceToken + "]");
-  publishStatus();
-  // Push immediately so the relay knows we're online
-  relayStatusDirty = true;
-}
-
-bool connectToWifi(const String& ssid, const String& password) {
-  Serial.println(String("[wifi-join] ssid=[") + ssid + "] pass_len=" + String(password.length()));
-
-  // This sequence was confirmed working in testing:
-  // disconnect(true) deinits the WiFi stack for a clean slate,
-  // then mode(WIFI_STA) re-inits it in BLE+WiFi coexistence mode.
-  WiFi.disconnect(true, false);
-  delay(500);
-
-  // Save credentials BEFORE attempting connect so they survive reboot.
-  // Only save relay settings if they're non-empty to avoid wiping
-  // previously configured values when WiFi is set first.
-  preferences.begin("desk-cfg", false);
-  preferences.putString("ssid", ssid);
-  preferences.putString("pass", password);
-  if (!relayUrl.isEmpty()) preferences.putString("relay_url", relayUrl);
-  if (!deviceToken.isEmpty()) preferences.putString("device_token", deviceToken);
-  preferences.end();
-
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(ssid.c_str(), password.c_str());
-  markWifiJoinStarted();
-
-  statusText = "Joining Wi-Fi";
-  currentSsid = ssid;
-  ipAddress = "";
-  publishStatus();
-
-  Serial.print("[wifi-join] waiting: ");
-  const unsigned long startedAt = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 20000) {
-    Serial.print(String(WiFi.status()) + " ");
-    delay(500);
-  }
-  Serial.println();
-
-  const int finalStatus = WiFi.status();
-  Serial.println(String("[wifi-join] final status=") + String(finalStatus));
-
-  markWifiJoinFinished();
-  if (finalStatus == WL_CONNECTED) {
-    ipAddress = WiFi.localIP().toString();
-    wifiWasConnected = true;
-    statusText = "Wi-Fi connected";
-    Serial.println(String("[wifi-join] OK ip=") + ipAddress);
-    publishStatus();
-    pushRelayStatus();
-    return true;
-  }
-
-  wifiWasConnected = false;
-  // Show the numeric status so the user can report it
-  // 1=NO_SSID_AVAIL  4=CONNECT_FAILED  6=DISCONNECTED
-  statusText = String("Wi-Fi failed (") + String(finalStatus) + ")";
-  Serial.println(String("[wifi-join] FAILED status=") + String(finalStatus));
-  publishStatus();
-  return false;
-}
-
-bool wifiJoinInProgress() {
-  return wifiJoinActive && millis() - lastWifiBeginMs < 30000;
-}
-
-void markWifiJoinStarted() {
-  wifiJoinActive = true;
-  lastWifiBeginMs = millis();
-}
-
-void markWifiJoinFinished() {
-  wifiJoinActive = false;
-}
-
-void scanWifiNetworks() {
-  statusText = "Scanning Wi-Fi";
-  publishStatus();
-
-  // Must disconnect to scan reliably on ESP32
-  const bool wasConnected = WiFi.status() == WL_CONNECTED;
-  if (wasConnected) {
-    WiFi.disconnect(false, false);
-    delay(300);
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.scanDelete();
-  availableWifiNetworkCount = 0;
-
-  const int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
-  for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
-    const String ssid = WiFi.SSID(i);
-    if (ssid.isEmpty()) continue;
-    bool dup = false;
-    for (int e = 0; e < availableWifiNetworkCount; e++) {
-      if (availableWifiNetworks[e] == ssid) { dup = true; break; }
-    }
-    if (!dup) availableWifiNetworks[availableWifiNetworkCount++] = ssid;
-  }
-  WiFi.scanDelete();
-
-  // Reconnect if we were connected before
-  if (wasConnected && !currentSsid.isEmpty()) {
-    preferences.begin("desk-cfg", true);
-    const String storedPass = preferences.getString("pass", "");
-    preferences.end();
-    WiFi.begin(currentSsid.c_str(), storedPass.c_str());
-    WiFi.setAutoReconnect(true);
-  }
-
-  statusText = availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
-  publishStatusWithNetworks();
-}
-
-void tryStoredWifi() {
+void tryStoredPrefs() {
   preferences.begin("desk-cfg", true);
-  currentSsid = preferences.getString("ssid", "");
-  storedWifiPass = preferences.getString("pass", "");
-  relayUrl = preferences.getString("relay_url", "");
-  deviceToken = preferences.getString("device_token", "");
   // Restore last note
   const String savedNote = preferences.getString("note_text", "");
   if (!savedNote.isEmpty()) {
@@ -1238,48 +992,12 @@ void tryStoredWifi() {
     currentMode = MODE_NOTE;
   }
   preferences.end();
-  // WiFi.begin() is called by setup() after this returns
 }
 
 void handleCommandJson(const String& body) {
   const String type = extractJsonStringField(body, "type");
   if (type.isEmpty()) {
     statusText = "Bad command JSON";
-    publishStatus();
-    return;
-  }
-
-  if (type == "connect_wifi") {
-    // Don't block BLE callback — defer to loop()
-    pendingWifiSsid = extractJsonStringField(body, "ssid");
-    pendingWifiPass = extractJsonStringField(body, "password");
-    wifiConnectPending = true;
-    statusText = "Wi-Fi queued";
-    publishStatus();
-    return;
-  }
-
-  if (type == "scan_wifi") {
-    // Defer scan to loop() so BLE callback returns immediately
-    wifiScanPending = true;
-    statusText = "Scan queued";
-    publishStatus();
-    return;
-  }
-
-  if (type == "forget_wifi") {
-    WiFi.disconnect(true, true);  // disconnect + erase SDK credentials
-    WiFi.setAutoReconnect(false);
-    currentSsid = "";
-    ipAddress = "";
-    wifiWasConnected = false;
-    availableWifiNetworkCount = 0;
-    // Clear stored credentials from NVS
-    preferences.begin("desk-cfg", false);
-    preferences.remove("ssid");
-    preferences.remove("pass");
-    preferences.end();
-    statusText = "Wi-Fi forgotten";
     publishStatus();
     return;
   }
@@ -1305,14 +1023,6 @@ void handleCommandJson(const String& body) {
   if (type == "set_expression") {
     setExpression(
       extractJsonStringField(body, "expression", "happy")
-    );
-    return;
-  }
-
-  if (type == "set_relay") {
-    saveRelaySettings(
-      extractJsonStringField(body, "relayUrl"),
-      extractJsonStringField(body, "deviceToken")
     );
     return;
   }
@@ -1395,86 +1105,6 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
     receivedImageBytes += chunkSize;
   }
 };
-
-void pushRelayStatus() {
-  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
-    Serial.println(String("[relay-push] SKIP: wifi=") + String(WiFi.status()) + " url=[" + relayUrl + "] token=[" + deviceToken + "]");
-    return;
-  }
-
-  lastRelayAttemptMs = millis();
-
-  const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
-  Serial.println(String("[relay-push] POST ") + url);
-  HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
-    Serial.println("[relay-push] beginHttpClient FAILED");
-    return;
-  }
-  client.addHeader("Content-Type", "application/json");
-  client.addHeader("Connection", "keep-alive");
-  
-  const String body = buildStatusJson();
-  Serial.println(String("[relay-push] body=") + body.substring(0, min((int)body.length(), 200)));
-  int code = client.POST(body);
-  Serial.println(String("[relay-push] response=") + String(code));
-  if (code < 0) {
-    Serial.println(String("[relay-push] HTTPClient error: ") + client.errorToString(code));
-  }
-  
-  // MUST read the response to clear the socket buffer for the next request
-  if (code > 0) {
-    client.getString();
-  } else {
-    // If connection dropped, flush TLS state to reconnect clean next time
-    relaySecureClient.stop();
-  }
-  
-  client.end();
-
-  relayStatusDirty = false;
-  lastRelayStatusPushMs = millis();
-}
-
-void pollRelay() {
-  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
-    return;
-  }
-
-  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
-  if (millis() - lastRelayPollMs < pollInterval) {
-    return;
-  }
-
-  lastRelayPollMs = millis();
-
-  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
-  Serial.println(String("[relay-poll] GET ") + url);
-  HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
-    Serial.println("[relay-poll] beginHttpClient FAILED");
-    return;
-  }
-  client.addHeader("Connection", "keep-alive");
-
-  const int code = client.GET();
-  Serial.println(String("[relay-poll] response=") + String(code));
-  if (code < 0) {
-    Serial.println(String("[relay-poll] HTTPClient error: ") + client.errorToString(code));
-  }
-  if (code == 200) {
-    const String cmd = client.getString();
-    Serial.println(String("[relay-poll] command=") + cmd);
-    handleCommandJson(cmd);
-  } else if (code > 0) {
-    // MUST read response to keep the socket alive!
-    client.getString();
-  } else {
-    // If connection dropped, flush TLS state to reconnect clean next time
-    relaySecureClient.stop();
-  }
-  client.end();
-}
 
 void setupBle() {
   BLEDevice::init(DEVICE_NAME);
@@ -1612,51 +1242,12 @@ void setup() {
   delay(500);
   Serial.println("\n=== Desk Companion S3 boot ===");
 
-  WiFi.persistent(false);  // never let SDK cache credentials to flash
-
   setupDisplay();
   setupButtons();
   clearImageBuffer();
 
-  // Load stored credentials from NVS
-  tryStoredWifi();
-
-  // BLE init — shared radio, coexistence manager handles BT+WiFi together
+  tryStoredPrefs();
   setupBle();
-
-  // Boot WiFi: direct begin AFTER BLE init, no disconnect, blocking wait
-  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
-    Serial.println(String("[boot-wifi] ssid=[") + currentSsid + "] pass_len=" + String(storedWifiPass.length()));
-    Serial.println(String("[boot-wifi] relay=[") + relayUrl + "] token=[" + deviceToken + "]");
-    WiFi.mode(WIFI_STA);
-    delay(100);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
-    markWifiJoinStarted();
-
-    Serial.print("[boot-wifi] waiting: ");
-    unsigned long t = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
-      delay(500);
-      Serial.print(String(WiFi.status()) + " ");
-    }
-    Serial.println();
-
-    if (WiFi.status() == WL_CONNECTED) {
-      ipAddress = WiFi.localIP().toString();
-      wifiWasConnected = true;
-      markWifiJoinFinished();
-      statusText = "Wi-Fi connected";
-      Serial.println(String("[boot-wifi] OK ip=") + ipAddress);
-      pushRelayStatus();
-    } else {
-      markWifiJoinFinished();
-      Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
-    }
-  }
-
-  // Prevent loop() reconnect tracker from firing before the deferred join
-  lastWifiCheckMs = millis();
 
   renderCurrentMode();
   publishStatus();
@@ -1694,56 +1285,6 @@ void loop() {
     }
   }
 
-  // --- WiFi status tracking ---
-  // WiFi.setAutoReconnect(true) handles reconnection at the driver level.
-  // We only track state changes here and do a last-resort reconnect after 60s.
-  const bool wifiNow = WiFi.status() == WL_CONNECTED;
-  if (wifiNow) {
-    ipAddress = WiFi.localIP().toString();
-    markWifiJoinFinished();
-    if (!wifiWasConnected) {
-      wifiWasConnected = true;
-      wifiReconnectAttempts = 0;
-      statusText = "Wi-Fi connected";
-      Serial.println(String("[wifi] CONNECTED ip=") + ipAddress);
-      publishStatus();
-    }
-    lastWifiCheckMs = millis();  // reset timer while connected
-  } else {
-    ipAddress = "";
-    if (wifiJoinActive && millis() - lastWifiBeginMs >= 30000) {
-      markWifiJoinFinished();
-      statusText = "Wi-Fi connect failed";
-      Serial.println(String("[wifi] JOIN TIMEOUT status=") + String(WiFi.status()));
-      publishStatus();
-    }
-    if (wifiWasConnected) {
-      wifiWasConnected = false;
-      statusText = "Wi-Fi reconnecting";
-      Serial.println("[wifi] DISCONNECTED — auto-reconnect active");
-      lastWifiCheckMs = millis();  // start 60s countdown
-      publishStatus();
-    }
-  }
-
-  // Handle deferred WiFi scan (from BLE callback)
-  if (wifiScanPending) {
-    wifiScanPending = false;
-    scanWifiNetworks();
-  }
-
-  // Handle deferred WiFi connect (from BLE callback)
-  if (wifiConnectPending) {
-    wifiConnectPending = false;
-    connectToWifi(pendingWifiSsid, pendingWifiPass);
-    pendingWifiSsid = "";
-    pendingWifiPass = "";
-  }
-
-  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
-    pushRelayStatus();
-  }
-  pollRelay();
   handleButtons();
 
   delay(1);
