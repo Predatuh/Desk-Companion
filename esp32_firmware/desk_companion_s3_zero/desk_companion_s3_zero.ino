@@ -7,7 +7,6 @@
 #include <BLEUtils.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
-#include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
@@ -44,9 +43,6 @@ BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
 WiFiClient relayHttpClient;
 WiFiClientSecure relaySecureClient;
-
-WebServer localServer(80);
-bool localServerRunning = false;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -145,7 +141,6 @@ void handleCommandJson(const String& body);
 void pushRelayStatus();
 void pollRelay();
 void setupBle();
-void setupLocalServer();
 void setupDisplay();
 void setupButtons();
 void handleButtons();
@@ -1451,28 +1446,6 @@ void pollRelay() {
   client.end();
 }
 
-void setupLocalServer() {
-  if (localServerRunning) return;
-  // POST /command  — accepts same JSON as BLE/relay commands
-  localServer.on("/command", HTTP_POST, []() {
-    String body = localServer.arg("plain");
-    Serial.println(String("[http] POST /command body=") + body.substring(0, min((int)body.length(), 200)));
-    if (body.isEmpty()) {
-      localServer.send(400, "application/json", "{\"error\":\"empty body\"}");
-      return;
-    }
-    handleCommandJson(body);
-    localServer.send(200, "application/json", buildStatusJson());
-  });
-  // GET /status  — returns full device status
-  localServer.on("/status", HTTP_GET, []() {
-    localServer.send(200, "application/json", buildStatusJson());
-  });
-  localServer.begin();
-  localServerRunning = true;
-  Serial.println(String("[http] Local server started on ") + ipAddress + ":80");
-}
-
 void setupBle() {
   BLEDevice::init(DEVICE_NAME);
   BLEDevice::setMTU(517);  // Request max MTU for larger payloads
@@ -1644,7 +1617,6 @@ void setup() {
       statusText = "Wi-Fi connected";
       Serial.println(String("[boot-wifi] OK ip=") + ipAddress);
       pushRelayStatus();
-      setupLocalServer();
     } else {
       markWifiJoinFinished();
       Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
@@ -1702,7 +1674,6 @@ void loop() {
       wifiReconnectAttempts = 0;
       statusText = "Wi-Fi connected";
       Serial.println(String("[wifi] CONNECTED ip=") + ipAddress);
-      setupLocalServer();
       publishStatus();
     }
     lastWifiCheckMs = millis();  // reset timer while connected
@@ -1766,10 +1737,6 @@ void loop() {
     connectToWifi(pendingWifiSsid, pendingWifiPass);
     pendingWifiSsid = "";
     pendingWifiPass = "";
-  }
-
-  if (localServerRunning) {
-    localServer.handleClient();
   }
 
   if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
