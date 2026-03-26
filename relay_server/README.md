@@ -5,6 +5,7 @@ Tiny relay for off-LAN delivery with:
 - persisted queue/status state in `relay_server/data/devices.json`
 - a simple built-in web UI served from `/`
 - support for both `http://` and `https://` relay base URLs on the client side
+- BLE remains the nearby setup and direct-send path; this relay is the remote delivery path
 
 ## Endpoints
 
@@ -60,4 +61,5 @@ The root path `/` serves a simple page where you can:
 
 - The ESP32 stores the relay base URL and token, then polls `pull` for queued commands.
 - Relay state survives server restarts via `relay_server/data/devices.json`.
-- Re-enabled HTTPS relay support in firmware may require a larger ESP32 partition scheme if your current app partition is too small.
+- The active app flow does not use direct LAN control; remote commands go through this relay and nearby setup stays on BLE.
+- Command and status payloads are documented in `docs/relay-protocol.md`.

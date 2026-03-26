@@ -5,7 +5,10 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <HTTPClient.h>
 #include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -38,6 +41,8 @@ BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
+WiFiClient relayHttpClient;
+WiFiClientSecure relaySecureClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -54,6 +59,10 @@ String currentFlower = "rose";
 String currentNote = "hi honey";
 String currentBanner = "hello from your desk buddy";
 String currentExpression = "happy";
+String currentSsid = "";
+String ipAddress = "";
+String relayUrl = "";
+String deviceToken = "";
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -63,8 +72,23 @@ int bannerOffset = SCREEN_WIDTH;
 unsigned long lastBannerTickMs = 0;
 unsigned long lastDecorTickMs = 0;
 unsigned long lastExpressionTickMs = 0;
+unsigned long lastRelayPollMs = 0;
+unsigned long lastRelayStatusPushMs = 0;
+unsigned long lastWifiCheckMs = 0;
+unsigned long lastWifiBeginMs = 0;
+bool wifiJoinActive = false;
+bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
+String availableWifiNetworks[10];
+int availableWifiNetworkCount = 0;
+
+bool wifiConnectPending = false;
+String pendingWifiSsid = "";
+String pendingWifiPass = "";
+bool wifiScanPending = false;
+bool wifiWasConnected = false;
+String storedWifiPass = "";
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -85,9 +109,11 @@ unsigned long btnNextDownMs = 0;
 unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
+void publishStatusWithNetworks();
 void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
 void renderBannerFrame();
 void renderExpressionFrame();
@@ -96,14 +122,22 @@ void renderIdle();
 void renderCurrentMode();
 void setIdleStatus(const String& value);
 void setExpression(const String& expression);
-void setNote(const String& text, int fontSize, int border, const String& icons);
+void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "");
 void setBanner(const String& text, int speed);
 void setImageReady();
 void setFlower(const String& flowerType);
+void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
+bool connectToWifi(const String& ssid, const String& password);
+bool wifiJoinInProgress();
+void markWifiJoinStarted();
+void markWifiJoinFinished();
+void scanWifiNetworks();
 void renderFlowerFrame();
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
 void tryStoredPrefs();
 void handleCommandJson(const String& body);
+void pushRelayStatus();
+void pollRelay();
 void setupBle();
 void setupDisplay();
 void setupButtons();
@@ -236,10 +270,42 @@ int extractJsonIntField(const String& body, const char* key, int fallback = 0) {
   return foundDigit ? static_cast<int>(value * sign) : fallback;
 }
 
+String buildStatusJson() {
+  String json = "{";
+  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
+  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\"";
+  json += "}";
+  return json;
+}
+
 String buildBleStatusJson() {
   String json = "{";
   json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
-  json += "\"status\":\"" + jsonEscape(statusText) + "\"";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\"";
+  json += "}";
+  return json;
+}
+
+String buildBleStatusWithNetworksJson() {
+  String json = "{";
+  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"wifiNetworks\":[";
+  for (int i = 0; i < availableWifiNetworkCount; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
+  }
+  json += "]";
   json += "}";
   return json;
 }
@@ -260,6 +326,33 @@ const char* modeName(DisplayMode mode) {
     default:
       return "idle";
   }
+}
+
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
+  bool started = false;
+
+  static bool secureInited = false;
+  if (!secureInited) {
+    relaySecureClient.setInsecure();
+    secureInited = true;
+  }
+
+  String finalUrl = url;
+  if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
+    finalUrl = "https://" + finalUrl.substring(7);
+  }
+
+  if (finalUrl.startsWith("https://")) {
+    started = client.begin(relaySecureClient, finalUrl);
+  } else {
+    started = client.begin(relayHttpClient, finalUrl);
+  }
+
+  if (started) {
+    client.setReuse(true);
+    client.setTimeout(timeoutMs);
+  }
+  return started;
 }
 
 void clearImageBuffer() {
@@ -295,6 +388,16 @@ void publishStatus() {
     statusCharacteristic->setValue(payload.c_str());
     statusCharacteristic->notify();
   }
+  relayStatusDirty = true;
+}
+
+void publishStatusWithNetworks() {
+  const String payload = buildBleStatusWithNetworksJson();
+  if (statusCharacteristic != nullptr) {
+    statusCharacteristic->setValue(payload.c_str());
+    statusCharacteristic->notify();
+  }
+  relayStatusDirty = true;
 }
 
 // ─── Native note decoration helpers ───
@@ -1064,6 +1167,125 @@ void setFlower(const String& flowerType) {
   publishStatus();
 }
 
+void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken) {
+  relayUrl = nextRelayUrl;
+  deviceToken = nextDeviceToken;
+  preferences.begin("desk-cfg", false);
+  preferences.putString("relay_url", relayUrl);
+  preferences.putString("device_token", deviceToken);
+  preferences.end();
+  statusText = relayUrl.isEmpty() ? "Relay cleared" : "Relay configured";
+  publishStatus();
+  relayStatusDirty = true;
+}
+
+bool connectToWifi(const String& ssid, const String& password) {
+  WiFi.disconnect(true, false);
+  delay(500);
+
+  preferences.begin("desk-cfg", false);
+  preferences.putString("ssid", ssid);
+  preferences.putString("pass", password);
+  if (!relayUrl.isEmpty()) {
+    preferences.putString("relay_url", relayUrl);
+  }
+  if (!deviceToken.isEmpty()) {
+    preferences.putString("device_token", deviceToken);
+  }
+  preferences.end();
+
+  WiFi.mode(WIFI_STA);
+  delay(100);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(ssid.c_str(), password.c_str());
+  markWifiJoinStarted();
+
+  statusText = "Joining Wi-Fi";
+  currentSsid = ssid;
+  ipAddress = "";
+  publishStatus();
+
+  const unsigned long startedAt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 20000) {
+    delay(500);
+  }
+
+  const int finalStatus = WiFi.status();
+  markWifiJoinFinished();
+  if (finalStatus == WL_CONNECTED) {
+    ipAddress = WiFi.localIP().toString();
+    wifiWasConnected = true;
+    statusText = "Wi-Fi connected";
+    publishStatus();
+    pushRelayStatus();
+    return true;
+  }
+
+  wifiWasConnected = false;
+  statusText = String("Wi-Fi failed (") + String(finalStatus) + ")";
+  publishStatus();
+  return false;
+}
+
+bool wifiJoinInProgress() {
+  return wifiJoinActive && millis() - lastWifiBeginMs < 30000;
+}
+
+void markWifiJoinStarted() {
+  wifiJoinActive = true;
+  lastWifiBeginMs = millis();
+}
+
+void markWifiJoinFinished() {
+  wifiJoinActive = false;
+}
+
+void scanWifiNetworks() {
+  statusText = "Scanning Wi-Fi";
+  publishStatus();
+
+  const bool wasConnected = WiFi.status() == WL_CONNECTED;
+  if (wasConnected) {
+    WiFi.disconnect(false, false);
+    delay(300);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.scanDelete();
+  availableWifiNetworkCount = 0;
+
+  const int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+  for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.isEmpty()) {
+      continue;
+    }
+    bool duplicate = false;
+    for (int existing = 0; existing < availableWifiNetworkCount; existing++) {
+      if (availableWifiNetworks[existing] == ssid) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (!duplicate) {
+      availableWifiNetworks[availableWifiNetworkCount++] = ssid;
+    }
+  }
+  WiFi.scanDelete();
+
+  if (wasConnected && !currentSsid.isEmpty()) {
+    preferences.begin("desk-cfg", true);
+    const String storedPass = preferences.getString("pass", "");
+    preferences.end();
+    WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+    WiFi.setAutoReconnect(true);
+  }
+
+  statusText =
+      availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+  publishStatusWithNetworks();
+}
+
 // ─── Flower drawing helpers ───
 
 // Draw a rose: layered petal circles spiraling from center
@@ -1263,6 +1485,10 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
 
 void tryStoredPrefs() {
   preferences.begin("desk-cfg", true);
+  currentSsid = preferences.getString("ssid", "");
+  storedWifiPass = preferences.getString("pass", "");
+  relayUrl = preferences.getString("relay_url", "");
+  deviceToken = preferences.getString("device_token", "");
   // Restore last note
   const String savedNote = preferences.getString("note_text", "");
   if (!savedNote.isEmpty()) {
@@ -1284,6 +1510,38 @@ void handleCommandJson(const String& body) {
   const String type = extractJsonStringField(body, "type");
   if (type.isEmpty()) {
     statusText = "Bad command JSON";
+    publishStatus();
+    return;
+  }
+
+  if (type == "connect_wifi") {
+    pendingWifiSsid = extractJsonStringField(body, "ssid");
+    pendingWifiPass = extractJsonStringField(body, "password");
+    wifiConnectPending = true;
+    statusText = "Wi-Fi queued";
+    publishStatus();
+    return;
+  }
+
+  if (type == "scan_wifi") {
+    wifiScanPending = true;
+    statusText = "Scan queued";
+    publishStatus();
+    return;
+  }
+
+  if (type == "forget_wifi") {
+    WiFi.disconnect(true, true);
+    WiFi.setAutoReconnect(false);
+    currentSsid = "";
+    ipAddress = "";
+    wifiWasConnected = false;
+    availableWifiNetworkCount = 0;
+    preferences.begin("desk-cfg", false);
+    preferences.remove("ssid");
+    preferences.remove("pass");
+    preferences.end();
+    statusText = "Wi-Fi forgotten";
     publishStatus();
     return;
   }
@@ -1310,6 +1568,14 @@ void handleCommandJson(const String& body) {
   if (type == "set_expression") {
     setExpression(
       extractJsonStringField(body, "expression", "happy")
+    );
+    return;
+  }
+
+  if (type == "set_relay") {
+    saveRelaySettings(
+      extractJsonStringField(body, "relayUrl"),
+      extractJsonStringField(body, "deviceToken")
     );
     return;
   }
@@ -1397,6 +1663,66 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
     receivedImageBytes += chunkSize;
   }
 };
+
+void pushRelayStatus() {
+  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    return;
+  }
+
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
+  HTTPClient client;
+  if (!beginHttpClient(client, url, 5000)) {
+    return;
+  }
+
+  client.addHeader("Content-Type", "application/json");
+  client.addHeader("Connection", "keep-alive");
+
+  const String body = buildStatusJson();
+  const int code = client.POST(body);
+  if (code > 0) {
+    client.getString();
+  } else {
+    relaySecureClient.stop();
+  }
+
+  client.end();
+  relayStatusDirty = false;
+  lastRelayStatusPushMs = millis();
+}
+
+void pollRelay() {
+  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    return;
+  }
+
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
+  if (millis() - lastRelayPollMs < pollInterval) {
+    return;
+  }
+
+  lastRelayPollMs = millis();
+
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  HTTPClient client;
+  if (!beginHttpClient(client, url, 5000)) {
+    return;
+  }
+
+  client.addHeader("Connection", "keep-alive");
+
+  const int code = client.GET();
+  if (code == 200) {
+    const String command = client.getString();
+    handleCommandJson(command);
+  } else if (code > 0) {
+    client.getString();
+  } else {
+    relaySecureClient.stop();
+  }
+
+  client.end();
+}
 
 void setupBle() {
   BLEDevice::init(DEVICE_NAME);
@@ -1534,12 +1860,39 @@ void setup() {
   delay(500);
   Serial.println("\n=== Desk Companion S3 boot ===");
 
+  WiFi.persistent(false);
+
   setupDisplay();
   setupButtons();
   clearImageBuffer();
 
   tryStoredPrefs();
   setupBle();
+
+  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
+    WiFi.mode(WIFI_STA);
+    delay(100);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    markWifiJoinStarted();
+
+    const unsigned long startedAt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 15000) {
+      delay(500);
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      ipAddress = WiFi.localIP().toString();
+      wifiWasConnected = true;
+      markWifiJoinFinished();
+      statusText = "Wi-Fi connected";
+      pushRelayStatus();
+    } else {
+      markWifiJoinFinished();
+    }
+  }
+
+  lastWifiCheckMs = millis();
 
   renderCurrentMode();
   publishStatus();
@@ -1585,6 +1938,49 @@ void loop() {
       renderFlowerFrame();
     }
   }
+
+  const bool wifiNow = WiFi.status() == WL_CONNECTED;
+  if (wifiNow) {
+    ipAddress = WiFi.localIP().toString();
+    markWifiJoinFinished();
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
+      statusText = "Wi-Fi connected";
+      publishStatus();
+    }
+    lastWifiCheckMs = millis();
+  } else {
+    ipAddress = "";
+    if (wifiJoinActive && millis() - lastWifiBeginMs >= 30000) {
+      markWifiJoinFinished();
+      statusText = "Wi-Fi connect failed";
+      publishStatus();
+    }
+    if (wifiWasConnected) {
+      wifiWasConnected = false;
+      statusText = "Wi-Fi reconnecting";
+      lastWifiCheckMs = millis();
+      publishStatus();
+    }
+  }
+
+  if (wifiScanPending) {
+    wifiScanPending = false;
+    scanWifiNetworks();
+  }
+
+  if (wifiConnectPending) {
+    wifiConnectPending = false;
+    connectToWifi(pendingWifiSsid, pendingWifiPass);
+    pendingWifiSsid = "";
+    pendingWifiPass = "";
+  }
+
+  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
+    pushRelayStatus();
+  }
+
+  pollRelay();
 
   handleButtons();
 

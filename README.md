@@ -9,9 +9,9 @@ Separate Flutter app, ESP32-S3 firmware, and optional relay service for a tiny d
 - Saves Wi-Fi credentials on the device so it can reconnect after reboot or temporary Wi-Fi loss.
 - Sends sticky notes, scrolling banner text, and 128x64 monochrome images.
 - Includes an exact 128x64 drawing pad so anything you sketch on the phone maps pixel-for-pixel to the OLED.
-- Includes a live draw mode that streams the current bitmap while you sketch.
-- Supports a small relay server for off-home-network delivery.
-- Uses BLE for setup and fallback, plus a hosted relay for remote delivery.
+- Includes a live draw mode that streams the current bitmap while you sketch when BLE is connected.
+- Supports a small relay server for off-home-network delivery from anywhere.
+- Uses BLE for nearby setup/direct delivery and a hosted relay for remote delivery.
 
 ## Flutter app
 
@@ -22,10 +22,11 @@ Project path:
 Main UI flow:
 
 - Find the device over BLE.
-- Send Wi-Fi credentials.
-- Optionally save relay URL plus device token to the ESP32.
-- Send note, banner, image, or drawing payloads.
-- Turn on live draw if you want the OLED to update as your finger moves.
+- Send Wi-Fi credentials over BLE.
+- Save relay URL plus device token to the ESP32 over BLE.
+- Send note, banner, expression, flower, or image payloads over BLE when nearby.
+- Send note, banner, expression, flower, or image payloads through the hosted relay when remote.
+- Turn on live draw if you want the OLED to update as your finger moves over BLE.
 
 Packages used:
 
@@ -93,8 +94,8 @@ The ESP32 stores the relay base URL and token, then polls the relay for queued c
 
 Firmware note:
 
-- The ESP32 firmware in this repo does not run a local HTTP server.
+- The ESP32 firmware in this repo does not run a local HTTP server for app control.
 - Device setup happens over BLE.
-- Remote delivery happens through the relay server.
-- Wi-Fi credentials are stored in device preferences so the ESP32 can reconnect automatically.
-- For the ESP32-S3 Zero build in this repo, use an `http://` relay URL instead of `https://` to keep the sketch within the default app size limit.
+- Remote delivery happens through the hosted relay server.
+- Wi-Fi credentials and relay settings are stored in device preferences so the ESP32 can reconnect automatically.
+- Remote and BLE message formats are documented in `docs/relay-protocol.md`.
