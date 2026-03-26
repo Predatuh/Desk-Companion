@@ -1107,6 +1107,12 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 bool connectToWifi(const String& ssid, const String& password) {
   Serial.println(String("[wifi-join] ssid=[") + ssid + "] pass_len=" + String(password.length()));
 
+  // This sequence was confirmed working in testing:
+  // disconnect(true) deinits the WiFi stack for a clean slate,
+  // then mode(WIFI_STA) re-inits it in BLE+WiFi coexistence mode.
+  WiFi.disconnect(true, false);
+  delay(500);
+
   // Save credentials BEFORE attempting connect so they survive reboot.
   // Only save relay settings if they're non-empty to avoid wiping
   // previously configured values when WiFi is set first.
@@ -1117,9 +1123,8 @@ bool connectToWifi(const String& ssid, const String& password) {
   if (!deviceToken.isEmpty()) preferences.putString("device_token", deviceToken);
   preferences.end();
 
-  // Do NOT call WiFi.mode() or WiFi.disconnect() here — BLE is active and
-  // the radio is already in BT+WiFi coexistence mode.  Calling WiFi.mode()
-  // disrupts that and causes WL_DISCONNECTED (status 6) immediately.
+  WiFi.mode(WIFI_STA);
+  delay(100);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   markWifiJoinStarted();
@@ -1608,10 +1613,6 @@ void setup() {
   Serial.println("\n=== Desk Companion S3 boot ===");
 
   WiFi.persistent(false);  // never let SDK cache credentials to flash
-  // Put WiFi in STA mode once, before BLE init.  Must be done here so the
-  // WiFi stack is initialised; calling WiFi.mode() later (after BLE is up)
-  // disrupts the coexistence manager and causes WL_DISCONNECTED (status 6).
-  WiFi.mode(WIFI_STA);
 
   setupDisplay();
   setupButtons();
