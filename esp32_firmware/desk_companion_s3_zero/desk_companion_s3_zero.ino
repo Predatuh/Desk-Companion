@@ -1692,11 +1692,26 @@ void loop() {
       preferences.begin("desk-cfg", true);
       const String storedPass = preferences.getString("pass", "");
       preferences.end();
-      WiFi.disconnect(true, false);
-      delay(200);
+      WiFi.disconnect(false, false);
+      delay(500);
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
+    }
+  }
+
+  // Handle BLE disconnect recovery
+  if (wifiReconnectAfterBle && (millis() - wifiReconnectAfterBleMs > 2000)) {
+    wifiReconnectAfterBle = false;
+    if (WiFi.status() != WL_CONNECTED && !currentSsid.isEmpty()) {
+      Serial.println("[wifi] Manual reconnect after BLE disconnect");
+      preferences.begin("desk-cfg", true);
+      const String storedPass = preferences.getString("pass", "");
+      preferences.end();
+      WiFi.disconnect(false, false);
+      delay(200);
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(currentSsid.c_str(), storedPass.c_str());
     }
   }
 

@@ -377,24 +377,25 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> refreshDeviceStatus() async {
-    await _runBusy(() async {
+  Future<bool> refreshDeviceStatus() async {
+    final result = await _runBusy<bool>(() async {
       // Always prefer BLE when connected — it's faster and more reliable
       if (isBleConnected) {
         await _sendBleCommand({'type': 'status'});
-        return;
+        return true;
       }
       // Try direct HTTP to device IP first
       if (_deviceIp.isNotEmpty && _deviceIp != 'no connection') {
         final ok = await _fetchDirectStatus();
-        if (ok) return;
+        if (ok) return true;
       }
       if (hasRelayTarget) {
-        await _fetchRelayStatus();
-        return;
+        final ok = await _fetchRelayStatus();
+        if (ok) return true;
       }
-      await _sendBleCommand({'type': 'status'});
+      return false;
     });
+    return result ?? false;
   }
 
   /// Send a command: prefer BLE → direct IP → relay.
@@ -814,15 +815,15 @@ class DeskCompanionController extends ChangeNotifier {
     }
   }
 
-  Future<void> _runBusy(Future<void> Function() action) async {
+  Future<T?> _runBusy<T>(Future<T> Function() action) async {
     if (_busy) {
-      return;
+      return null;
     }
 
     _busy = true;
     notifyListeners();
     try {
-      await action();
+      return await action();
     } finally {
       _busy = false;
       notifyListeners();

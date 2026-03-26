@@ -214,20 +214,38 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
                                       : controller.hasRelayTarget
-                                          ? () => _perform(
-                                                () => controller
-                                                    .refreshDeviceStatus(),
-                                                success: controller
-                                                        .isRelayOnline
-                                                    ? 'Device is online over Wi-Fi.'
-                                                    : 'Wi-Fi status checked.',
-                                              )
-                                          : () => _perform(
-                                                () => controller
-                                                    .refreshDeviceStatus(),
-                                                success:
-                                                    'Device status refreshed.',
-                                              ),
+                                          ? () async {
+                                              try {
+                                                final success = await controller.refreshDeviceStatus();
+                                                if (!mounted) return;
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    backgroundColor: success ? Colors.green.shade800 : Colors.red.shade800,
+                                                    content: Text(
+                                                      success
+                                                          ? 'Successfully connected to device over Wi-Fi!'
+                                                          : 'Device is offline or unreachable.',
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                if (!mounted) return;
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    backgroundColor: Colors.red.shade800,
+                                                    content: Text('Error: $e')
+                                                  ),
+                                                );
+                                              }
+                                            }
+                                          : () async {
+                                              await controller.refreshDeviceStatus();
+                                              if (mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Device status refreshed.')),
+                                                );
+                                              }
+                                            },
                               icon: Icon(
                                 controller.isBleConnected
                                     ? Icons.link_off
