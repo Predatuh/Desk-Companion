@@ -43,6 +43,7 @@ BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
 WiFiClient relayHttpClient;
+WiFiClientSecure relaySecureClient;
 
 WebServer localServer(80);
 bool localServerRunning = false;
@@ -339,19 +340,21 @@ const char* modeName(DisplayMode mode) {
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
   
-  // We keep a single persistent WiFiClientSecure to maintain the TLS session via Keep-Alive
-  // This prevents the ~2.5s TLS handshake penalty on every single poll!
-  static WiFiClientSecure secureClient;
   static bool secureInited = false;
   if (!secureInited) {
-    secureClient.setInsecure();
+    relaySecureClient.setInsecure();
     secureInited = true;
   }
+  
+  String finalUrl = url;
+  if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
+    finalUrl = "https://" + finalUrl.substring(7);
+  }
 
-  if (url.startsWith("https://")) {
-    started = client.begin(secureClient, url);
+  if (finalUrl.startsWith("https://")) {
+    started = client.begin(relaySecureClient, finalUrl);
   } else {
-    started = client.begin(relayHttpClient, url);
+    started = client.begin(relayHttpClient, finalUrl);
   }
   
   if (started) {
@@ -1383,6 +1386,9 @@ void pushRelayStatus() {
   // MUST read the response to clear the socket buffer for the next request
   if (code > 0) {
     client.getString();
+  } else {
+    // If connection dropped, flush TLS state to reconnect clean next time
+    relaySecureClient.stop();
   }
   
   client.end();
@@ -1396,7 +1402,7 @@ void pollRelay() {
     return;
   }
 
-  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 2500UL;
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
   if (millis() - lastRelayPollMs < pollInterval) {
     return;
   }
@@ -1421,6 +1427,9 @@ void pollRelay() {
   } else if (code > 0) {
     // MUST read response to keep the socket alive!
     client.getString();
+  } else {
+    // If connection dropped, flush TLS state to reconnect clean next time
+    relaySecureClient.stop();
   }
   client.end();
 }
