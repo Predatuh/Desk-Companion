@@ -273,22 +273,14 @@ int extractJsonIntField(const String& body, const char* key, int fallback = 0) {
 }
 
 String buildStatusJson() {
-  // Full status for relay push (includes everything)
+  // Status for relay push and HTTP GET (keep compact for TLS memory safety)
   String json = "{";
   json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
-  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
-  json += "\"wifiNetworks\":[";
-  for (int i = 0; i < availableWifiNetworkCount; i++) {
-    if (i > 0) {
-      json += ",";
-    }
-    json += "\"" + jsonEscape(availableWifiNetworks[i]) + "\"";
-  }
-  json += "]";
+  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\"";
   json += "}";
   return json;
 }
