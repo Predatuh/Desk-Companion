@@ -11,7 +11,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
-#include <esp_wifi.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
 #include <string>
@@ -145,7 +144,6 @@ void setupLocalServer();
 void setupDisplay();
 void setupButtons();
 void handleButtons();
-void resetWifiRadio();
 
 String bleValueToString(const String& value) {
   return value;
@@ -1104,8 +1102,9 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  // Always reset the radio before connecting (avoids 'un-init timeout type=13')
-  resetWifiRadio();
+  // Use a gentle disconnect here; hard driver resets broke STA association.
+  WiFi.disconnect(false, false);
+  delay(100);
 
   // Save credentials BEFORE attempting connect so they survive reboot
   preferences.begin("desk-cfg", false);
@@ -1115,6 +1114,8 @@ bool connectToWifi(const String& ssid, const String& password) {
   preferences.putString("device_token", deviceToken);
   preferences.end();
 
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   statusText = "Joining Wi-Fi";
@@ -1599,7 +1600,8 @@ void setup() {
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
     Serial.println(String("[boot-wifi] ssid=[") + currentSsid + "] pass_len=" + String(storedWifiPass.length()));
     Serial.println(String("[boot-wifi] relay=[") + relayUrl + "] token=[" + deviceToken + "]");
-    resetWifiRadio();
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
 
     unsigned long t = millis();
@@ -1691,8 +1693,11 @@ void loop() {
       preferences.begin("desk-cfg", true);
       const String storedPass = preferences.getString("pass", "");
       preferences.end();
-      resetWifiRadio();
+      WiFi.disconnect(false, false);
+      delay(200);
+      WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+      WiFi.setAutoReconnect(true);
     }
   }
 
@@ -1704,8 +1709,11 @@ void loop() {
       preferences.begin("desk-cfg", true);
       const String storedPass = preferences.getString("pass", "");
       preferences.end();
-      resetWifiRadio();
+      WiFi.disconnect(false, false);
+      delay(200);
+      WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+      WiFi.setAutoReconnect(true);
     }
   }
 
@@ -1734,19 +1742,4 @@ void loop() {
   handleButtons();
 
   delay(1);
-}
-
-void resetWifiRadio() {
-  // Force the Wi-Fi driver to a known clean state to avoid un-init timeouts.
-  WiFi.disconnect(true, true);
-  delay(200);
-  WiFi.mode(WIFI_OFF);
-  delay(200);
-  esp_wifi_stop();
-  esp_wifi_deinit();
-  delay(200);
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
 }
