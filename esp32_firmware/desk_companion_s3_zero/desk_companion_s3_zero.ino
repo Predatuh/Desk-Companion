@@ -1105,6 +1105,8 @@ bool connectToWifi(const String& ssid, const String& password) {
   // Always disconnect cleanly before connecting (required on cold boot too)
   WiFi.disconnect(true, true);
   delay(300);
+  WiFi.mode(WIFI_OFF);
+  delay(200);
   WiFi.persistent(false);
 
   // Save credentials BEFORE attempting connect so they survive reboot
@@ -1116,6 +1118,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   preferences.end();
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
 
@@ -1696,8 +1699,11 @@ void loop() {
       preferences.end();
       WiFi.disconnect(true, true);
       delay(300);
+      WiFi.mode(WIFI_OFF);
+      delay(200);
       WiFi.persistent(false);
       WiFi.mode(WIFI_STA);
+      WiFi.setSleep(false);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
     }
@@ -1713,8 +1719,11 @@ void loop() {
       preferences.end();
       WiFi.disconnect(true, true);
       delay(300);
+      WiFi.mode(WIFI_OFF);
+      delay(200);
       WiFi.persistent(false);
       WiFi.mode(WIFI_STA);
+      WiFi.setSleep(false);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
     }
   }
