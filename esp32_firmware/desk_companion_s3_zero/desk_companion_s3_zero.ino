@@ -1103,8 +1103,9 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 
 bool connectToWifi(const String& ssid, const String& password) {
   // Always disconnect cleanly before connecting (required on cold boot too)
-  WiFi.disconnect(false, false);
-  delay(100);
+  WiFi.disconnect(true, true);
+  delay(300);
+  WiFi.persistent(false);
 
   // Save credentials BEFORE attempting connect so they survive reboot
   preferences.begin("desk-cfg", false);
@@ -1693,8 +1694,9 @@ void loop() {
       preferences.begin("desk-cfg", true);
       const String storedPass = preferences.getString("pass", "");
       preferences.end();
-      WiFi.disconnect(false, false);
-      delay(500);
+      WiFi.disconnect(true, true);
+      delay(300);
+      WiFi.persistent(false);
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
@@ -1709,8 +1711,9 @@ void loop() {
       preferences.begin("desk-cfg", true);
       const String storedPass = preferences.getString("pass", "");
       preferences.end();
-      WiFi.disconnect(false, false);
-      delay(200);
+      WiFi.disconnect(true, true);
+      delay(300);
+      WiFi.persistent(false);
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
     }
