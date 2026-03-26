@@ -1107,10 +1107,6 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 bool connectToWifi(const String& ssid, const String& password) {
   Serial.println(String("[wifi-join] ssid=[") + ssid + "] pass_len=" + String(password.length()));
 
-  // Soft disconnect — do NOT pass true (that kills the radio on shared BLE/WiFi)
-  WiFi.disconnect(false, false);
-  delay(200);
-
   // Save credentials BEFORE attempting connect so they survive reboot.
   // Only save relay settings if they're non-empty to avoid wiping
   // previously configured values when WiFi is set first.
@@ -1121,8 +1117,9 @@ bool connectToWifi(const String& ssid, const String& password) {
   if (!deviceToken.isEmpty()) preferences.putString("device_token", deviceToken);
   preferences.end();
 
-  WiFi.mode(WIFI_STA);
-  delay(100);  // let mode switch settle
+  // Do NOT call WiFi.mode() or WiFi.disconnect() here — BLE is active and
+  // the radio is already in BT+WiFi coexistence mode.  Calling WiFi.mode()
+  // disrupts that and causes WL_DISCONNECTED (status 6) immediately.
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   markWifiJoinStarted();
