@@ -628,12 +628,12 @@ class DeskCompanionController extends ChangeNotifier {
     }
   }
 
-  Future<void> _fetchRelayStatus() async {
+  Future<bool> _fetchRelayStatus() async {
     final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
     final token = _deviceToken.trim();
     if (base.isEmpty || token.isEmpty) {
       _setStatus('Relay URL or token is empty — cannot check relay.');
-      return;
+      return false;
     }
 
     final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
@@ -646,14 +646,14 @@ class DeskCompanionController extends ChangeNotifier {
         _relayOnline = false;
         _relayStatusKnown = true;
         _setStatus('Relay $url → ${response.statusCode}');
-        return;
+        return false;
       }
 
       final payload = jsonDecode(response.body);
       if (payload is! Map<String, dynamic>) {
         _relayOnline = false;
         _relayStatusKnown = true;
-        return;
+        return false;
       }
 
       final updatedAtValue = payload['updatedAt'] as String?;
@@ -675,6 +675,7 @@ class DeskCompanionController extends ChangeNotifier {
           _setStatus('Device is not pushing to relay — is it on Wi-Fi?');
         }
       }
+      return _relayOnline;
     } catch (error) {
       _relayOnline = false;
       _relayStatusKnown = true;
@@ -684,6 +685,7 @@ class DeskCompanionController extends ChangeNotifier {
       } else {
         _setStatus('Relay error — $msg');
       }
+      return false;
     }
   }
 
