@@ -77,6 +77,7 @@ unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
 unsigned long lastWifiCheckMs = 0;
 unsigned long lastWifiBeginMs = 0;
+bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
@@ -136,6 +137,8 @@ void setImageReady();
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
 bool connectToWifi(const String& ssid, const String& password);
 bool wifiJoinInProgress();
+void markWifiJoinStarted();
+void markWifiJoinFinished();
 void scanWifiNetworks();
 void tryStoredWifi();
 void handleCommandJson(const String& body);
@@ -1104,7 +1107,7 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  if (wifiJoinInProgress() && currentSsid == ssid) {
+  if (wifiJoinActive && currentSsid == ssid) {
     statusText = "Joining Wi-Fi";
     publishStatus();
     return true;
@@ -1125,7 +1128,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
-  lastWifiBeginMs = millis();
+  markWifiJoinStarted();
 
   statusText = "Joining Wi-Fi";
   currentSsid = ssid;
@@ -1137,17 +1140,16 @@ bool connectToWifi(const String& ssid, const String& password) {
 }
 
 bool wifiJoinInProgress() {
-  const wl_status_t status = WiFi.status();
-  if (status == WL_CONNECTED || currentSsid.isEmpty()) {
-    return false;
-  }
+  return wifiJoinActive && millis() - lastWifiBeginMs < 30000;
+}
 
-  if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL ||
-      status == WL_CONNECTION_LOST || status == WL_DISCONNECTED) {
-    return false;
-  }
+void markWifiJoinStarted() {
+  wifiJoinActive = true;
+  lastWifiBeginMs = millis();
+}
 
-  return millis() - lastWifiBeginMs < 30000;
+void markWifiJoinFinished() {
+  wifiJoinActive = false;
 }
 
 void scanWifiNetworks() {
@@ -1626,7 +1628,7 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
-    lastWifiBeginMs = millis();
+    markWifiJoinStarted();
 
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
@@ -1638,11 +1640,13 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
       ipAddress = WiFi.localIP().toString();
       wifiWasConnected = true;
+      markWifiJoinFinished();
       statusText = "Wi-Fi connected";
       Serial.println(String("[boot-wifi] OK ip=") + ipAddress);
       pushRelayStatus();
       setupLocalServer();
     } else {
+      markWifiJoinFinished();
       Serial.println(String("[boot-wifi] FAILED status=") + String(WiFi.status()));
     }
   }
@@ -1692,6 +1696,7 @@ void loop() {
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {
     ipAddress = WiFi.localIP().toString();
+    markWifiJoinFinished();
     if (!wifiWasConnected) {
       wifiWasConnected = true;
       wifiReconnectAttempts = 0;
@@ -1703,6 +1708,12 @@ void loop() {
     lastWifiCheckMs = millis();  // reset timer while connected
   } else {
     ipAddress = "";
+    if (wifiJoinActive && millis() - lastWifiBeginMs >= 30000) {
+      markWifiJoinFinished();
+      statusText = "Wi-Fi connect failed";
+      Serial.println(String("[wifi] JOIN TIMEOUT status=") + String(WiFi.status()));
+      publishStatus();
+    }
     if (wifiWasConnected) {
       wifiWasConnected = false;
       statusText = "Wi-Fi reconnecting";
@@ -1722,7 +1733,7 @@ void loop() {
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
-      lastWifiBeginMs = millis();
+      markWifiJoinStarted();
     }
   }
 
@@ -1739,7 +1750,7 @@ void loop() {
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
-      lastWifiBeginMs = millis();
+      markWifiJoinStarted();
     }
   }
 
