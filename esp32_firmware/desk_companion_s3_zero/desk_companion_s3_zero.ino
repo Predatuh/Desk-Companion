@@ -45,13 +45,16 @@ enum DisplayMode {
   MODE_BANNER,
   MODE_IMAGE,
   MODE_EXPRESSION,
+  MODE_FLOWER,
 };
 
 DisplayMode currentMode = MODE_IDLE;
 String statusText = "Booting";
+String currentFlower = "rose";
 String currentNote = "hi honey";
 String currentBanner = "hello from your desk buddy";
 String currentExpression = "happy";
+String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
 String currentNoteIcons = "";   // comma-separated: heart,star,flower,note,moon
@@ -96,6 +99,9 @@ void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons);
 void setBanner(const String& text, int speed);
 void setImageReady();
+void setFlower(const String& flowerType);
+void renderFlowerFrame();
+void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
 void tryStoredPrefs();
 void handleCommandJson(const String& body);
 void setupBle();
@@ -248,6 +254,8 @@ const char* modeName(DisplayMode mode) {
       return "image";
     case MODE_EXPRESSION:
       return "expression";
+    case MODE_FLOWER:
+      return "flower";
     case MODE_IDLE:
     default:
       return "idle";
@@ -544,7 +552,11 @@ void renderIdle() {
 void renderCurrentMode() {
   switch (currentMode) {
     case MODE_NOTE:
-      drawWrappedText(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons);
+      if (currentNoteFlowerAccent.length() > 0) {
+        drawNoteWithFlowerAccent(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons, currentNoteFlowerAccent);
+      } else {
+        drawWrappedText(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons);
+      }
       break;
     case MODE_BANNER:
       renderBannerFrame();
@@ -554,6 +566,9 @@ void renderCurrentMode() {
       break;
     case MODE_EXPRESSION:
       renderExpressionFrame();
+      break;
+    case MODE_FLOWER:
+      renderFlowerFrame();
       break;
     case MODE_IDLE:
     default:
@@ -885,6 +900,67 @@ void renderExpressionFrame() {
       drawBigHeart(hx, hy, 2);
     }
   }
+  // ── Wink: left eye closed, right normal, soft smile ──
+  else if (currentExpression == "wink") {
+    // Left eye: flat line (closed)
+    for (int t = 0; t < 3; t++) {
+      display.drawLine(LX - EW/2, EY + t, LX + EW/2, EY + t, SH110X_WHITE);
+    }
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
+  }
+  // ── Laugh: eyes squinted shut into arcs, huge open mouth ──
+  else if (currentExpression == "laugh") {
+    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f; // shaking
+    int shakeX = (int)(wave * 3.0f) - 1;
+    drawHappyArc(LX + shakeX, EY, EW);
+    drawHappyArc(RX + shakeX, EY, EW);
+    // Big open mouth
+    int mw = 20 + (int)(wave * 4.0f);
+    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2, MY - 5, mw, 12, 4, SH110X_WHITE);
+    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2 + 2, MY - 3, mw - 4, 8, 3, SH110X_BLACK);
+  }
+  // ── Star eyes: star-shaped pupils shimmer ──
+  else if (currentExpression == "star_eyes") {
+    drawEye(LX, EY, EW, EH, ER, 0, 0);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Star overlay on each eye
+    float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int starR = 5 + (int)(twinkle * 2.0f);
+    drawIconStar(LX, EY, starR);
+    drawIconStar(RX, EY, starR);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
+  }
+  // ── Excited: wide bouncing eyes, can't-hold-the-smile ──
+  else if (currentExpression == "excited") {
+    float bounce = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int eyeShift = (int)(bounce * 4.0f);
+    drawEye(LX, EY - eyeShift, EW + 4, EH + 4, ER, 0, 0);
+    drawEye(RX, EY - eyeShift, EW + 4, EH + 4, ER, 0, 0);
+    // Eyebrows raised
+    drawBrow(LX - 14, EY - 20 - eyeShift, LX + 14, EY - 20 - eyeShift);
+    drawBrow(RX - 14, EY - 20 - eyeShift, RX + 14, EY - 20 - eyeShift);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2 - (int)(bounce * 2.0f), 28);
+  }
+  // ── Tongue: wink + tongue sticking out ──
+  else if (currentExpression == "tongue") {
+    // Left eye wink
+    for (int tt = 0; tt < 3; tt++) {
+      display.drawLine(LX - EW/2, EY + tt, LX + EW/2, EY + tt, SH110X_WHITE);
+    }
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Mouth with tongue
+    // Upper lip: small smile
+    for (int tt = 0; tt < 2; tt++) {
+      display.drawLine(SCREEN_WIDTH/2 - 10, MY - 2 + tt, SCREEN_WIDTH/2, MY + 2 + tt, SH110X_WHITE);
+      display.drawLine(SCREEN_WIDTH/2, MY + 2 + tt, SCREEN_WIDTH/2 + 10, MY - 2 + tt, SH110X_WHITE);
+    }
+    // Tongue: rounded rect hanging below
+    float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int tongueH = 8 + (int)(wobble * 3.0f);
+    display.fillRoundRect(SCREEN_WIDTH/2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
+    display.fillCircle(SCREEN_WIDTH/2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
+  }
   // ── Default / Idle personality: neutral face with micro-movements ──
   else {
     // Subtle autonomous micro-movements — the bot feels alive
@@ -915,7 +991,7 @@ void setIdleStatus(const String& value) {
   publishStatus();
 }
 
-void setNote(const String& text, int fontSize, int border, const String& icons) {
+void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "") {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
   currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);
@@ -926,6 +1002,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons) 
   preferences.putInt("note_fs", boundedFontSize);
   preferences.putInt("note_border", currentNoteBorder);
   preferences.putString("note_icons", currentNoteIcons);
+  preferences.putString("note_flower", flowerAccent);
   preferences.end();
 
   // Push into circular queue, evicting oldest when full
@@ -943,6 +1020,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons) 
   noteQueueIndex = noteQueueCount - 1;
   currentNote = noteQueue[noteQueueIndex];
   currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
+  currentNoteFlowerAccent = flowerAccent;
   currentMode = MODE_NOTE;
   statusText = "Showing note";
   renderCurrentMode();
@@ -976,6 +1054,213 @@ void setImageReady() {
   publishStatus();
 }
 
+void setFlower(const String& flowerType) {
+  currentFlower = flowerType;
+  expressionPhase = 0;
+  lastExpressionTickMs = 0;
+  currentMode = MODE_FLOWER;
+  statusText = "Flower animation";
+  renderCurrentMode();
+  publishStatus();
+}
+
+// ─── Flower drawing helpers ───
+
+// Draw a rose: layered petal circles spiraling from center
+// cx,cy = center; scale = 1 for full-screen (28px outer radius), smaller for accents
+void drawFlowerRose(int cx, int cy, int scale, int phase) {
+  float spiralT = (float)phase / 31.f;
+  float spiralOff = spiralT * 0.4f; // gentle rotation
+  int outerR   = 8  * scale / 8;
+  int outerDist = 16 * scale / 8;
+  int midR     = 6  * scale / 8;
+  int midDist  = 9  * scale / 8;
+  int centerR  = 4  * scale / 8;
+  if (outerR    < 2) outerR    = 2;
+  if (outerDist < 4) outerDist = 4;
+  if (midR      < 2) midR      = 2;
+  if (midDist   < 3) midDist   = 3;
+  if (centerR   < 1) centerR   = 1;
+
+  // 5 outer petals
+  for (int i = 0; i < 5; i++) {
+    float a = i * 3.14159f * 2.f / 5.f + spiralOff;
+    int px = cx + (int)(outerDist * cosf(a));
+    int py = cy + (int)(outerDist * sinf(a));
+    display.fillCircle(px, py, outerR, SH110X_WHITE);
+  }
+  // 5 inner petals (offset to interleave)
+  for (int i = 0; i < 5; i++) {
+    float a = i * 3.14159f * 2.f / 5.f + spiralOff + 0.314f;
+    int px = cx + (int)(midDist * cosf(a));
+    int py = cy + (int)(midDist * sinf(a));
+    display.fillCircle(px, py, midR, SH110X_WHITE);
+  }
+  // Center dot
+  display.fillCircle(cx, cy, centerR + 1, SH110X_WHITE);
+  display.fillCircle(cx, cy, centerR - 1, SH110X_BLACK);
+}
+
+// Draw a sunflower: long petals + seed-spiral center
+void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
+  float t = (float)phase / 31.f;
+  int petalLen = 18 * scale / 8;
+  int petalW   = 4  * scale / 8;
+  int centerR  = 12 * scale / 8;
+  if (petalLen < 5)  petalLen = 5;
+  if (petalW   < 1)  petalW   = 1;
+  if (centerR  < 3)  centerR  = 3;
+
+  // 16 thin oval petals radiating out
+  for (int i = 0; i < 16; i++) {
+    float a = i * 3.14159f * 2.f / 16.f + t * 0.2f;
+    int tip_x = cx + (int)((centerR + petalLen) * cosf(a));
+    int tip_y = cy + (int)((centerR + petalLen) * sinf(a));
+    int base_x = cx + (int)(centerR * cosf(a));
+    int base_y = cy + (int)(centerR * sinf(a));
+    // Fat line for each petal
+    for (int w = -petalW/2; w <= petalW/2; w++) {
+      float perp_a = a + 3.14159f / 2.f;
+      int dx = (int)(w * cosf(perp_a));
+      int dy = (int)(w * sinf(perp_a));
+      display.drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, SH110X_WHITE);
+    }
+  }
+  // Large center disc
+  display.fillCircle(cx, cy, centerR, SH110X_WHITE);
+  // Sunflower seed spiral: Fibonacci-ish dots
+  int numSeeds = 21 + (int)(t * 11.f);
+  for (int i = 0; i < numSeeds; i++) {
+    float angle = i * 2.399f + t * 0.5f; // golden angle
+    float r     = (centerR - 2) * sqrtf((float)i / 34.f);
+    int sx = cx + (int)(r * cosf(angle));
+    int sy = cy + (int)(r * sinf(angle));
+    if (sx >= 0 && sx < SCREEN_WIDTH && sy >= 0 && sy < SCREEN_HEIGHT) {
+      display.fillCircle(sx, sy, 1, SH110X_BLACK);
+    }
+  }
+}
+
+// Draw a king protea: bold spiky bracts around dense center
+void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
+  float t = (float)phase / 31.f;
+  float growT = t < 0.1f ? t * 10.f : 1.0f; // bracts extend in first phase
+  int bractLen = (int)(20 * scale / 8 * growT);
+  int bractW   = 3  * scale / 8;
+  int centerR  = 14 * scale / 8;
+  if (bractLen < 3)  bractLen = 3;
+  if (bractW   < 1)  bractW   = 1;
+  if (centerR  < 4)  centerR  = 4;
+
+  // 20 elongated bracts (like spiky petals)
+  for (int i = 0; i < 20; i++) {
+    float a = i * 3.14159f * 2.f / 20.f + t * 0.1f;
+    int base_x = cx + (int)(centerR * cosf(a));
+    int base_y = cy + (int)(centerR * sinf(a));
+    int tip_x  = cx + (int)((centerR + bractLen) * cosf(a));
+    int tip_y  = cy + (int)((centerR + bractLen) * sinf(a));
+    // Sharp tip — draw filled triangle-ish
+    float side_a = a + 3.14159f / 2.f;
+    int sx = (int)(bractW * cosf(side_a));
+    int sy = (int)(bractW * sinf(side_a));
+    display.fillTriangle(
+      base_x + sx, base_y + sy,
+      base_x - sx, base_y - sy,
+      tip_x, tip_y,
+      SH110X_WHITE
+    );
+  }
+  // Dense textured center
+  display.fillCircle(cx, cy, centerR, SH110X_WHITE);
+  // Inner ring detail
+  display.fillCircle(cx, cy, centerR - 3, SH110X_BLACK);
+  display.fillCircle(cx, cy, centerR - 6, SH110X_WHITE);
+  // Center pip
+  display.fillCircle(cx, cy, 2, SH110X_BLACK);
+}
+
+// Dispatch based on currentFlower
+void renderFlowerFrame() {
+  display.clearDisplay();
+  int cx = 64, cy = 27;
+  // Stem
+  display.drawLine(cx,     cy + 22, cx,     63, SH110X_WHITE);
+  display.drawLine(cx + 1, cy + 22, cx + 1, 63, SH110X_WHITE);
+  // Simple leaf
+  for (int i = 0; i < 8; i++) {
+    display.drawLine(cx + 1, cy + 40 + i, cx + 1 + 8 - i, cy + 40 + i, SH110X_WHITE);
+  }
+
+  if (currentFlower == "sunflower") {
+    drawFlowerSunflower(cx, cy, 8, expressionPhase);
+  } else if (currentFlower == "king_protea") {
+    drawFlowerKingProtea(cx, cy, 8, expressionPhase);
+  } else {
+    drawFlowerRose(cx, cy, 8, expressionPhase);
+  }
+  display.display();
+}
+
+// ─── Note with flower accent ───
+// Draws a note with a prominent flower on the left (pixels ~0-40),
+// and the text in the right 86 pixels.
+void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType) {
+  display.clearDisplay();
+
+  // Flower on the left side (cx=19, cy=32, scale=4)
+  const int flowerCX = 20;
+  const int flowerCY = 30;
+  const int flowerScale = 4;
+  if (flowerType == "sunflower") {
+    drawFlowerSunflower(flowerCX, flowerCY, flowerScale, expressionPhase);
+  } else if (flowerType == "king_protea") {
+    drawFlowerKingProtea(flowerCX, flowerCY, flowerScale, expressionPhase);
+  } else {
+    drawFlowerRose(flowerCX, flowerCY, flowerScale, expressionPhase);
+  }
+
+  // Vertical divider
+  display.drawLine(42, 2, 42, SCREEN_HEIGHT - 3, SH110X_WHITE);
+
+  // Text on the right side
+  const int safeFontSize = 1;
+  const int textLeft = 46;
+  const int textAreaW = SCREEN_WIDTH - textLeft - 4;
+  const int maxChars = textAreaW / (6 * safeFontSize);
+  const int lineHeight = (8 * safeFontSize) + 2;
+  const int maxLines = (SCREEN_HEIGHT - 8) / lineHeight;
+
+  String lines[maxLines];
+  int lineCount = 0;
+  String remaining = text;
+  remaining.trim();
+  while (remaining.length() > 0 && lineCount < maxLines) {
+    int lineLength = (int)remaining.length() > maxChars ? maxChars : (int)remaining.length();
+    if (lineLength < (int)remaining.length()) {
+      int split = remaining.lastIndexOf(' ', lineLength);
+      if (split > 0) lineLength = split;
+    }
+    String line = remaining.substring(0, lineLength);
+    line.trim();
+    if (line.isEmpty()) { line = remaining.substring(0, maxChars); lineLength = line.length(); }
+    lines[lineCount++] = line;
+    remaining = remaining.substring(lineLength);
+    remaining.trim();
+  }
+
+  display.setTextSize(safeFontSize);
+  display.setTextColor(SH110X_WHITE);
+  display.setTextWrap(false);
+  int totalH = lineCount * lineHeight;
+  int startY = 4 + (SCREEN_HEIGHT - 8 - totalH) / 2;
+  if (startY < 4) startY = 4;
+  for (int i = 0; i < lineCount; i++) {
+    display.setCursor(textLeft, startY + i * lineHeight);
+    display.print(lines[i]);
+  }
+  display.display();
+}
+
 void tryStoredPrefs() {
   preferences.begin("desk-cfg", true);
   // Restore last note
@@ -985,6 +1270,7 @@ void tryStoredPrefs() {
     currentNoteFontSize = preferences.getInt("note_fs", 1);
     currentNoteBorder = preferences.getInt("note_border", 0);
     currentNoteIcons = preferences.getString("note_icons", "");
+    currentNoteFlowerAccent = preferences.getString("note_flower", "");
     noteQueue[0] = currentNote;
     noteFontSizeQueue[0] = currentNoteFontSize;
     noteQueueCount = 1;
@@ -1007,7 +1293,8 @@ void handleCommandJson(const String& body) {
       extractJsonStringField(body, "text"),
       extractJsonIntField(body, "fontSize", 1),
       extractJsonIntField(body, "border", 0),
-      extractJsonStringField(body, "icons", "")
+      extractJsonStringField(body, "icons", ""),
+      extractJsonStringField(body, "flowerAccent", "")
     );
     return;
   }
@@ -1024,6 +1311,11 @@ void handleCommandJson(const String& body) {
     setExpression(
       extractJsonStringField(body, "expression", "happy")
     );
+    return;
+  }
+
+  if (type == "set_flower") {
+    setFlower(extractJsonStringField(body, "flower", "rose"));
     return;
   }
 
@@ -1282,6 +1574,15 @@ void loop() {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 32;
       renderExpressionFrame();
+    }
+  }
+
+  if (currentMode == MODE_FLOWER) {
+    const unsigned long now = millis();
+    if (now - lastExpressionTickMs >= 60) {
+      lastExpressionTickMs = now;
+      expressionPhase = (expressionPhase + 1) % 32;
+      renderFlowerFrame();
     }
   }
 

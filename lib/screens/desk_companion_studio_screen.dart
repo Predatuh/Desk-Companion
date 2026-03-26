@@ -13,6 +13,29 @@ import '../widgets/note_card_preview.dart';
 import '../widgets/oled_drawing_pad.dart';
 
 const int kMaxNoteCharacters = 80;
+
+enum DeskFlower { rose, sunflower, kingProtea }
+
+extension DeskFlowerExt on DeskFlower {
+  String get label => switch (this) {
+        DeskFlower.rose => 'Rose',
+        DeskFlower.sunflower => 'Sunflower',
+        DeskFlower.kingProtea => 'King Protea',
+      };
+
+  String get command => switch (this) {
+        DeskFlower.rose => 'rose',
+        DeskFlower.sunflower => 'sunflower',
+        DeskFlower.kingProtea => 'king_protea',
+      };
+
+  String get description => switch (this) {
+        DeskFlower.rose => 'Petals unfurl outward in a layered spiral bloom.',
+        DeskFlower.sunflower => 'Seed spiral glows at the center, petals radiate like rays of sun.',
+        DeskFlower.kingProtea => 'Bold spiky bracts fan out around a dense center — South Africa\'s wild queen.',
+      };
+}
+
 enum DeskExpression {
   happy,
   smile,
@@ -26,6 +49,11 @@ enum DeskExpression {
   sleepy,
   love,
   thinking,
+  wink,
+  laugh,
+  starEyes,
+  excited,
+  tongue,
 }
 
 extension DeskExpressionLabel on DeskExpression {
@@ -42,6 +70,11 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.sleepy => 'Sleepy',
         DeskExpression.love => 'In love',
         DeskExpression.thinking => 'Thinking',
+        DeskExpression.wink => 'Wink',
+        DeskExpression.laugh => 'Laughing',
+        DeskExpression.starEyes => 'Star eyes',
+        DeskExpression.excited => 'Excited',
+        DeskExpression.tongue => 'Tongue out',
       };
 
   String get command => switch (this) {
@@ -57,6 +90,11 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.sleepy => 'sleepy',
         DeskExpression.love => 'love',
         DeskExpression.thinking => 'thinking',
+        DeskExpression.wink => 'wink',
+        DeskExpression.laugh => 'laugh',
+        DeskExpression.starEyes => 'star_eyes',
+        DeskExpression.excited => 'excited',
+        DeskExpression.tongue => 'tongue',
       };
 
   String get subtitle => switch (this) {
@@ -72,6 +110,11 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.sleepy => 'Half-closed eyes slowly blinking, ZZZ rising.',
         DeskExpression.love => 'Heart-shaped pupils and a giant grin.',
         DeskExpression.thinking => 'One squinted eye, gaze up, thought bubble.',
+        DeskExpression.wink => 'One eye closes playfully, slight smile.',
+        DeskExpression.laugh => 'Eyes crinkle shut, huge open-mouth laugh.',
+        DeskExpression.starEyes => 'Star-shaped pupils shimmer with amazement.',
+        DeskExpression.excited => 'Wide bouncing eyes, can\'t stop smiling.',
+        DeskExpression.tongue => 'One wink and a cheeky tongue poke.',
       };
 }
 
@@ -84,15 +127,14 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
-  final _wifiPasswordController = TextEditingController();
-  final _relayUrlController = TextEditingController();
-  final _deviceTokenController = TextEditingController();
   final _noteController = TextEditingController();
   final _bannerController = TextEditingController(text: 'miss you already <3');
-  String? _selectedWifiSsid;
   double _noteFontSize = 1;
   int _noteBorderStyle = 0;
   final List<String> _noteIcons = [];
+  String? _noteFlowerAccent;  // flower accent for note decoration
+
+  DeskFlower _selectedFlower = DeskFlower.rose;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -115,9 +157,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   @override
   void dispose() {
     _noteController.removeListener(_onNoteTextChanged);
-    _wifiPasswordController.dispose();
-    _relayUrlController.dispose();
-    _deviceTokenController.dispose();
     _noteController.dispose();
     _bannerController.dispose();
     _liveSyncTimer?.cancel();
@@ -131,17 +170,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DeskCompanionController>();
-    final availableWifiNetworks = controller.availableWifiNetworks;
-    final selectedWifiSsid = _resolveSelectedWifiSsid(
-      availableWifiNetworks,
-      controller.connectedSsid,
-    );
-    final canReachDevice = controller.canControlDevice;
-
-    _syncController(_relayUrlController, controller.relayBaseUrl);
-    _syncController(_deviceTokenController, controller.deviceToken);
-
-    final canUseRelay = controller.hasRelayTarget;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Desk Companion')),
@@ -168,29 +196,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _ChipLabel(
-                            label: controller.isBleConnected
-                                ? 'BLE: ${controller.deviceName}'
-                                : 'BLE: disconnected',
-                          ),
-                          _ChipLabel(
-                            label: controller.deviceIp.isEmpty
-                                ? 'IP: no connection'
-                                : 'IP: ${controller.deviceIp}',
-                          ),
-                          _ChipLabel(
-                            label: controller.connectedSsid.isEmpty
-                                ? 'Wi-Fi: not joined'
-                                : 'Wi-Fi: ${controller.connectedSsid}',
-                          ),
-                          _ChipLabel(
-                            label: _relayStatusLabel(controller),
-                          ),
-                        ],
+                      _ChipLabel(
+                        label: controller.isBleConnected
+                            ? 'BLE: ${controller.deviceName}'
+                            : 'BLE: disconnected',
                       ),
                       const SizedBox(height: 14),
                       Row(
@@ -213,250 +222,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ? null
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
-                                      : controller.hasRelayTarget
-                                          ? () async {
-                                              try {
-                                                final success = await controller.refreshDeviceStatus();
-                                                if (!mounted) return;
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    backgroundColor: success ? Colors.green.shade800 : Colors.red.shade800,
-                                                    content: Text(
-                                                      success
-                                                          ? 'Successfully connected to device over Wi-Fi!'
-                                                          : 'Device is offline or unreachable.',
-                                                    ),
-                                                  ),
-                                                );
-                                              } catch (e) {
-                                                if (!mounted) return;
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    backgroundColor: Colors.red.shade800,
-                                                    content: Text('Error: $e')
-                                                  ),
-                                                );
-                                              }
-                                            }
-                                          : () async {
-                                              await controller.refreshDeviceStatus();
-                                              if (mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Device status refreshed.')),
-                                                );
-                                              }
-                                            },
-                              icon: Icon(
-                                controller.isBleConnected
-                                    ? Icons.link_off
-                                    : controller.hasRelayTarget
-                                        ? Icons.wifi
-                                        : Icons.refresh,
-                              ),
-                              label: Text(
-                                controller.isBleConnected
-                                    ? 'Disconnect'
-                                    : controller.hasRelayTarget
-                                        ? 'Connect Wi-Fi'
-                                        : 'Refresh status',
-                              ),
+                                      : null,
+                              icon: const Icon(Icons.link_off),
+                              label: const Text('Disconnect'),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      Text(
-                        canUseRelay
-                            ? 'BLE is only needed for setup. If the relay target is saved and the desk is online, you can connect and send over Wi-Fi directly.'
-                            : 'Connect over BLE once to save the relay URL and token to the device for future Wi-Fi use.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Remote relay',
-                  subtitle:
-                      'Use this when you want to send something even when the phone is not on the same Wi-Fi as the desk.',
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _relayUrlController,
-                        onChanged: controller.updateRelayBaseUrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Relay base URL',
-                          hintText:
-                              'https://desk-companion-production.up.railway.app',
-                          helperText:
-                              'Use the base domain only. Full paths like /v1/device/... are cleaned automatically.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _deviceTokenController,
-                        onChanged: controller.updateDeviceToken,
-                        decoration: const InputDecoration(
-                          labelText: 'Device token',
-                          hintText: 'gf-desk-01',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  controller.busy || !controller.isBleConnected
-                                      ? null
-                                      : () => _saveRelay(controller),
-                              icon: const Icon(Icons.cloud_done_outlined),
-                              label: const Text('Save to device'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ||
-                                      !controller.hasRelayTarget
-                                  ? null
-                                  : () => _perform(
-                                        () => controller.refreshDeviceStatus(),
-                                        success: 'Relay status refreshed.',
-                                      ),
-                              icon: const Icon(Icons.cloud_sync_outlined),
-                              label: const Text('Check relay'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Wi-Fi setup',
-                  subtitle:
-                      'Scan Wi-Fi from the device, pick a network, then send only the password.',
-                  child: Column(
-                    children: [
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Wi-Fi network',
-                          hintText: 'Scan from device first',
-                        ),
-                        child: availableWifiNetworks.isEmpty
-                            ? const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text('No scanned networks yet.'),
-                              )
-                            : Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: availableWifiNetworks
-                                    .map(
-                                      (ssid) => ChoiceChip(
-                                        label: Text(
-                                          ssid,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        selected: selectedWifiSsid == ssid,
-                                        onSelected: controller.busy
-                                            ? null
-                                            : (_) => setState(
-                                                () => _selectedWifiSsid = ssid),
-                                      ),
-                                    )
-                                    .toList(growable: false),
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _wifiPasswordController,
-                        obscureText: true,
-                        decoration:
-                            const InputDecoration(labelText: 'Wi-Fi password'),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy || !canReachDevice
-                                  ? null
-                                  : () {
-                                      setState(() => _selectedWifiSsid = null);
-                                      _perform(
-                                        () => controller.scanWifiNetworks(),
-                                        success:
-                                            controller.isBleConnected
-                                                ? 'Wi-Fi networks refreshed from device. Pick one from the list.'
-                                                : 'Wi-Fi scan requested over relay. Wait a moment for the list to refresh.',
-                                      );
-                                    },
-                              icon: const Icon(Icons.wifi_find_outlined),
-                              label: const Text('Scan networks'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy ||
-                                      !canReachDevice ||
-                                      selectedWifiSsid == null
-                                  ? null
-                                  : () => _sendWifi(controller),
-                              icon: const Icon(Icons.wifi),
-                              label: const Text('Send password'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: controller.busy || !canReachDevice
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _selectedWifiSsid = null;
-                                    _wifiPasswordController.clear();
-                                  });
-                                  _perform(
-                                    () => controller.forgetWifi(),
-                                    success: 'Wi-Fi credentials cleared on device.',
-                                  );
-                                },
-                          icon: const Icon(Icons.wifi_off, size: 18),
-                          label: const Text('Forget Wi-Fi'),
-                        ),
-                      ),
-                      if (availableWifiNetworks.isEmpty) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'No networks yet — tap Scan networks to load them from the device.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                      if (controller.wifiScanning || controller.wifiConnecting) ...[
-                        const SizedBox(height: 12),
-                        Column(
-                          children: [
-                            const LinearProgressIndicator(),
-                            const SizedBox(height: 6),
-                            Text(
-                              controller.statusMessage,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -548,6 +320,36 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Flower accent',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final flower in DeskFlower.values)
+                            ChoiceChip(
+                              label: Text(flower.label),
+                              selected: _noteFlowerAccent == flower.command,
+                              onSelected: (_) => setState(() {
+                                _noteFlowerAccent = _noteFlowerAccent == flower.command
+                                    ? null
+                                    : flower.command;
+                              }),
+                            ),
+                        ],
+                      ),
+                      if (_noteFlowerAccent != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'A large ${_noteFlowerAccent!.replaceAll('_', ' ')} will be drawn beside your note.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
                       const SizedBox(height: 8),
                       Text(
                         'Preview',
@@ -643,6 +445,55 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               : () => _sendBanner(controller),
                           icon: const Icon(Icons.view_carousel_outlined),
                           label: const Text('Start banner'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Flowers',
+                  subtitle:
+                      'Full-screen animated flowers — a little gift that fills the whole display.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskFlower.values
+                            .map(
+                              (flower) => ChoiceChip(
+                                label: Text(flower.label),
+                                selected: _selectedFlower == flower,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedFlower = flower,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedFlower.description,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy
+                              ? null
+                              : () => _perform(
+                                    () => controller.sendFlower(
+                                        _selectedFlower.command),
+                                    success:
+                                        '${_selectedFlower.label} blooming on the display!',
+                                  ),
+                          icon: const Icon(Icons.local_florist_outlined),
+                          label: Text('Send ${_selectedFlower.label}'),
                         ),
                       ),
                     ],
@@ -906,15 +757,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  void _syncController(TextEditingController controller, String value) {
-    if (controller.text != value) {
-      controller.text = value;
-      controller.selection = TextSelection.fromPosition(
-        TextPosition(offset: controller.text.length),
-      );
-    }
-  }
-
   Future<void> _pickImage() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
@@ -1034,48 +876,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     });
   }
 
-  Future<void> _sendWifi(DeskCompanionController controller) async {
-    final selectedWifiSsid = _resolveSelectedWifiSsid(
-      controller.availableWifiNetworks,
-      controller.connectedSsid,
-    );
-    if (selectedWifiSsid == null) {
-      _showMessage('Scan and pick a Wi-Fi network first.');
-      return;
-    }
-    await _perform(
-      () => controller.sendWifiCredentials(
-        ssid: selectedWifiSsid,
-        password: _wifiPasswordController.text,
-      ),
-      success: controller.isBleConnected
-          ? 'Wi-Fi credentials sent. Use refresh once the display joins.'
-          : 'Wi-Fi credentials sent over relay. Watch the status chip for delivery confirmation.',
-    );
-  }
-
-  String? _resolveSelectedWifiSsid(
-      List<String> availableWifiNetworks, String connectedSsid) {
-    if (_selectedWifiSsid != null &&
-        availableWifiNetworks.contains(_selectedWifiSsid)) {
-      return _selectedWifiSsid;
-    }
-    if (connectedSsid.trim().isNotEmpty) {
-      return connectedSsid.trim();
-    }
-    return null;
-  }
-
-  Future<void> _saveRelay(DeskCompanionController controller) async {
-    await _perform(
-      () => controller.configureRelay(
-        relayUrl: _relayUrlController.text.trim(),
-        token: _deviceTokenController.text.trim(),
-      ),
-      success: 'Relay settings saved to device.',
-    );
-  }
-
   Future<void> _sendNote(DeskCompanionController controller) async {
     final text = _noteController.text.characters
         .take(kMaxNoteCharacters)
@@ -1088,10 +888,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         fontSize: _noteFontSize.round(),
         border: _noteBorderStyle,
         icons: _noteIcons.join(','),
+        flowerAccent: _noteFlowerAccent ?? '',
       ),
-      success: controller.hasRelayTarget && !controller.isBleConnected
-          ? 'Note sent via relay — check the status chip for delivery confirmation.'
-          : 'Note delivered.',
+      success: 'Note delivered.',
     );
   }
 
@@ -1154,27 +953,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  String _relayStatusLabel(DeskCompanionController controller) {
-    if (!controller.hasRelayTarget) {
-      return 'Relay: not set';
-    }
-    if (!controller.relayStatusKnown) {
-      return 'Relay: checking';
-    }
-    if (controller.isRelayOnline) {
-      return 'Relay: online';
-    }
-    if (controller.relayLastSeenAt != null) {
-      final now = DateTime.now();
-      final minutes = now.difference(controller.relayLastSeenAt!).inMinutes;
-      if (minutes <= 0) {
-        return 'Relay: just seen';
-      }
-      return 'Relay: offline (${minutes}m ago)';
-    }
-    return 'Relay: offline';
   }
 }
 
