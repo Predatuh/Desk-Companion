@@ -339,6 +339,8 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     finalUrl = "https://" + finalUrl.substring(7);
   }
 
+  Serial.println(String("[http] begin url=") + finalUrl + " heap=" + String(ESP.getFreeHeap()));
+
   if (finalUrl.startsWith("https://")) {
     started = client.begin(relaySecureClient, finalUrl);
   } else {
@@ -348,6 +350,8 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (started) {
     client.setReuse(true); // MUST be true for Keep-Alive
     client.setTimeout(timeoutMs);
+  } else {
+    Serial.println("[http] client.begin returned false!");
   }
   return started;
 }
@@ -1094,7 +1098,10 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
   preferences.putString("device_token", deviceToken);
   preferences.end();
   statusText = relayUrl.isEmpty() ? "Relay cleared" : "Relay configured";
+  Serial.println(String("[relay-cfg] url=[") + relayUrl + "] token=[" + deviceToken + "]");
   publishStatus();
+  // Push immediately so the relay knows we're online
+  relayStatusDirty = true;
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
@@ -1104,12 +1111,14 @@ bool connectToWifi(const String& ssid, const String& password) {
   WiFi.disconnect(true, false);   // disconnect + clear STA config, keep NVS
   delay(500);
 
-  // Save credentials BEFORE attempting connect so they survive reboot
+  // Save credentials BEFORE attempting connect so they survive reboot.
+  // Only save relay settings if they're non-empty to avoid wiping
+  // previously configured values when WiFi is set first.
   preferences.begin("desk-cfg", false);
   preferences.putString("ssid", ssid);
   preferences.putString("pass", password);
-  preferences.putString("relay_url", relayUrl);
-  preferences.putString("device_token", deviceToken);
+  if (!relayUrl.isEmpty()) preferences.putString("relay_url", relayUrl);
+  if (!deviceToken.isEmpty()) preferences.putString("device_token", deviceToken);
   preferences.end();
 
   WiFi.mode(WIFI_STA);
@@ -1396,18 +1405,20 @@ void pushRelayStatus() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
   Serial.println(String("[relay-push] POST ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 2500)) {
+  if (!beginHttpClient(client, url, 5000)) {
     Serial.println("[relay-push] beginHttpClient FAILED");
     return;
   }
   client.addHeader("Content-Type", "application/json");
-  // Keep-alive header ensures the connection isn't closed by the server
   client.addHeader("Connection", "keep-alive");
   
   const String body = buildStatusJson();
   Serial.println(String("[relay-push] body=") + body.substring(0, min((int)body.length(), 200)));
   int code = client.POST(body);
   Serial.println(String("[relay-push] response=") + String(code));
+  if (code < 0) {
+    Serial.println(String("[relay-push] HTTPClient error: ") + client.errorToString(code));
+  }
   
   // MUST read the response to clear the socket buffer for the next request
   if (code > 0) {
@@ -1438,7 +1449,7 @@ void pollRelay() {
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
   Serial.println(String("[relay-poll] GET ") + url);
   HTTPClient client;
-  if (!beginHttpClient(client, url, 2500)) {
+  if (!beginHttpClient(client, url, 5000)) {
     Serial.println("[relay-poll] beginHttpClient FAILED");
     return;
   }
@@ -1446,6 +1457,9 @@ void pollRelay() {
 
   const int code = client.GET();
   Serial.println(String("[relay-poll] response=") + String(code));
+  if (code < 0) {
+    Serial.println(String("[relay-poll] HTTPClient error: ") + client.errorToString(code));
+  }
   if (code == 200) {
     const String cmd = client.getString();
     Serial.println(String("[relay-poll] command=") + cmd);
