@@ -76,6 +76,7 @@ unsigned long lastExpressionTickMs = 0;
 unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
 unsigned long lastWifiCheckMs = 0;
+unsigned long lastWifiBeginMs = 0;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
@@ -134,6 +135,7 @@ void setBanner(const String& text, int speed);
 void setImageReady();
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
 bool connectToWifi(const String& ssid, const String& password);
+bool wifiJoinInProgress();
 void scanWifiNetworks();
 void tryStoredWifi();
 void handleCommandJson(const String& body);
@@ -1102,6 +1104,12 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
+  if (wifiJoinInProgress() && currentSsid == ssid) {
+    statusText = "Joining Wi-Fi";
+    publishStatus();
+    return true;
+  }
+
   // Use a gentle disconnect here; hard driver resets broke STA association.
   WiFi.disconnect(false, false);
   delay(100);
@@ -1117,6 +1125,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
+  lastWifiBeginMs = millis();
 
   statusText = "Joining Wi-Fi";
   currentSsid = ssid;
@@ -1125,6 +1134,20 @@ bool connectToWifi(const String& ssid, const String& password) {
 
   // No blocking wait — loop() will detect WL_CONNECTED and publishStatus()
   return true;
+}
+
+bool wifiJoinInProgress() {
+  const wl_status_t status = WiFi.status();
+  if (status == WL_CONNECTED || currentSsid.isEmpty()) {
+    return false;
+  }
+
+  if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL ||
+      status == WL_CONNECTION_LOST || status == WL_DISCONNECTED) {
+    return false;
+  }
+
+  return millis() - lastWifiBeginMs < 30000;
 }
 
 void scanWifiNetworks() {
@@ -1603,6 +1626,7 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    lastWifiBeginMs = millis();
 
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
@@ -1687,7 +1711,7 @@ void loop() {
       publishStatus();
     }
     // Last-resort: if auto-reconnect hasn't worked after 60s, do one manual begin
-    if (!currentSsid.isEmpty() && millis() - lastWifiCheckMs >= 60000) {
+    if (!currentSsid.isEmpty() && !wifiJoinInProgress() && millis() - lastWifiCheckMs >= 60000) {
       lastWifiCheckMs = millis();
       Serial.println("[wifi] 60s without connection — manual re-init");
       preferences.begin("desk-cfg", true);
@@ -1698,11 +1722,12 @@ void loop() {
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
+      lastWifiBeginMs = millis();
     }
   }
 
   // Handle BLE disconnect recovery
-  if (wifiReconnectAfterBle && (millis() - wifiReconnectAfterBleMs > 2000)) {
+  if (wifiReconnectAfterBle && !wifiJoinInProgress() && (millis() - wifiReconnectAfterBleMs > 2000)) {
     wifiReconnectAfterBle = false;
     if (WiFi.status() != WL_CONNECTED && !currentSsid.isEmpty()) {
       Serial.println("[wifi] Manual reconnect after BLE disconnect");
@@ -1714,6 +1739,7 @@ void loop() {
       WiFi.mode(WIFI_STA);
       WiFi.begin(currentSsid.c_str(), storedPass.c_str());
       WiFi.setAutoReconnect(true);
+      lastWifiBeginMs = millis();
     }
   }
 
