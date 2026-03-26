@@ -1098,10 +1098,11 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  // Run one explicit join attempt at a time; overlapping retries were causing
-  // "sta is connecting, cannot set config" errors.
-  WiFi.disconnect(false, false);
-  delay(100);
+  Serial.println(String("[wifi-join] ssid=[") + ssid + "] pass_len=" + String(password.length()));
+
+  // Clean disconnect first — give the driver time to tear down
+  WiFi.disconnect(true, false);   // disconnect + clear STA config, keep NVS
+  delay(500);
 
   // Save credentials BEFORE attempting connect so they survive reboot
   preferences.begin("desk-cfg", false);
@@ -1112,6 +1113,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   preferences.end();
 
   WiFi.mode(WIFI_STA);
+  delay(100);  // let mode switch settle
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   markWifiJoinStarted();
@@ -1121,25 +1123,35 @@ bool connectToWifi(const String& ssid, const String& password) {
   ipAddress = "";
   publishStatus();
 
+  Serial.print("[wifi-join] waiting: ");
   const unsigned long startedAt = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 20000) {
-    delay(250);
+    Serial.print(String(WiFi.status()) + " ");
+    delay(500);
   }
+  Serial.println();
+
+  const int finalStatus = WiFi.status();
+  Serial.println(String("[wifi-join] final status=") + String(finalStatus));
 
   markWifiJoinFinished();
-  if (WiFi.status() == WL_CONNECTED) {
+  if (finalStatus == WL_CONNECTED) {
     ipAddress = WiFi.localIP().toString();
     wifiWasConnected = true;
     statusText = "Wi-Fi connected";
+    Serial.println(String("[wifi-join] OK ip=") + ipAddress);
     publishStatus();
     pushRelayStatus();
     return true;
   }
 
   wifiWasConnected = false;
-  statusText = "Wi-Fi connect failed";
+  // Show the numeric status so the user can report it
+  // 1=NO_SSID_AVAIL  4=CONNECT_FAILED  6=DISCONNECTED
+  statusText = String("Wi-Fi failed (") + String(finalStatus) + ")";
+  Serial.println(String("[wifi-join] FAILED status=") + String(finalStatus));
   publishStatus();
-  return true;
+  return false;
 }
 
 bool wifiJoinInProgress() {
@@ -1601,10 +1613,12 @@ void setup() {
     Serial.println(String("[boot-wifi] ssid=[") + currentSsid + "] pass_len=" + String(storedWifiPass.length()));
     Serial.println(String("[boot-wifi] relay=[") + relayUrl + "] token=[" + deviceToken + "]");
     WiFi.mode(WIFI_STA);
+    delay(100);  // let mode switch settle
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
     markWifiJoinStarted();
 
+    Serial.print("[boot-wifi] waiting: ");
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
       delay(500);
