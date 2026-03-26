@@ -88,10 +88,6 @@ bool wifiScanPending = false;
 bool wifiScanInProgress = false;
 bool wifiWasConnected = false;
 String storedWifiPass = "";  // kept for boot WiFi connect in setup()
-
-// BLE disconnect → WiFi reconnect (ESP32-S3 radio coexistence recovery)
-bool wifiReconnectAfterBle = false;
-unsigned long wifiReconnectAfterBleMs = 0;
 int wifiReconnectAttempts = 0;
 unsigned long lastRelayAttemptMs = 0;
 
@@ -1102,13 +1098,8 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  if (wifiJoinActive && currentSsid == ssid) {
-    statusText = "Joining Wi-Fi";
-    publishStatus();
-    return true;
-  }
-
-  // Use a gentle disconnect here; hard driver resets broke STA association.
+  // Run one explicit join attempt at a time; overlapping retries were causing
+  // "sta is connecting, cannot set config" errors.
   WiFi.disconnect(false, false);
   delay(100);
 
@@ -1130,7 +1121,24 @@ bool connectToWifi(const String& ssid, const String& password) {
   ipAddress = "";
   publishStatus();
 
-  // No blocking wait — loop() will detect WL_CONNECTED and publishStatus()
+  const unsigned long startedAt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 20000) {
+    delay(250);
+  }
+
+  markWifiJoinFinished();
+  if (WiFi.status() == WL_CONNECTED) {
+    ipAddress = WiFi.localIP().toString();
+    wifiWasConnected = true;
+    statusText = "Wi-Fi connected";
+    publishStatus();
+    pushRelayStatus();
+    return true;
+  }
+
+  wifiWasConnected = false;
+  statusText = "Wi-Fi connect failed";
+  publishStatus();
   return true;
 }
 
@@ -1338,12 +1346,6 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* server) override {
     (void)server;
     BLEDevice::startAdvertising();
-    // BLE state change on ESP32-S3 can disrupt the shared radio and drop WiFi.
-    // Schedule a reconnect attempt in loop() after the radio settles.
-    if (!currentSsid.isEmpty()) {
-      wifiReconnectAfterBle = true;
-      wifiReconnectAfterBleMs = millis();
-    }
   }
 };
 
@@ -1691,37 +1693,6 @@ void loop() {
       Serial.println("[wifi] DISCONNECTED — auto-reconnect active");
       lastWifiCheckMs = millis();  // start 60s countdown
       publishStatus();
-    }
-    // Last-resort: if auto-reconnect hasn't worked after 60s, do one manual begin
-    if (!currentSsid.isEmpty() && !wifiJoinInProgress() && millis() - lastWifiCheckMs >= 60000) {
-      lastWifiCheckMs = millis();
-      Serial.println("[wifi] 60s without connection — manual re-init");
-      preferences.begin("desk-cfg", true);
-      const String storedPass = preferences.getString("pass", "");
-      preferences.end();
-      WiFi.disconnect(false, false);
-      delay(200);
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(currentSsid.c_str(), storedPass.c_str());
-      WiFi.setAutoReconnect(true);
-      markWifiJoinStarted();
-    }
-  }
-
-  // Handle BLE disconnect recovery
-  if (wifiReconnectAfterBle && !wifiJoinInProgress() && (millis() - wifiReconnectAfterBleMs > 2000)) {
-    wifiReconnectAfterBle = false;
-    if (WiFi.status() != WL_CONNECTED && !currentSsid.isEmpty()) {
-      Serial.println("[wifi] Manual reconnect after BLE disconnect");
-      preferences.begin("desk-cfg", true);
-      const String storedPass = preferences.getString("pass", "");
-      preferences.end();
-      WiFi.disconnect(false, false);
-      delay(200);
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(currentSsid.c_str(), storedPass.c_str());
-      WiFi.setAutoReconnect(true);
-      markWifiJoinStarted();
     }
   }
 
