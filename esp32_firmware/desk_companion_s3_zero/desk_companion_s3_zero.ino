@@ -1460,80 +1460,63 @@ void drawZzz(int x, int y, int phase) {
 void renderExpressionFrame() {
   display.clearDisplay();
 
-  // EMO geometry — bigger eyes, wider spacing
-  const int LX = 36;   // left eye center X
-  const int RX = 92;   // right eye center X
-  const int EY = 24;   // eye center Y
-  const int MY = 52;   // mouth center Y
-  const int EW = 28;   // eye width  (EMO = wide)
-  const int EH = 22;   // eye height (EMO = tall)
-  const int ER = 7;    // eye corner radius (rounder = more EMO)
+  const int LX = 36;
+  const int RX = 92;
+  const int EY = 24;
+  const int MY = 52;
+  const int EW = 28;
+  const int EH = 22;
+  const int ER = 7;
 
-  int ph = expressionPhase % 32;
-  float t = (float)ph / 31.0f; // 0..1 progress through the cycle
+  const int ph = expressionPhase % 32;
+  const float t = (float)ph / 31.0f;
 
-  // ── Heart: big pulsing heart, smooth sine size ──
   if (currentExpression == "heart") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int s = 8 + (int)(6.0f * wave);
     drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 2, s);
-    drawCompanionAccessories(LX, RX, EY, MY);
-    display.display();
-    return;
-  }
-
-  if (currentExpression == "love") {
+  } else if (currentExpression == "love") {
     drawEye(LX, EY, EW, EH, ER, 0, 0);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawBigHeart(LX, EY, 4);
     drawBigHeart(RX, EY, 4);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 28);
+
     float r1 = fmod(t * 2.0f, 1.0f);
     float r2 = fmod(t * 2.0f + 0.5f, 1.0f);
-    int y1 = MY - 4 - (int)(r1 * 40.0f);
-    int y2 = MY - 4 - (int)(r2 * 36.0f);
-    if (r1 < 0.8f) drawBigHeart(16 + (int)(r1 * 10.0f), y1, 3);
-    if (r2 < 0.8f) drawBigHeart(112 - (int)(r2 * 10.0f), y2, 2);
-    drawCompanionAccessories(LX, RX, EY, MY);
-    display.display();
-    return;
-  }
-
-  if (currentExpression == "surprised") {
+    if (r1 < 0.8f) {
+      int y1 = MY - 4 - (int)(r1 * 40.0f);
+      drawBigHeart(16 + (int)(r1 * 10.0f), y1, 3);
+    }
+    if (r2 < 0.8f) {
+      int y2 = MY - 4 - (int)(r2 * 36.0f);
+      drawBigHeart(112 - (int)(r2 * 10.0f), y2, 2);
+    }
+  } else if (currentExpression == "surprised") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int eh = EH + (int)(wave * 8.0f);
-    drawEye(LX, EY, EW + 4, eh, ER + 2, 0, 0);
-    drawEye(RX, EY, EW + 4, eh, ER + 2, 0, 0);
+    int eyeH = EH + (int)(wave * 8.0f);
     int browLift = (int)(wave * 4.0f);
+    int mouthR = 5 + (int)(wave * 3.0f);
+    drawEye(LX, EY, EW + 4, eyeH, ER + 2, 0, 0);
+    drawEye(RX, EY, EW + 4, eyeH, ER + 2, 0, 0);
     drawBrow(LX - 14, EY - 17 - browLift, LX + 14, EY - 17 - browLift);
     drawBrow(RX - 14, EY - 17 - browLift, RX + 14, EY - 17 - browLift);
-    int mr = 5 + (int)(wave * 3.0f);
-    drawOvalMouth(SCREEN_WIDTH / 2, MY, mr, mr - 1);
-    drawCompanionAccessories(LX, RX, EY, MY);
-    display.display();
-    return;
-  }
-
-  if (currentExpression == "angry") {
+    drawOvalMouth(SCREEN_WIDTH / 2, MY, mouthR, mouthR - 1);
+  } else if (currentExpression == "angry") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int lidH = 4 + (int)(wave * 3.0f);
+    int twitch = (int)(wave * 2.0f);
+    int mouthShift = (int)(sin(t * 3.14159f * 6.0f) * 2.0f);
     drawEye(LX, EY + 2, EW, EH - 2, ER, 0, 2);
     drawEye(RX, EY + 2, EW, EH - 2, ER, 0, 2);
-    int lidH = 4 + (int)(wave * 3.0f);
-    display.fillRect(LX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
-    display.fillRect(RX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
-    int twitch = (int)(wave * 2.0f);
+    display.fillRect(LX - EW / 2, EY + 2 - (EH - 2) / 2, EW, lidH, SH110X_BLACK);
+    display.fillRect(RX - EW / 2, EY + 2 - (EH - 2) / 2, EW, lidH, SH110X_BLACK);
     drawBrow(LX - 14, EY - 16, LX + 8, EY - 6 - twitch);
     drawBrow(RX + 14, EY - 16, RX - 8, EY - 6 - twitch);
-    int mShift = (int)(sin(t * 3.14159f * 6.0f) * 2.0f);
-    for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 10, MY + tt + mShift, SCREEN_WIDTH/2 + 10, MY + tt + mShift, SH110X_WHITE);
+    for (int line = 0; line < 3; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 10, MY + line + mouthShift, SCREEN_WIDTH / 2 + 10, MY + line + mouthShift, SH110X_WHITE);
     }
-    drawCompanionAccessories(LX, RX, EY, MY);
-    display.display();
-    return;
-  }
-
-  if (currentExpression == "sad") {
+  } else if (currentExpression == "sad") {
     drawEye(LX, EY + 3, EW, EH - 4, ER, 0, 4);
     drawEye(RX, EY + 3, EW, EH - 4, ER, 0, 4);
     drawBrow(LX - 14, EY - 6, LX + 10, EY - 16);
@@ -1542,170 +1525,146 @@ void renderExpressionFrame() {
     if (ph >= 12) {
       float tearT = (float)(ph - 12) / 19.0f;
       int tearY = EY + 14 + (int)(tearT * 24.0f);
-      int tearS = (tearT < 0.5f) ? 3 : 2;
-      drawTear(LX + EW/2 + 2, tearY, tearS);
+      int tearS = tearT < 0.5f ? 3 : 2;
+      drawTear(LX + EW / 2 + 2, tearY, tearS);
     }
     if (ph >= 20) {
       float tearT = (float)(ph - 20) / 11.0f;
       int tearY = EY + 14 + (int)(tearT * 22.0f);
-      drawTear(RX + EW/2 + 2, tearY, 2);
+      drawTear(RX + EW / 2 + 2, tearY, 2);
     }
-    display.display();
-    return;
-      drawCompanionAccessories(LX, RX, EY, MY);
-  }
-
-  // ── Sleepy: eyes slowly droop, ZZZ rises, occasional full close ──
-  if (currentExpression == "sleepy") {
+  } else if (currentExpression == "sleepy") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    drawEye(LX, EY, EW, eh, ER, 0, 0);
-    drawEye(RX, EY, EW, eh, ER, 0, 0);
-    // Relaxed flat mouth
-    for (int tt = 0; tt < 2; tt++) {
+    int eyeH = 5 + (int)((1.0f - wave) * 5.0f);
+    drawEye(LX, EY, EW, eyeH, ER, 0, 0);
+    drawEye(RX, EY, EW, eyeH, ER, 0, 0);
+    for (int line = 0; line < 2; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 8, MY + line, SCREEN_WIDTH / 2 + 8, MY + line, SH110X_WHITE);
     }
     drawZzz(98, 12, expressionPhase);
-    display.display();
-    return;
-      drawCompanionAccessories(LX, RX, EY, MY);
-  }
-
-  // ── Thinking: one squinted eye, gaze drifts up-right, bubble pulses ──
-  if (currentExpression == "thinking") {
+  } else if (currentExpression == "thinking") {
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int px = 2 + (int)(wave * 5.0f);
     int py = -2 + (int)(wave * 3.0f);
-    drawEye(LX, EY, EW - 6, 12, ER, px, py); // squinted left
-    drawEye(RX, EY, EW, EH, ER, px, py);      // normal right
-      drawEye(LX, EY, EW - 6, 12, ER, px, py);
-      drawEye(RX, EY, EW, EH, ER, px, py);
-    display.fillCircle(108, 38, bs,     SH110X_WHITE);
-    display.fillCircle(114, 28, bs + 1, SH110X_WHITE);
-    display.fillCircle(118, 16, bs + 2, SH110X_WHITE);
-    // Neutral tilt mouth
-    for (int tt = 0; tt < 2; tt++) {
-    }
-    display.display();
-    return;
-      drawCompanionAccessories(LX, RX, EY, MY);
-  }
-
-  // ── Happy: smooth gradual blink, pupil drift, big grin ──
-  if (currentExpression == "happy") {
-    int eh = EH;
-    if (ph >= 24 && ph <= 27) {
-      int py = (int)(sin(t * 3.14159f * 2.0f) * 2.0f);
-      float blinkT = (float)(ph - 24) / 3.0f;
-    drawEye(LX, EY, EW, eh, ER, 0, py);
-        eh = EH - (int)(blinkT * (EH - 3));
-    drawEye(RX, EY, EW, eh, ER, 0, py);
-      const int mouthY = 45;
-        eh = 3 + (int)(blinkT * (EH - 3));
-  // ── Smile: happy arcs + warm smile ──
-  else if (currentExpression == "smile") {
-      const String behavior = activePetBehavior();
-      drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
-    }
-        drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, 0);
-      } else if (behavior == "nap" || behavior == "sleepy") {
-      drawHappyArc(RX, EY, EW);
-    drawEye(LX, EY - 2, EW, EH + 4, ER, -2, 0);
-    drawEye(RX, EY + 3, EW - 6, EH - 6, ER - 2, 2, 0);
-      } else if (behavior == "cuddle" || behavior == "cuddly") {
-    drawBrow(RX - 8, EY - 9, RX + 14, EY - 13 + browTwitch);
-    for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 12, MY + 4 + tt, SCREEN_WIDTH/2 + 12, MY - 2 + tt, SH110X_WHITE);
-    }
-      drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
-  // ── Look around: smooth sinusoidal pupil sweep ──
-  else if (currentExpression == "look_around") {
-    // True sine sweep — much smoother than lookup table
-    float sx = sin(t * 3.14159f * 2.0f);
-    }
-    int py = (int)(sy * 3.0f);
+    int bubble = 2 + (int)(wave * 2.0f);
+    drawEye(LX, EY, EW - 6, 12, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
-      float sy = cos(t * 3.14159f * 4.0f) * 0.4f;
-      } else if (behavior == "needy") {
-        drawEye(leftX, eyeY, 24, 16, 5, pupilDx, 1);
-        drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, 1);
-        drawSadArc(SCREEN_WIDTH / 2, mouthY - 2, 16);
-      display.drawLine(SCREEN_WIDTH/2 - 8, MY + tt, SCREEN_WIDTH/2 + 8, MY + tt, SH110X_WHITE);
-    // Left eye: smooth wink (stays closed)
-      drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
-    drawKissLips(SCREEN_WIDTH / 2, MY);
+    display.fillCircle(108, 38, bubble, SH110X_WHITE);
+    display.fillCircle(114, 28, bubble + 1, SH110X_WHITE);
+    display.fillCircle(118, 16, bubble + 2, SH110X_WHITE);
+    for (int line = 0; line < 2; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 8, MY + line, SCREEN_WIDTH / 2 + 6, MY - 2 + line, SH110X_WHITE);
+    }
+  } else if (currentExpression == "happy") {
+    int eyeH = EH;
+    int py = (int)(sin(t * 3.14159f * 2.0f) * 2.0f);
+    if (ph >= 24 && ph <= 27) {
+      float blinkT = (float)(ph - 24) / 3.0f;
+      if (ph <= 25) {
+        eyeH = EH - (int)(blinkT * (EH - 3));
+      } else {
+        eyeH = 3 + (int)(blinkT * (EH - 3));
+      }
+    }
+    drawEye(LX, EY, EW, eyeH, ER, 0, py);
+    drawEye(RX, EY, EW, eyeH, ER, 0, py);
+    drawSmile(SCREEN_WIDTH / 2, MY - 3, 24);
+  } else if (currentExpression == "smile") {
+    drawHappyArc(LX, EY, EW);
+    drawHappyArc(RX, EY, EW);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
+  } else if (currentExpression == "confused") {
+    float wave = sin(t * 3.14159f * 2.0f);
+    int browTwitch = (int)(wave * 3.0f);
+    drawEye(LX, EY - 2, EW, EH + 2, ER, -2, 0);
+    drawEye(RX, EY + 3, EW - 6, EH - 6, ER - 2, 2, 0);
+    drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
+    drawBrow(RX - 8, EY - 9, RX + 14, EY - 13 + browTwitch);
+    for (int line = 0; line < 3; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 12, MY + 4 + line, SCREEN_WIDTH / 2 + 12, MY - 2 + line, SH110X_WHITE);
+    }
+  } else if (currentExpression == "look_around") {
+    float sx = sin(t * 3.14159f * 2.0f);
+    float sy = cos(t * 3.14159f * 4.0f) * 0.4f;
+    int px = (int)(sx * 5.0f);
+    int py = (int)(sy * 3.0f);
+    drawEye(LX, EY, EW, EH, ER, px, py);
+    drawEye(RX, EY, EW, EH, ER, px, py);
+    for (int line = 0; line < 2; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 8, MY + line, SCREEN_WIDTH / 2 + 8, MY + line, SH110X_WHITE);
+    }
+  } else if (currentExpression == "kiss") {
     float r1 = fmod(t * 1.5f, 1.0f);
-      drawBlinkEye(LX, EY, EW, 4, ER);
-      drawEye(RX, EY, EW, EH, ER, 0, 0);
+    float r2 = fmod(t * 1.5f + 0.45f, 1.0f);
+    drawBlinkEye(LX, EY, EW, 4, ER);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    drawKissLips(SCREEN_WIDTH / 2, MY);
+    if (r1 < 0.85f) {
+      int hx = SCREEN_WIDTH / 2 - 10 + (int)(sin(r1 * 3.14159f) * 8.0f);
       int hy = MY - 10 - (int)(r1 * 38.0f);
       drawBigHeart(hx, hy, 3);
     }
     if (r2 < 0.85f) {
-      int hy = MY - 8 - (int)(r2 * 34.0f);
       int hx = SCREEN_WIDTH / 2 + 12 - (int)(sin(r2 * 3.14159f) * 6.0f);
+      int hy = MY - 8 - (int)(r2 * 34.0f);
       drawBigHeart(hx, hy, 2);
     }
-  }
-  else if (currentExpression == "wink") {
-    for (int t = 0; t < 3; t++) {
-      display.drawLine(LX - EW/2, EY + t, LX + EW/2, EY + t, SH110X_WHITE);
+  } else if (currentExpression == "wink") {
+    for (int line = 0; line < 3; line++) {
+      display.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, SH110X_WHITE);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
-  }
-  else if (currentExpression == "laugh") {
+  } else if (currentExpression == "laugh") {
     float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int shakeX = (int)(wave * 3.0f) - 1;
+    int mouthW = 20 + (int)(wave * 4.0f);
     drawHappyArc(LX + shakeX, EY, EW);
     drawHappyArc(RX + shakeX, EY, EW);
-    int mw = 20 + (int)(wave * 4.0f);
-    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2, MY - 5, mw, 12, 4, SH110X_WHITE);
-    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2 + 2, MY - 3, mw - 4, 8, 3, SH110X_BLACK);
-  }
-  else if (currentExpression == "star_eyes") {
-    drawEye(LX, EY, EW, EH, ER, 0, 0);
-    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    display.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2, MY - 5, mouthW, 12, 4, SH110X_WHITE);
+    display.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2 + 2, MY - 3, mouthW - 4, 8, 3, SH110X_BLACK);
+  } else if (currentExpression == "star_eyes") {
     float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int starR = 5 + (int)(twinkle * 2.0f);
+    drawEye(LX, EY, EW, EH, ER, 0, 0);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawIconStar(LX, EY, starR);
     drawIconStar(RX, EY, starR);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
-  }
-  // ── Excited: wide bouncing eyes, can't-hold-the-smile ──
-  else if (currentExpression == "excited") {
+  } else if (currentExpression == "excited") {
     float bounce = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int eyeShift = (int)(bounce * 4.0f);
     drawEye(LX, EY - eyeShift, EW + 4, EH + 4, ER, 0, 0);
     drawEye(RX, EY - eyeShift, EW + 4, EH + 4, ER, 0, 0);
-    // Eyebrows raised
     drawBrow(LX - 14, EY - 20 - eyeShift, LX + 14, EY - 20 - eyeShift);
     drawBrow(RX - 14, EY - 20 - eyeShift, RX + 14, EY - 20 - eyeShift);
     drawSmile(SCREEN_WIDTH / 2, MY - 2 - (int)(bounce * 2.0f), 28);
-  }
-  else if (currentExpression == "tongue") {
-    for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(LX - EW/2, EY + tt, LX + EW/2, EY + tt, SH110X_WHITE);
+  } else if (currentExpression == "tongue") {
+    for (int line = 0; line < 3; line++) {
+      display.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, SH110X_WHITE);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
-    for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 10, MY - 2 + tt, SCREEN_WIDTH/2, MY + 2 + tt, SH110X_WHITE);
-      display.drawLine(SCREEN_WIDTH/2, MY + 2 + tt, SCREEN_WIDTH/2 + 10, MY - 2 + tt, SH110X_WHITE);
+    for (int line = 0; line < 2; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 10, MY - 2 + line, SCREEN_WIDTH / 2, MY + 2 + line, SH110X_WHITE);
+      display.drawLine(SCREEN_WIDTH / 2, MY + 2 + line, SCREEN_WIDTH / 2 + 10, MY - 2 + line, SH110X_WHITE);
     }
     float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int tongueH = 8 + (int)(wobble * 3.0f);
-    display.fillRoundRect(SCREEN_WIDTH/2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
-    display.fillCircle(SCREEN_WIDTH/2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
-  }
-  else {
+    display.fillRoundRect(SCREEN_WIDTH / 2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
+    display.fillCircle(SCREEN_WIDTH / 2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
+  } else {
     float drift = sin(t * 3.14159f * 2.0f);
     int px = (int)(drift * 2.0f);
     int py = (int)(cos(t * 3.14159f * 3.0f) * 1.0f);
-    int eh = EH;
+    int eyeH = EH;
     if (ph >= 28 && ph <= 30) {
-      float blinkT = (ph == 29) ? 1.0f : 0.5f;
-      eh = EH - (int)(blinkT * (EH - 3));
+      float blinkT = ph == 29 ? 1.0f : 0.5f;
+      eyeH = EH - (int)(blinkT * (EH - 3));
     }
-    drawEye(LX, EY, EW, eh, ER, px, py);
-    drawEye(RX, EY, EW, eh, ER, px, py);
-    for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH / 2 - 7, MY + tt, SCREEN_WIDTH / 2 + 7, MY + tt, SH110X_WHITE);
+    drawEye(LX, EY, EW, eyeH, ER, px, py);
+    drawEye(RX, EY, EW, eyeH, ER, px, py);
+    for (int line = 0; line < 2; line++) {
+      display.drawLine(SCREEN_WIDTH / 2 - 7, MY + line, SCREEN_WIDTH / 2 + 7, MY + line, SH110X_WHITE);
     }
   }
 
