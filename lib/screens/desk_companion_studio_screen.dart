@@ -143,11 +143,12 @@ extension DeskPersonalityExt on DeskPersonality {
       };
 }
 
-enum DeskPetMode { hangout, play, cuddle, nap, needy, party }
+enum DeskPetMode { off, hangout, play, cuddle, nap, needy, party }
 
 extension DeskPetModeExt on DeskPetMode {
   String get label => switch (this) {
-      DeskPetMode.hangout => 'Hangout / Off',
+        DeskPetMode.off => 'Off',
+        DeskPetMode.hangout => 'Hangout',
         DeskPetMode.play => 'Play',
         DeskPetMode.cuddle => 'Cuddle',
         DeskPetMode.nap => 'Nap',
@@ -156,6 +157,7 @@ extension DeskPetModeExt on DeskPetMode {
       };
 
   String get command => switch (this) {
+      DeskPetMode.off => 'off',
         DeskPetMode.hangout => 'hangout',
         DeskPetMode.play => 'play',
         DeskPetMode.cuddle => 'cuddle',
@@ -165,12 +167,65 @@ extension DeskPetModeExt on DeskPetMode {
       };
 
   String get description => switch (this) {
-      DeskPetMode.hangout => 'Default companion state. Use this to return to normal behavior and turn off a special mode.',
-      DeskPetMode.play => 'Persistent playful mode with energetic scenes and more active attention-seeking behavior.',
-      DeskPetMode.cuddle => 'Persistent affectionate mode with hearts, kisses, and softer reactions.',
-      DeskPetMode.nap => 'Persistent sleepy mode with longer pauses and drowsy expressions.',
-      DeskPetMode.needy => 'Persistent attention-seeking mode that acts like it wants you to notice it.',
-      DeskPetMode.party => 'Persistent party mode inspired by desk companions that dance, show off, and stay extra excited.',
+        DeskPetMode.off => 'Turns companion behavior off and leaves the face in a simple neutral state.',
+        DeskPetMode.hangout => 'Default companion state. Personality can drive the idle behavior here.',
+        DeskPetMode.play => 'Persistent playful mode with energetic scenes and more active attention-seeking behavior.',
+        DeskPetMode.cuddle => 'Persistent affectionate mode with hearts, kisses, and softer reactions.',
+        DeskPetMode.nap => 'Persistent sleepy mode with longer pauses and drowsy expressions.',
+        DeskPetMode.needy => 'Persistent attention-seeking mode that acts like it wants you to notice it.',
+        DeskPetMode.party => 'Persistent party mode inspired by desk companions that dance, show off, and stay extra excited.',
+      };
+}
+
+enum DeskHairStyle { none, tuft, bangs, spiky }
+
+extension DeskHairStyleExt on DeskHairStyle {
+  String get label => switch (this) {
+        DeskHairStyle.none => 'None',
+        DeskHairStyle.tuft => 'Tuft',
+        DeskHairStyle.bangs => 'Bangs',
+        DeskHairStyle.spiky => 'Spiky',
+      };
+
+  String get command => switch (this) {
+        DeskHairStyle.none => 'none',
+        DeskHairStyle.tuft => 'tuft',
+        DeskHairStyle.bangs => 'bangs',
+        DeskHairStyle.spiky => 'spiky',
+      };
+}
+
+enum DeskEarsStyle { none, cat, bear, bunny }
+
+extension DeskEarsStyleExt on DeskEarsStyle {
+  String get label => switch (this) {
+        DeskEarsStyle.none => 'None',
+        DeskEarsStyle.cat => 'Cat',
+        DeskEarsStyle.bear => 'Bear',
+        DeskEarsStyle.bunny => 'Bunny',
+      };
+
+  String get command => switch (this) {
+        DeskEarsStyle.none => 'none',
+        DeskEarsStyle.cat => 'cat',
+        DeskEarsStyle.bear => 'bear',
+        DeskEarsStyle.bunny => 'bunny',
+      };
+}
+
+enum DeskMustacheStyle { none, classic, curled }
+
+extension DeskMustacheStyleExt on DeskMustacheStyle {
+  String get label => switch (this) {
+        DeskMustacheStyle.none => 'None',
+        DeskMustacheStyle.classic => 'Classic',
+        DeskMustacheStyle.curled => 'Curled',
+      };
+
+  String get command => switch (this) {
+        DeskMustacheStyle.none => 'none',
+        DeskMustacheStyle.classic => 'classic',
+        DeskMustacheStyle.curled => 'curled',
       };
 }
 
@@ -237,6 +292,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskPersonality _selectedPersonality = DeskPersonality.curious;
   DeskPetMode _selectedPetMode = DeskPetMode.hangout;
   DeskCareAction _selectedCareAction = DeskCareAction.pet;
+  DeskHairStyle _selectedHairStyle = DeskHairStyle.none;
+  DeskEarsStyle _selectedEarsStyle = DeskEarsStyle.none;
+  DeskMustacheStyle _selectedMustacheStyle = DeskMustacheStyle.none;
   Timer? _liveSyncTimer;
 
   @override
@@ -660,6 +718,91 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               : () => _sendCareAction(controller),
                           icon: const Icon(Icons.favorite_outline),
                           label: Text('Send ${_selectedCareAction.label} action'),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Appearance',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Hair',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskHairStyle.values
+                            .map(
+                              (hair) => ChoiceChip(
+                                label: Text(hair.label),
+                                selected: _selectedHairStyle == hair,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedHairStyle = hair,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Ears',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskEarsStyle.values
+                            .map(
+                              (ears) => ChoiceChip(
+                                label: Text(ears.label),
+                                selected: _selectedEarsStyle == ears,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedEarsStyle = ears,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Mustache',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskMustacheStyle.values
+                            .map(
+                              (mustache) => ChoiceChip(
+                                label: Text(mustache.label),
+                                selected: _selectedMustacheStyle == mustache,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedMustacheStyle = mustache,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: controller.busy || !controller.canControlDevice
+                              ? null
+                              : () => _sendCompanionStyle(controller),
+                          icon: const Icon(Icons.face_retouching_natural),
+                          label: const Text('Apply appearance'),
                         ),
                       ),
                     ],
@@ -1422,7 +1565,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Future<void> _triggerPetMode(DeskCompanionController controller) async {
     await _perform(
       () => controller.triggerPetMode(_selectedPetMode.command),
-      success: '${_selectedPetMode.label} mode activated.',
+      success: '${_selectedPetMode.label} mode set.',
     );
   }
 
@@ -1430,6 +1573,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     await _perform(
       () => controller.sendCareAction(_selectedCareAction.command),
       success: '${_selectedCareAction.label} action sent.',
+    );
+  }
+
+  Future<void> _sendCompanionStyle(DeskCompanionController controller) async {
+    await _perform(
+      () => controller.setCompanionStyle(
+        hair: _selectedHairStyle.command,
+        ears: _selectedEarsStyle.command,
+        mustache: _selectedMustacheStyle.command,
+      ),
+      success: 'Companion appearance applied.',
     );
   }
 

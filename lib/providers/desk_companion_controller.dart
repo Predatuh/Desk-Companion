@@ -31,6 +31,9 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _bondLevelKey = 'bondLevel';
   static const String _energyLevelKey = 'energyLevel';
   static const String _boredomLevelKey = 'boredomLevel';
+  static const String _hairKey = 'companionHair';
+  static const String _earsKey = 'companionEars';
+  static const String _mustacheKey = 'companionMustache';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -41,6 +44,9 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
+  String _companionHair = 'none';
+  String _companionEars = 'none';
+  String _companionMustache = 'none';
   int _bondLevel = 50;
   int _energyLevel = 72;
   int _boredomLevel = 28;
@@ -77,6 +83,9 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceToken => _deviceToken;
   String get petPersonality => _petPersonality;
   String get activePetMode => _activePetMode;
+  String get companionHair => _companionHair;
+  String get companionEars => _companionEars;
+  String get companionMustache => _companionMustache;
   int get bondLevel => _bondLevel;
   int get energyLevel => _energyLevel;
   int get boredomLevel => _boredomLevel;
@@ -173,6 +182,10 @@ class DeskCompanionController extends ChangeNotifier {
       (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
     _activePetMode =
       (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
+    _companionHair = (prefs.getString(_hairKey) ?? _companionHair).trim();
+    _companionEars = (prefs.getString(_earsKey) ?? _companionEars).trim();
+    _companionMustache =
+        (prefs.getString(_mustacheKey) ?? _companionMustache).trim();
     _bondLevel = prefs.getInt(_bondLevelKey) ?? _bondLevel;
     _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
     _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
@@ -211,6 +224,9 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_modeKey, _mode);
     await prefs.setString(_petPersonalityKey, _petPersonality);
     await prefs.setString(_activePetModeKey, _activePetMode);
+    await prefs.setString(_hairKey, _companionHair);
+    await prefs.setString(_earsKey, _companionEars);
+    await prefs.setString(_mustacheKey, _companionMustache);
     await prefs.setInt(_bondLevelKey, _bondLevel);
     await prefs.setInt(_energyLevelKey, _energyLevel);
     await prefs.setInt(_boredomLevelKey, _boredomLevel);
@@ -525,6 +541,31 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> setCompanionStyle({
+    required String hair,
+    required String ears,
+    required String mustache,
+  }) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {
+          'type': 'set_companion_style',
+          'hair': hair,
+          'ears': ears,
+          'mustache': mustache,
+        },
+        mode: _mode,
+        bleLabel: 'Companion style sent over BLE.',
+        relayLabel: 'Companion style queued through relay.',
+      );
+      _companionHair = hair.trim();
+      _companionEars = ears.trim();
+      _companionMustache = mustache.trim();
+      await _persistRelayPreferences();
+      notifyListeners();
+    });
+  }
+
   Future<void> sendLiveBitmap(Uint8List bitmap) async {
     if (!isBleConnected) {
       return;
@@ -765,6 +806,21 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingPetMode = (payload['petMode'] as String? ?? '').trim();
     if (incomingPetMode.isNotEmpty) {
       _activePetMode = incomingPetMode;
+    }
+
+    final incomingHair = (payload['hair'] as String? ?? '').trim();
+    if (incomingHair.isNotEmpty) {
+      _companionHair = incomingHair;
+    }
+
+    final incomingEars = (payload['ears'] as String? ?? '').trim();
+    if (incomingEars.isNotEmpty) {
+      _companionEars = incomingEars;
+    }
+
+    final incomingMustache = (payload['mustache'] as String? ?? '').trim();
+    if (incomingMustache.isNotEmpty) {
+      _companionMustache = incomingMustache;
     }
 
     final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();

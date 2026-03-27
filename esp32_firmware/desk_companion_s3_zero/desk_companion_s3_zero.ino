@@ -66,6 +66,9 @@ String deviceToken = "";
 String petPersonality = "curious";
 String activePetMode = "hangout";
 String activeCareAction = "";
+String companionHair = "none";
+String companionEars = "none";
+String companionMustache = "none";
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -140,8 +143,12 @@ String petDisplayLabel(const String& value);
 String normalizePetPersonality(const String& value);
 String normalizePetMode(const String& value);
 String normalizeCareAction(const String& value);
+String normalizeCompanionHair(const String& value);
+String normalizeCompanionEars(const String& value);
+String normalizeCompanionMustache(const String& value);
 String petAmbientStatus();
 int clampLevel(int value);
+String activePetBehavior();
 String pickAutonomousPetExpression();
 String pickReactionExpression(const String& trigger);
 String currentAttentionStatus();
@@ -172,6 +179,7 @@ void drawSadArc(int cx, int cy, int w);
 void drawSmile(int cx, int cy, int w);
 void drawOvalMouth(int cx, int cy, int rw, int rh);
 void drawIconHeart(int cx, int cy, int s);
+void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY);
 void renderFlowerFrame();
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
 void tryStoredPrefs();
@@ -320,6 +328,9 @@ String buildStatusJson() {
   json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
   json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
+  json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
+  json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -335,6 +346,9 @@ String buildBleStatusJson() {
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
   json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
+  json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
+  json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -350,6 +364,9 @@ String buildBleStatusWithNetworksJson() {
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
   json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
+  json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
+  json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel) + ",";
@@ -441,7 +458,8 @@ String normalizePetPersonality(const String& value) {
 
 String normalizePetMode(const String& value) {
   const String trimmed = value.length() == 0 ? "" : value;
-  if (trimmed == "hangout" ||
+  if (trimmed == "off" ||
+      trimmed == "hangout" ||
       trimmed == "play" ||
       trimmed == "cuddle" ||
       trimmed == "nap" ||
@@ -464,9 +482,54 @@ String normalizeCareAction(const String& value) {
   return "pet";
 }
 
+String normalizeCompanionHair(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "tuft" ||
+      trimmed == "bangs" ||
+      trimmed == "spiky") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String normalizeCompanionEars(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "cat" ||
+      trimmed == "bear" ||
+      trimmed == "bunny") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String normalizeCompanionMustache(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "classic" ||
+      trimmed == "curled") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String activePetBehavior() {
+  if (activePetMode == "off") {
+    return "off";
+  }
+  if (activePetMode != "hangout") {
+    return activePetMode;
+  }
+  return petPersonality;
+}
+
 String petAmbientStatus() {
   if (!activeCareAction.isEmpty()) {
     return currentAttentionStatus();
+  }
+  if (activePetMode == "off") {
+    return "Companion off";
   }
   if (activePetMode == "play") {
     return "Feeling playful";
@@ -525,54 +588,52 @@ String currentAttentionStatus() {
 }
 
 String pickAutonomousPetExpression() {
+  const String behavior = activePetBehavior();
   const uint8_t cycle = petCycleStep++ % 4;
-  if (activePetMode == "party") {
+  if (behavior == "off") {
+    return "happy";
+  }
+  if (behavior == "party") {
     if (cycle == 0) return "star_eyes";
     if (cycle == 1) return "laugh";
     if (cycle == 2) return "excited";
     return "tongue";
   }
-  if (activePetMode == "play") {
+  if (behavior == "play") {
     if (cycle == 0) return "excited";
     if (cycle == 1) return "laugh";
     if (cycle == 2) return "wink";
     return "tongue";
   }
-  if (activePetMode == "cuddle") {
+  if (behavior == "cuddle") {
     if (cycle == 0) return "love";
     if (cycle == 1) return "kiss";
     if (cycle == 2) return "heart";
     return "smile";
   }
-  if (activePetMode == "nap") {
+  if (behavior == "nap" || behavior == "sleepy") {
     if (cycle == 0) return "sleepy";
     if (cycle == 1) return "smile";
     if (cycle == 2) return "thinking";
     return "sleepy";
   }
-  if (activePetMode == "needy") {
+  if (behavior == "needy") {
     if (cycle == 0) return "sad";
     if (cycle == 1) return "look_around";
     if (cycle == 2) return "kiss";
     return "surprised";
   }
-  if (petPersonality == "playful") {
+  if (behavior == "playful") {
     if (cycle == 0) return "excited";
     if (cycle == 1) return "laugh";
     if (cycle == 2) return "wink";
     return "tongue";
   }
-  if (petPersonality == "cuddly") {
+  if (behavior == "cuddly") {
     if (cycle == 0) return "love";
     if (cycle == 1) return "heart";
     if (cycle == 2) return "kiss";
     return "smile";
-  }
-  if (petPersonality == "sleepy") {
-    if (cycle == 0) return "sleepy";
-    if (cycle == 1) return "smile";
-    if (cycle == 2) return "thinking";
-    return "sleepy";
   }
   if (cycle == 0) return "look_around";
   if (cycle == 1) return "thinking";
@@ -622,6 +683,9 @@ void persistPetState() {
   preferences.begin("desk-cfg", false);
   preferences.putString("pet_personality", petPersonality);
   preferences.putString("pet_mode", activePetMode);
+  preferences.putString("companion_hair", companionHair);
+  preferences.putString("companion_ears", companionEars);
+  preferences.putString("companion_mustache", companionMustache);
   preferences.putInt("bond_level", bondLevel);
   preferences.putInt("energy_level", energyLevel);
   preferences.putInt("boredom_level", boredomLevel);
@@ -680,6 +744,7 @@ void setPetPersonality(const String& personality, bool persist) {
 
 void triggerPetMode(const String& petMode, bool persist) {
   activePetMode = normalizePetMode(petMode);
+  activeCareAction = "";
   if (activePetMode == "party") {
     boredomLevel = clampLevel(boredomLevel - 20);
     energyLevel = clampLevel(energyLevel - 8);
@@ -691,6 +756,11 @@ void triggerPetMode(const String& petMode, bool persist) {
   currentMode = MODE_IDLE;
   statusText = petDisplayLabel(activePetMode) + " mode";
   lastPetBeatMs = 0;
+  if (activePetMode == "off") {
+    renderCurrentMode();
+    publishStatus();
+    return;
+  }
   startTransientExpression(
     pickReactionExpression("pet_mode"),
     3200,
@@ -760,6 +830,10 @@ void updatePetBehavior() {
   }
 
   if (currentMode != MODE_IDLE || transientActive) {
+    return;
+  }
+
+  if (activePetMode == "off") {
     return;
   }
 
@@ -1238,6 +1312,49 @@ void drawBrow(int x1, int y1, int x2, int y2) {
   }
 }
 
+void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
+  const int faceCenterX = (leftX + rightX) / 2;
+
+  if (companionEars == "cat") {
+    display.drawTriangle(leftX - 16, eyeY - 18, leftX - 8, eyeY - 30, leftX + 2, eyeY - 18, SH110X_WHITE);
+    display.drawTriangle(rightX - 2, eyeY - 18, rightX + 8, eyeY - 30, rightX + 16, eyeY - 18, SH110X_WHITE);
+  } else if (companionEars == "bear") {
+    display.drawCircle(leftX - 12, eyeY - 20, 6, SH110X_WHITE);
+    display.drawCircle(rightX + 12, eyeY - 20, 6, SH110X_WHITE);
+  } else if (companionEars == "bunny") {
+    display.drawRoundRect(leftX - 15, eyeY - 34, 8, 16, 4, SH110X_WHITE);
+    display.drawRoundRect(rightX + 7, eyeY - 34, 8, 16, 4, SH110X_WHITE);
+  }
+
+  if (companionHair == "tuft") {
+    display.drawLine(faceCenterX - 4, eyeY - 20, faceCenterX, eyeY - 30, SH110X_WHITE);
+    display.drawLine(faceCenterX, eyeY - 30, faceCenterX + 4, eyeY - 20, SH110X_WHITE);
+    display.drawLine(faceCenterX, eyeY - 30, faceCenterX + 1, eyeY - 18, SH110X_WHITE);
+  } else if (companionHair == "bangs") {
+    display.drawLine(leftX - 18, eyeY - 19, rightX + 18, eyeY - 19, SH110X_WHITE);
+    for (int x = leftX - 14; x <= rightX + 14; x += 8) {
+      display.drawLine(x, eyeY - 18, x + 3, eyeY - 12, SH110X_WHITE);
+    }
+  } else if (companionHair == "spiky") {
+    for (int x = leftX - 14; x <= rightX + 14; x += 10) {
+      display.drawLine(x, eyeY - 18, x + 4, eyeY - 30, SH110X_WHITE);
+      display.drawLine(x + 4, eyeY - 30, x + 8, eyeY - 18, SH110X_WHITE);
+    }
+  }
+
+  if (companionMustache == "classic") {
+    display.drawLine(faceCenterX - 16, mouthY - 3, faceCenterX - 4, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX - 16, mouthY - 2, faceCenterX - 4, mouthY, SH110X_WHITE);
+    display.drawLine(faceCenterX + 4, mouthY - 1, faceCenterX + 16, mouthY - 3, SH110X_WHITE);
+    display.drawLine(faceCenterX + 4, mouthY, faceCenterX + 16, mouthY - 2, SH110X_WHITE);
+  } else if (companionMustache == "curled") {
+    display.drawLine(faceCenterX - 14, mouthY - 2, faceCenterX - 2, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX + 2, mouthY - 1, faceCenterX + 14, mouthY - 2, SH110X_WHITE);
+    display.drawCircle(faceCenterX - 16, mouthY - 3, 2, SH110X_WHITE);
+    display.drawCircle(faceCenterX + 16, mouthY - 3, 2, SH110X_WHITE);
+  }
+}
+
 // ZZZ floating up
 void drawZzz(int x, int y, int phase) {
   int p = phase % 32;
@@ -1268,36 +1385,32 @@ void renderExpressionFrame() {
 
   // ── Heart: big pulsing heart, smooth sine size ──
   if (currentExpression == "heart") {
-    // Smooth 32-phase pulse: 8→14→8
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int s = 8 + (int)(6.0f * wave);
     drawBigHeart(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 2, s);
+    drawCompanionAccessories(LX, RX, EY, MY);
     display.display();
     return;
   }
 
-  // ── Love: heart-pupil eyes, huge grin, floating hearts ──
   if (currentExpression == "love") {
     drawEye(LX, EY, EW, EH, ER, 0, 0);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
-    // Draw hearts OVER the pupils
     drawBigHeart(LX, EY, 4);
     drawBigHeart(RX, EY, 4);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 28);
-    // Two floating hearts, staggered
     float r1 = fmod(t * 2.0f, 1.0f);
     float r2 = fmod(t * 2.0f + 0.5f, 1.0f);
     int y1 = MY - 4 - (int)(r1 * 40.0f);
     int y2 = MY - 4 - (int)(r2 * 36.0f);
     if (r1 < 0.8f) drawBigHeart(16 + (int)(r1 * 10.0f), y1, 3);
     if (r2 < 0.8f) drawBigHeart(112 - (int)(r2 * 10.0f), y2, 2);
+    drawCompanionAccessories(LX, RX, EY, MY);
     display.display();
     return;
   }
 
-  // ── Surprised: eyes widen dramatically, brows raised, O-mouth ──
   if (currentExpression == "surprised") {
-    // Eyes grow and shrink smoothly
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int eh = EH + (int)(wave * 8.0f);
     drawEye(LX, EY, EW + 4, eh, ER + 2, 0, 0);
@@ -1305,45 +1418,38 @@ void renderExpressionFrame() {
     int browLift = (int)(wave * 4.0f);
     drawBrow(LX - 14, EY - 17 - browLift, LX + 14, EY - 17 - browLift);
     drawBrow(RX - 14, EY - 17 - browLift, RX + 14, EY - 17 - browLift);
-    // Mouth O size pulses
     int mr = 5 + (int)(wave * 3.0f);
     drawOvalMouth(SCREEN_WIDTH / 2, MY, mr, mr - 1);
+    drawCompanionAccessories(LX, RX, EY, MY);
     display.display();
     return;
   }
 
-  // ── Angry: V-brows, flat squinting eyes, rigid trembling mouth ──
   if (currentExpression == "angry") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    // Eyes stay wide but FLAT — top half clipped by thick V-brows
     drawEye(LX, EY + 2, EW, EH - 2, ER, 0, 2);
     drawEye(RX, EY + 2, EW, EH - 2, ER, 0, 2);
-    // Black-fill the top portion of each eye to simulate angry lids
     int lidH = 4 + (int)(wave * 3.0f);
     display.fillRect(LX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
     display.fillRect(RX - EW/2, EY + 2 - (EH-2)/2, EW, lidH, SH110X_BLACK);
-    // V-shaped brows: inner ends LOW (near nose), outer ends HIGH
     int twitch = (int)(wave * 2.0f);
-    drawBrow(LX - 14, EY - 16, LX + 8, EY - 6 - twitch);   // left: outer-high, inner-low
-    drawBrow(RX + 14, EY - 16, RX - 8, EY - 6 - twitch);   // right: outer-high, inner-low
-    // Small tight straight mouth with tremble
+    drawBrow(LX - 14, EY - 16, LX + 8, EY - 6 - twitch);
+    drawBrow(RX + 14, EY - 16, RX - 8, EY - 6 - twitch);
     int mShift = (int)(sin(t * 3.14159f * 6.0f) * 2.0f);
     for (int tt = 0; tt < 3; tt++) {
       display.drawLine(SCREEN_WIDTH/2 - 10, MY + tt + mShift, SCREEN_WIDTH/2 + 10, MY + tt + mShift, SH110X_WHITE);
     }
+    drawCompanionAccessories(LX, RX, EY, MY);
     display.display();
     return;
   }
 
-  // ── Sad: droopy eyes, sad brows, frown, tears drip ──
   if (currentExpression == "sad") {
     drawEye(LX, EY + 3, EW, EH - 4, ER, 0, 4);
     drawEye(RX, EY + 3, EW, EH - 4, ER, 0, 4);
-    // Sad brows — outer raised
     drawBrow(LX - 14, EY - 6, LX + 10, EY - 16);
     drawBrow(RX + 14, EY - 6, RX - 10, EY - 16);
     drawSadArc(SCREEN_WIDTH / 2, MY - 2, 16);
-    // Smooth tear drip: tear falls in second half of cycle
     if (ph >= 12) {
       float tearT = (float)(ph - 12) / 19.0f;
       int tearY = EY + 14 + (int)(tearT * 24.0f);
@@ -1357,105 +1463,89 @@ void renderExpressionFrame() {
     }
     display.display();
     return;
+      drawCompanionAccessories(LX, RX, EY, MY);
   }
 
   // ── Sleepy: eyes slowly droop, ZZZ rises, occasional full close ──
   if (currentExpression == "sleepy") {
-    // Smooth sine droop: eye height oscillates EH→6→EH
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int eh = 6 + (int)((1.0f - wave) * (EH - 6));
     drawEye(LX, EY, EW, eh, ER, 0, 0);
     drawEye(RX, EY, EW, eh, ER, 0, 0);
     // Relaxed flat mouth
     for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 8, MY + tt, SCREEN_WIDTH/2 + 8, MY + tt, SH110X_WHITE);
     }
     drawZzz(98, 12, expressionPhase);
     display.display();
     return;
+      drawCompanionAccessories(LX, RX, EY, MY);
   }
 
   // ── Thinking: one squinted eye, gaze drifts up-right, bubble pulses ──
   if (currentExpression == "thinking") {
-    float wave = sin(t * 3.14159f * 2.0f);
     int px = 2 + (int)(wave * 5.0f);
     int py = -2 + (int)(wave * 3.0f);
     drawEye(LX, EY, EW - 6, 12, ER, px, py); // squinted left
     drawEye(RX, EY, EW, EH, ER, px, py);      // normal right
-    // Thought bubbles — 3 dots rising, size pulsing
-    float bp = ease(ph, 32);
-    int bs = 1 + (int)(bp * 2.0f);
+      drawEye(LX, EY, EW - 6, 12, ER, px, py);
+      drawEye(RX, EY, EW, EH, ER, px, py);
     display.fillCircle(108, 38, bs,     SH110X_WHITE);
     display.fillCircle(114, 28, bs + 1, SH110X_WHITE);
     display.fillCircle(118, 16, bs + 2, SH110X_WHITE);
     // Neutral tilt mouth
     for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 8, MY + 2 + tt, SCREEN_WIDTH/2 + 8, MY + tt, SH110X_WHITE);
     }
     display.display();
     return;
+      drawCompanionAccessories(LX, RX, EY, MY);
   }
 
   // ── Happy: smooth gradual blink, pupil drift, big grin ──
   if (currentExpression == "happy") {
-    // Smooth blink at phases 24-31: close 24-27, open 28-31
     int eh = EH;
-    int py = (int)(sin(t * 3.14159f * 2.0f) * 2.0f); // gentle pupil bounce
     if (ph >= 24 && ph <= 27) {
-      // Closing: EH → 3
+      int py = (int)(sin(t * 3.14159f * 2.0f) * 2.0f);
       float blinkT = (float)(ph - 24) / 3.0f;
-      eh = EH - (int)(blinkT * (EH - 3));
-    } else if (ph >= 28 && ph <= 31) {
-      // Opening: 3 → EH
-      float blinkT = (float)(ph - 28) / 3.0f;
-      eh = 3 + (int)(blinkT * (EH - 3));
-    }
     drawEye(LX, EY, EW, eh, ER, 0, py);
+        eh = EH - (int)(blinkT * (EH - 3));
     drawEye(RX, EY, EW, eh, ER, 0, py);
-    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
-  }
+      const int mouthY = 45;
+        eh = 3 + (int)(blinkT * (EH - 3));
   // ── Smile: happy arcs + warm smile ──
   else if (currentExpression == "smile") {
-    drawHappyArc(LX, EY, EW);
-    drawHappyArc(RX, EY, EW);
-    drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
-  }
-  else if (currentExpression == "confused") {
-    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
-    int browTwitch = (int)(wave * 3.0f);
+      const String behavior = activePetBehavior();
+      drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
+    }
+        drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, 0);
+      } else if (behavior == "nap" || behavior == "sleepy") {
+      drawHappyArc(RX, EY, EW);
     drawEye(LX, EY - 2, EW, EH + 4, ER, -2, 0);
     drawEye(RX, EY + 3, EW - 6, EH - 6, ER - 2, 2, 0);
-    drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
+      } else if (behavior == "cuddle" || behavior == "cuddly") {
     drawBrow(RX - 8, EY - 9, RX + 14, EY - 13 + browTwitch);
     for (int tt = 0; tt < 3; tt++) {
       display.drawLine(SCREEN_WIDTH/2 - 12, MY + 4 + tt, SCREEN_WIDTH/2 + 12, MY - 2 + tt, SH110X_WHITE);
     }
-  }
+      drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
   // ── Look around: smooth sinusoidal pupil sweep ──
   else if (currentExpression == "look_around") {
     // True sine sweep — much smoother than lookup table
     float sx = sin(t * 3.14159f * 2.0f);
-    float sy = cos(t * 3.14159f * 4.0f) * 0.4f;
-    int px = (int)(sx * 8.0f);
-    int py = (int)(sy * 3.0f);
-    drawEye(LX, EY, EW, EH, ER, px, py);
-    drawEye(RX, EY, EW, EH, ER, px, py);
-    for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 8, MY + tt, SCREEN_WIDTH/2 + 8, MY + tt, SH110X_WHITE);
     }
-  }
-  // ── Kiss: wink, open eye, lips, hearts rise from mouth ──
-  else if (currentExpression == "kiss") {
+    int py = (int)(sy * 3.0f);
+    drawEye(RX, EY, EW, EH, ER, px, py);
+      float sy = cos(t * 3.14159f * 4.0f) * 0.4f;
+      } else if (behavior == "needy") {
+        drawEye(leftX, eyeY, 24, 16, 5, pupilDx, 1);
+        drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, 1);
+        drawSadArc(SCREEN_WIDTH / 2, mouthY - 2, 16);
+      display.drawLine(SCREEN_WIDTH/2 - 8, MY + tt, SCREEN_WIDTH/2 + 8, MY + tt, SH110X_WHITE);
     // Left eye: smooth wink (stays closed)
-    drawBlinkEye(LX, EY, EW, 4, ER);
-    drawEye(RX, EY, EW, EH, ER, 0, 0);
+      drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
     drawKissLips(SCREEN_WIDTH / 2, MY);
-    // Hearts rise smoothly from lips upward
     float r1 = fmod(t * 1.5f, 1.0f);
-    float r2 = fmod(t * 1.5f + 0.4f, 1.0f);
-    if (r1 < 0.85f) {
+      drawBlinkEye(LX, EY, EW, 4, ER);
+      drawEye(RX, EY, EW, EH, ER, 0, 0);
       int hy = MY - 10 - (int)(r1 * 38.0f);
-      int hx = SCREEN_WIDTH / 2 + (int)(sin(r1 * 3.14159f) * 8.0f);
       drawBigHeart(hx, hy, 3);
     }
     if (r2 < 0.85f) {
@@ -1464,9 +1554,7 @@ void renderExpressionFrame() {
       drawBigHeart(hx, hy, 2);
     }
   }
-  // ── Wink: left eye closed, right normal, soft smile ──
   else if (currentExpression == "wink") {
-    // Left eye: flat line (closed)
     for (int t = 0; t < 3; t++) {
       display.drawLine(LX - EW/2, EY + t, LX + EW/2, EY + t, SH110X_WHITE);
     }
@@ -1516,13 +1604,10 @@ void renderExpressionFrame() {
     display.fillRoundRect(SCREEN_WIDTH/2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
     display.fillCircle(SCREEN_WIDTH/2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
   }
-  // ── Default / Idle personality: neutral face with micro-movements ──
   else {
-    // Subtle autonomous micro-movements — the bot feels alive
     float drift = sin(t * 3.14159f * 2.0f);
-    int px = (int)(drift * 2.0f); // tiny pupil drift
+    int px = (int)(drift * 2.0f);
     int py = (int)(cos(t * 3.14159f * 3.0f) * 1.0f);
-    // Occasional blink in idle
     int eh = EH;
     if (ph >= 28 && ph <= 30) {
       float blinkT = (ph == 29) ? 1.0f : 0.5f;
@@ -1530,12 +1615,12 @@ void renderExpressionFrame() {
     }
     drawEye(LX, EY, EW, eh, ER, px, py);
     drawEye(RX, EY, EW, eh, ER, px, py);
-    // Relaxed flat mouth
     for (int tt = 0; tt < 2; tt++) {
       display.drawLine(SCREEN_WIDTH / 2 - 7, MY + tt, SCREEN_WIDTH / 2 + 7, MY + tt, SH110X_WHITE);
     }
   }
 
+  drawCompanionAccessories(LX, RX, EY, MY);
   display.display();
 }
 
@@ -1957,6 +2042,15 @@ void tryStoredPrefs() {
   activePetMode = normalizePetMode(
     preferences.getString("pet_mode", activePetMode)
   );
+  companionHair = normalizeCompanionHair(
+    preferences.getString("companion_hair", companionHair)
+  );
+  companionEars = normalizeCompanionEars(
+    preferences.getString("companion_ears", companionEars)
+  );
+  companionMustache = normalizeCompanionMustache(
+    preferences.getString("companion_mustache", companionMustache)
+  );
   bondLevel = clampLevel(preferences.getInt("bond_level", bondLevel));
   energyLevel = clampLevel(preferences.getInt("energy_level", energyLevel));
   boredomLevel = clampLevel(preferences.getInt("boredom_level", boredomLevel));
@@ -2052,6 +2146,24 @@ void handleCommandJson(const String& body) {
 
   if (type == "trigger_pet_mode") {
     triggerPetMode(extractJsonStringField(body, "petMode", "hangout"));
+    return;
+  }
+
+  if (type == "set_companion_style") {
+    companionHair = normalizeCompanionHair(
+      extractJsonStringField(body, "hair", companionHair)
+    );
+    companionEars = normalizeCompanionEars(
+      extractJsonStringField(body, "ears", companionEars)
+    );
+    companionMustache = normalizeCompanionMustache(
+      extractJsonStringField(body, "mustache", companionMustache)
+    );
+    persistPetState();
+    if (currentMode == MODE_IDLE) {
+      renderCurrentMode();
+    }
+    publishStatus();
     return;
   }
 

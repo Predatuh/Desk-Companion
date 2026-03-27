@@ -68,6 +68,9 @@ The ESP32 posts:
   "deviceToken": "desk-01",
   "personality": "curious",
   "petMode": "hangout",
+  "hair": "none",
+  "ears": "none",
+  "mustache": "none",
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -88,6 +91,9 @@ Standard BLE status notifications contain:
   "ip": "192.168.1.55",
   "personality": "curious",
   "petMode": "hangout",
+  "hair": "none",
+  "ears": "none",
+  "mustache": "none",
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -173,6 +179,7 @@ Supported personalities in the first version:
 
 Supported pet modes in the first version:
 
+- `off`
 - `hangout`
 - `play`
 - `cuddle`
@@ -180,7 +187,26 @@ Supported pet modes in the first version:
 - `party`
 - `needy`
 
-These commands set the device's autonomous idle behavior and also trigger a short reaction scene before returning to the current content.
+These commands set the device's active companion mode. `off` disables companion behavior, `hangout` returns to the default personality-driven idle behavior, and the other modes stay active until changed again.
+
+- `set_companion_style`
+
+```json
+{
+  "type": "set_companion_style",
+  "hair": "spiky",
+  "ears": "cat",
+  "mustache": "curled"
+}
+```
+
+Supported style options:
+
+- `hair`: `none`, `tuft`, `bangs`, `spiky`
+- `ears`: `none`, `cat`, `bear`, `bunny`
+- `mustache`: `none`, `classic`, `curled`
+
+Style changes persist on the device and are applied to the idle face and emotion scenes.
 
 - `care_action`
 
@@ -280,7 +306,7 @@ Remote relay image delivery uses `set_image` with a base64 payload instead.
 ## Pet behavior notes
 
 - The device now keeps a persistent `personality` and `petMode` in preferences.
+- The device also keeps persistent appearance settings for `hair`, `ears`, and `mustache`.
 - The device also keeps persistent `bondLevel`, `energyLevel`, and `boredomLevel` values in preferences.
-- While the display is idle, the firmware can trigger short autonomous pet-like reactions based on those settings.
-- The firmware can shift itself into `party`, `nap`, or `needy` behavior as those needs change over time.
+- While the display is idle, the firmware can trigger short autonomous pet-like reactions based on the current companion mode.
 - Notes, banners, and hardware button interactions can trigger a brief emotional reaction before the device returns to its previous display mode.
