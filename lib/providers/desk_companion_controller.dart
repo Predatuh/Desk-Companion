@@ -26,6 +26,8 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _connectedSsidKey = 'lastSsid';
   static const String _modeKey = 'lastMode';
   static const String _wifiNetworksKey = 'lastWifiNetworks';
+  static const String _petPersonalityKey = 'petPersonality';
+  static const String _activePetModeKey = 'activePetMode';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -34,6 +36,8 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceName = '';
   String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
   String _deviceToken = '';
+  String _petPersonality = 'curious';
+  String _activePetMode = 'hangout';
   List<String> _availableWifiNetworks = const [];
   String? _lastRelayError;
   int _relayPendingCount = 0;
@@ -65,6 +69,8 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceName => _deviceName;
   String get relayBaseUrl => _relayBaseUrl;
   String get deviceToken => _deviceToken;
+  String get petPersonality => _petPersonality;
+  String get activePetMode => _activePetMode;
   List<String> get availableWifiNetworks => _availableWifiNetworks;
   int get relayPendingCount => _relayPendingCount;
   DateTime? get relayLastCommandAt => _relayLastCommandAt;
@@ -154,6 +160,10 @@ class DeskCompanionController extends ChangeNotifier {
     _deviceToken = (prefs.getString(_deviceTokenKey) ?? '').trim();
     _connectedSsid = (prefs.getString(_connectedSsidKey) ?? '').trim();
     _mode = (prefs.getString(_modeKey) ?? _mode).trim();
+    _petPersonality =
+      (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
+    _activePetMode =
+      (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
     final savedNetworks = prefs.getStringList(_wifiNetworksKey);
     if (savedNetworks != null && savedNetworks.isNotEmpty) {
       _availableWifiNetworks = savedNetworks;
@@ -187,6 +197,8 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_deviceTokenKey, _deviceToken);
     await prefs.setString(_connectedSsidKey, _connectedSsid);
     await prefs.setString(_modeKey, _mode);
+    await prefs.setString(_petPersonalityKey, _petPersonality);
+    await prefs.setString(_activePetModeKey, _activePetMode);
     if (_availableWifiNetworks.isNotEmpty) {
       await prefs.setStringList(_wifiNetworksKey, _availableWifiNetworks);
     }
@@ -459,6 +471,34 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> setPetPersonality(String personality) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_personality', 'personality': personality},
+        mode: _mode,
+        bleLabel: 'Personality sent over BLE.',
+        relayLabel: 'Personality queued through relay.',
+      );
+      _petPersonality = personality.trim();
+      await _persistRelayPreferences();
+      notifyListeners();
+    });
+  }
+
+  Future<void> triggerPetMode(String petMode) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'trigger_pet_mode', 'petMode': petMode},
+        mode: _mode,
+        bleLabel: 'Pet mode sent over BLE.',
+        relayLabel: 'Pet mode queued through relay.',
+      );
+      _activePetMode = petMode.trim();
+      await _persistRelayPreferences();
+      notifyListeners();
+    });
+  }
+
   Future<void> sendLiveBitmap(Uint8List bitmap) async {
     if (!isBleConnected) {
       return;
@@ -688,6 +728,17 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingToken = (payload['deviceToken'] as String? ?? '').trim();
     if (incomingToken.isNotEmpty) {
       _deviceToken = incomingToken;
+    }
+
+    final incomingPersonality =
+        (payload['personality'] as String? ?? '').trim();
+    if (incomingPersonality.isNotEmpty) {
+      _petPersonality = incomingPersonality;
+    }
+
+    final incomingPetMode = (payload['petMode'] as String? ?? '').trim();
+    if (incomingPetMode.isNotEmpty) {
+      _activePetMode = incomingPetMode;
     }
 
     final wifiNetworks = payload['wifiNetworks'];

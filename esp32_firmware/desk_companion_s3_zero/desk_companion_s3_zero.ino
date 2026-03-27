@@ -63,6 +63,8 @@ String currentSsid = "";
 String ipAddress = "";
 String relayUrl = "";
 String deviceToken = "";
+String petPersonality = "curious";
+String activePetMode = "hangout";
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -81,8 +83,16 @@ bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
+uint8_t petCycleStep = 0;
 String availableWifiNetworks[10];
 int availableWifiNetworkCount = 0;
+DisplayMode transientResumeMode = MODE_IDLE;
+String transientResumeStatus = "Ready";
+String transientResumeExpression = "happy";
+String transientResumeFlower = "rose";
+bool transientActive = false;
+unsigned long transientEndsAt = 0;
+unsigned long lastPetBeatMs = 0;
 
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
@@ -121,6 +131,18 @@ void renderExpressionFrame();
 void renderImage();
 void renderIdle();
 void renderCurrentMode();
+String petDisplayLabel(const String& value);
+String normalizePetPersonality(const String& value);
+String normalizePetMode(const String& value);
+String petAmbientStatus();
+String pickAutonomousPetExpression();
+String pickReactionExpression(const String& trigger);
+void persistPetState();
+void setPetPersonality(const String& personality, bool persist = true);
+void triggerPetMode(const String& petMode, bool persist = true);
+void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus);
+void restoreTransientMode();
+void updatePetBehavior();
 void setIdleStatus(const String& value);
 void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "");
@@ -133,6 +155,13 @@ bool wifiJoinInProgress();
 void markWifiJoinStarted();
 void markWifiJoinFinished();
 void scanWifiNetworks();
+void drawEye(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy);
+void drawBlinkEye(int cx, int cy, int w, int h, int r);
+void drawHappyArc(int cx, int cy, int w);
+void drawSadArc(int cx, int cy, int w);
+void drawSmile(int cx, int cy, int w);
+void drawOvalMouth(int cx, int cy, int rw, int rh);
+void drawIconHeart(int cx, int cy, int s);
 void renderFlowerFrame();
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
 void tryStoredPrefs();
@@ -278,7 +307,9 @@ String buildStatusJson() {
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
-  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\"";
+  json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
+  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\"";
   json += "}";
   return json;
 }
@@ -288,7 +319,9 @@ String buildBleStatusJson() {
   json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
-  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\"";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\"";
   json += "}";
   return json;
 }
@@ -299,6 +332,8 @@ String buildBleStatusWithNetworksJson() {
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
   json += "\"wifiNetworks\":[";
   for (int i = 0; i < availableWifiNetworkCount; i++) {
     if (i > 0) {
@@ -363,6 +398,241 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
 
 void clearImageBuffer() {
   memset(imageBuffer, 0, sizeof(imageBuffer));
+}
+
+String petDisplayLabel(const String& value) {
+  String label = value;
+  label.replace("_", " ");
+  if (label.length() > 0) {
+    label.setCharAt(0, toupper(static_cast<unsigned char>(label[0])));
+  }
+  return label;
+}
+
+String normalizePetPersonality(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "playful" ||
+      trimmed == "cuddly" ||
+      trimmed == "sleepy" ||
+      trimmed == "curious") {
+    return trimmed;
+  }
+  return "curious";
+}
+
+String normalizePetMode(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "hangout" ||
+      trimmed == "play" ||
+      trimmed == "cuddle" ||
+      trimmed == "nap" ||
+      trimmed == "needy") {
+    return trimmed;
+  }
+  return "hangout";
+}
+
+String petAmbientStatus() {
+  if (activePetMode == "play") {
+    return "Feeling playful";
+  }
+  if (activePetMode == "cuddle") {
+    return "Feeling cuddly";
+  }
+  if (activePetMode == "nap") {
+    return "Drifting off";
+  }
+  if (activePetMode == "needy") {
+    return "Seeking attention";
+  }
+  return petDisplayLabel(petPersonality) + " mood";
+}
+
+String pickAutonomousPetExpression() {
+  const uint8_t cycle = petCycleStep++ % 3;
+  if (activePetMode == "play") {
+    if (cycle == 0) return "excited";
+    if (cycle == 1) return "laugh";
+    return "wink";
+  }
+  if (activePetMode == "cuddle") {
+    if (cycle == 0) return "love";
+    if (cycle == 1) return "kiss";
+    return "smile";
+  }
+  if (activePetMode == "nap") {
+    if (cycle == 0) return "sleepy";
+    if (cycle == 1) return "smile";
+    return "sleepy";
+  }
+  if (activePetMode == "needy") {
+    if (cycle == 0) return "sad";
+    if (cycle == 1) return "look_around";
+    return "kiss";
+  }
+
+  if (petPersonality == "playful") {
+    if (cycle == 0) return "excited";
+    if (cycle == 1) return "laugh";
+    return "wink";
+  }
+  if (petPersonality == "cuddly") {
+    if (cycle == 0) return "love";
+    if (cycle == 1) return "heart";
+    return "kiss";
+  }
+  if (petPersonality == "sleepy") {
+    if (cycle == 0) return "sleepy";
+    if (cycle == 1) return "smile";
+    return "thinking";
+  }
+
+  if (cycle == 0) return "look_around";
+  if (cycle == 1) return "thinking";
+  return "surprised";
+}
+
+String pickReactionExpression(const String& trigger) {
+  if (trigger == "button_clear") {
+    return "sad";
+  }
+
+  if (activePetMode == "play") {
+    if (trigger == "button_next") return "wink";
+    return "excited";
+  }
+  if (activePetMode == "cuddle") {
+    if (trigger == "banner") return "kiss";
+    return "love";
+  }
+  if (activePetMode == "nap") {
+    if (trigger == "note") return "surprised";
+    return "sleepy";
+  }
+  if (activePetMode == "needy") {
+    if (trigger == "note") return "heart";
+    return "kiss";
+  }
+
+  if (petPersonality == "playful") {
+    if (trigger == "button_next") return "wink";
+    if (trigger == "banner") return "laugh";
+    return "excited";
+  }
+  if (petPersonality == "cuddly") {
+    if (trigger == "banner") return "kiss";
+    if (trigger == "button_next") return "heart";
+    return "love";
+  }
+  if (petPersonality == "sleepy") {
+    if (trigger == "banner") return "surprised";
+    return "smile";
+  }
+
+  if (trigger == "note") return "thinking";
+  if (trigger == "button_next") return "surprised";
+  return "look_around";
+}
+
+void persistPetState() {
+  preferences.begin("desk-cfg", false);
+  preferences.putString("pet_personality", petPersonality);
+  preferences.putString("pet_mode", activePetMode);
+  preferences.end();
+}
+
+void restoreTransientMode() {
+  if (!transientActive) {
+    return;
+  }
+
+  transientActive = false;
+  currentMode = transientResumeMode;
+  currentExpression = transientResumeExpression;
+  currentFlower = transientResumeFlower;
+  statusText = currentMode == MODE_IDLE ? petAmbientStatus() : transientResumeStatus;
+  expressionPhase = 0;
+  renderCurrentMode();
+  publishStatus();
+}
+
+void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus) {
+  if (transientActive) {
+    restoreTransientMode();
+  }
+
+  transientResumeMode = currentMode;
+  transientResumeStatus = currentMode == MODE_IDLE ? petAmbientStatus() : statusText;
+  transientResumeExpression = currentExpression;
+  transientResumeFlower = currentFlower;
+  transientActive = true;
+  transientEndsAt = millis() + durationMs;
+  lastPetBeatMs = millis();
+
+  currentExpression = expression;
+  expressionPhase = 0;
+  lastExpressionTickMs = 0;
+  currentMode = MODE_EXPRESSION;
+  statusText = nextStatus;
+  renderCurrentMode();
+  publishStatus();
+}
+
+void setPetPersonality(const String& personality, bool persist) {
+  petPersonality = normalizePetPersonality(personality);
+  if (persist) {
+    persistPetState();
+  }
+  startTransientExpression(
+    pickReactionExpression("personality"),
+    2200,
+    petDisplayLabel(petPersonality) + " personality"
+  );
+}
+
+void triggerPetMode(const String& petMode, bool persist) {
+  activePetMode = normalizePetMode(petMode);
+  if (persist) {
+    persistPetState();
+  }
+  startTransientExpression(
+    pickReactionExpression("pet_mode"),
+    2600,
+    petDisplayLabel(activePetMode) + " mode"
+  );
+}
+
+void updatePetBehavior() {
+  const unsigned long now = millis();
+  if (transientActive && now >= transientEndsAt) {
+    restoreTransientMode();
+    return;
+  }
+
+  if (currentMode != MODE_IDLE || transientActive) {
+    return;
+  }
+
+  unsigned long intervalMs = 18000UL;
+  if (activePetMode == "play") {
+    intervalMs = 12000UL;
+  } else if (activePetMode == "cuddle") {
+    intervalMs = 18000UL;
+  } else if (activePetMode == "nap") {
+    intervalMs = 26000UL;
+  } else if (activePetMode == "needy") {
+    intervalMs = 14000UL;
+  } else if (petPersonality == "playful") {
+    intervalMs = 13000UL;
+  } else if (petPersonality == "sleepy") {
+    intervalMs = 24000UL;
+  }
+
+  if (now - lastPetBeatMs < intervalMs) {
+    return;
+  }
+
+  startTransientExpression(pickAutonomousPetExpression(), 2200, petAmbientStatus());
 }
 
 bool decodeBase64IntoImage(const String& input) {
@@ -644,17 +914,45 @@ void renderIdle() {
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
   display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 10, SH110X_WHITE);
-  display.setCursor(12, 7);
-  display.println("Desk Companion");
-  display.drawLine(10, 17, SCREEN_WIDTH - 11, 17, SH110X_WHITE);
-  display.setCursor(12, 38);
-  display.println("Use the app");
-  display.setCursor(12, 50);
-  display.println("to interact");
+  display.setCursor(8, 7);
+  display.print(petDisplayLabel(petPersonality));
+  display.print(" / ");
+  display.print(petDisplayLabel(activePetMode));
+  display.drawLine(8, 17, SCREEN_WIDTH - 9, 17, SH110X_WHITE);
 
-  const int orbitXs[4] = {100, 108, 116, 108};
-  const int orbitYs[4] = {22, 14, 22, 30};
-  display.fillCircle(orbitXs[idleOrbit % 4], orbitYs[idleOrbit % 4], 2, SH110X_WHITE);
+  const int leftX = 38;
+  const int rightX = 90;
+  const int eyeY = 30;
+  const int mouthY = 44;
+  const int pupilOffsets[4] = {-2, 0, 2, 0};
+  const int pupilDx = pupilOffsets[idleOrbit % 4];
+
+  if (activePetMode == "nap" || petPersonality == "sleepy") {
+    drawBlinkEye(leftX, eyeY, 24, 4, 4);
+    drawBlinkEye(rightX, eyeY, 24, 4, 4);
+    display.drawLine(SCREEN_WIDTH / 2 - 8, mouthY, SCREEN_WIDTH / 2 + 8, mouthY, SH110X_WHITE);
+    display.setCursor(100, 23);
+    display.print("z");
+    display.setCursor(108, 18);
+    display.print("z");
+  } else if (activePetMode == "cuddle" || petPersonality == "cuddly") {
+    drawEye(leftX, eyeY, 24, 16, 5, pupilDx / 2, 0);
+    drawEye(rightX, eyeY, 24, 16, 5, pupilDx / 2, 0);
+    drawSmile(SCREEN_WIDTH / 2, mouthY - 1, 24);
+    drawIconHeart(64, 55, 3);
+  } else if (activePetMode == "play" || petPersonality == "playful") {
+    drawEye(leftX, eyeY, 26, 18, 5, pupilDx * 2, 0);
+    drawEye(rightX, eyeY, 26, 18, 5, pupilDx * 2, 0);
+    drawSmile(SCREEN_WIDTH / 2, mouthY - 2, 26);
+    display.fillCircle(14 + (idleOrbit % 4) * 2, 50 - (idleOrbit % 2) * 2, 2, SH110X_WHITE);
+  } else {
+    drawEye(leftX, eyeY, 24, 16, 5, pupilDx * 2, 1);
+    drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, -1);
+    drawOvalMouth(SCREEN_WIDTH / 2, mouthY, 5, 4);
+  }
+
+  display.setCursor(26, 54);
+  display.print(petAmbientStatus());
   display.display();
 }
 
@@ -1096,6 +1394,7 @@ void renderExpressionFrame() {
 void setIdleStatus(const String& value) {
   statusText = value;
   currentMode = MODE_IDLE;
+  transientActive = false;
   renderCurrentMode();
   publishStatus();
 }
@@ -1134,6 +1433,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
+  startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
 }
 
 void setBanner(const String& text, int speed) {
@@ -1144,6 +1444,7 @@ void setBanner(const String& text, int speed) {
   statusText = "Banner running";
   renderCurrentMode();
   publishStatus();
+  startTransientExpression(pickReactionExpression("banner"), 1800, "Showing off");
 }
 
 void setExpression(const String& expression) {
@@ -1495,6 +1796,12 @@ void tryStoredPrefs() {
   storedWifiPass = preferences.getString("pass", "");
   relayUrl = preferences.getString("relay_url", "");
   deviceToken = preferences.getString("device_token", "");
+  petPersonality = normalizePetPersonality(
+    preferences.getString("pet_personality", petPersonality)
+  );
+  activePetMode = normalizePetMode(
+    preferences.getString("pet_mode", activePetMode)
+  );
   // Restore last note
   const String savedNote = preferences.getString("note_text", "");
   if (!savedNote.isEmpty()) {
@@ -1508,6 +1815,8 @@ void tryStoredPrefs() {
     noteQueueCount = 1;
     noteQueueIndex = 0;
     currentMode = MODE_NOTE;
+  } else {
+    statusText = petAmbientStatus();
   }
   preferences.end();
 }
@@ -1575,6 +1884,16 @@ void handleCommandJson(const String& body) {
     setExpression(
       extractJsonStringField(body, "expression", "happy")
     );
+    return;
+  }
+
+  if (type == "set_personality") {
+    setPetPersonality(extractJsonStringField(body, "personality", "curious"));
+    return;
+  }
+
+  if (type == "trigger_pet_mode") {
+    triggerPetMode(extractJsonStringField(body, "petMode", "hangout"));
     return;
   }
 
@@ -1834,6 +2153,8 @@ void handleButtons() {
       currentMode = MODE_NOTE;
       statusText = "Showing note";
       renderCurrentMode();
+      publishStatus();
+      startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
     }
   }
   btnNextLast = nextNow;
@@ -1858,6 +2179,7 @@ void handleButtons() {
       setIdleStatus("Ready");
       renderCurrentMode();
       publishStatus();
+      startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
     }
   }
   if (clearNow == HIGH) {
@@ -1949,6 +2271,8 @@ void loop() {
       renderFlowerFrame();
     }
   }
+
+  updatePetBehavior();
 
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {

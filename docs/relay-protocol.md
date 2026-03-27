@@ -65,7 +65,9 @@ The ESP32 posts:
   "ssid": "Home WiFi",
   "ip": "192.168.1.55",
   "relayUrl": "https://relay.example.com",
-  "deviceToken": "desk-01"
+  "deviceToken": "desk-01",
+  "personality": "curious",
+  "petMode": "hangout"
 }
 ```
 
@@ -80,7 +82,9 @@ Standard BLE status notifications contain:
   "mode": "idle",
   "status": "BLE connected.",
   "ssid": "Home WiFi",
-  "ip": "192.168.1.55"
+  "ip": "192.168.1.55",
+  "personality": "curious",
+  "petMode": "hangout"
 }
 ```
 
@@ -133,6 +137,43 @@ Wi-Fi scan responses extend that payload with:
 ```
 
 ### Display commands
+
+### Pet and personality commands
+
+- `set_personality`
+
+```json
+{
+  "type": "set_personality",
+  "personality": "playful"
+}
+```
+
+Supported personalities in the first version:
+
+- `playful`
+- `cuddly`
+- `sleepy`
+- `curious`
+
+- `trigger_pet_mode`
+
+```json
+{
+  "type": "trigger_pet_mode",
+  "petMode": "cuddle"
+}
+```
+
+Supported pet modes in the first version:
+
+- `hangout`
+- `play`
+- `cuddle`
+- `nap`
+- `needy`
+
+These commands set the device's autonomous idle behavior and also trigger a short reaction scene before returning to the current content.
 
 - `set_note`
 
@@ -209,3 +250,9 @@ When BLE is active, large image pushes use chunked transfer:
 3. Send `commit_image`.
 
 Remote relay image delivery uses `set_image` with a base64 payload instead.
+
+## Pet behavior notes
+
+- The device now keeps a persistent `personality` and `petMode` in preferences.
+- While the display is idle, the firmware can trigger short autonomous pet-like reactions based on those settings.
+- Notes, banners, and hardware button interactions can trigger a brief emotional reaction before the device returns to its previous display mode.

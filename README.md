@@ -8,6 +8,7 @@ Separate Flutter app, ESP32-S3 firmware, and optional relay service for a tiny d
 - Sends Wi-Fi credentials to the device over BLE.
 - Saves Wi-Fi credentials on the device so it can reconnect after reboot or temporary Wi-Fi loss.
 - Sends sticky notes, scrolling banner text, and 128x64 monochrome images.
+- Includes pet-style personalities and interactive modes so the desk companion can feel alive even while idle.
 - Includes an exact 128x64 drawing pad so anything you sketch on the phone maps pixel-for-pixel to the OLED.
 - Includes a live draw mode that streams the current bitmap while you sketch when BLE is connected.
 - Supports a small relay server for off-home-network delivery from anywhere.
@@ -26,6 +27,7 @@ Main UI flow:
 - Save relay URL plus device token to the ESP32 over BLE.
 - Send note, banner, expression, flower, or image payloads over BLE when nearby.
 - Send note, banner, expression, flower, or image payloads through the hosted relay when remote.
+- Set personalities such as playful, cuddly, sleepy, or curious and trigger pet modes such as play, cuddle, nap, or needy.
 - Turn on live draw if you want the OLED to update as your finger moves over BLE.
 
 Packages used:
@@ -91,6 +93,8 @@ node server.js
 ```
 
 The ESP32 stores the relay base URL and token, then polls the relay for queued commands.
+
+The firmware also stores a pet personality and active pet mode so the device can keep acting like a small companion when the app is not actively controlling it.
 
 Firmware note:
 

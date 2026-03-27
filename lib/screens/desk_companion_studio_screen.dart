@@ -118,6 +118,59 @@ extension DeskExpressionLabel on DeskExpression {
       };
 }
 
+    enum DeskPersonality { playful, cuddly, sleepy, curious }
+
+    extension DeskPersonalityExt on DeskPersonality {
+      String get label => switch (this) {
+        DeskPersonality.playful => 'Playful',
+        DeskPersonality.cuddly => 'Cuddly',
+        DeskPersonality.sleepy => 'Sleepy',
+        DeskPersonality.curious => 'Curious',
+      };
+
+      String get command => switch (this) {
+        DeskPersonality.playful => 'playful',
+        DeskPersonality.cuddly => 'cuddly',
+        DeskPersonality.sleepy => 'sleepy',
+        DeskPersonality.curious => 'curious',
+      };
+
+      String get description => switch (this) {
+        DeskPersonality.playful => 'Chases attention, reacts fast, and leans toward excited little scenes.',
+        DeskPersonality.cuddly => 'Warm, affectionate, and likely to answer you with hearts and soft faces.',
+        DeskPersonality.sleepy => 'Calmer and slower, with heavier eyelids and relaxed reactions.',
+        DeskPersonality.curious => 'Watches the room, looks around, and reacts like a tiny thoughtful companion.',
+      };
+    }
+
+    enum DeskPetMode { hangout, play, cuddle, nap, needy }
+
+    extension DeskPetModeExt on DeskPetMode {
+      String get label => switch (this) {
+        DeskPetMode.hangout => 'Hangout',
+        DeskPetMode.play => 'Play',
+        DeskPetMode.cuddle => 'Cuddle',
+        DeskPetMode.nap => 'Nap',
+        DeskPetMode.needy => 'Needy',
+      };
+
+      String get command => switch (this) {
+        DeskPetMode.hangout => 'hangout',
+        DeskPetMode.play => 'play',
+        DeskPetMode.cuddle => 'cuddle',
+        DeskPetMode.nap => 'nap',
+        DeskPetMode.needy => 'needy',
+      };
+
+      String get description => switch (this) {
+        DeskPetMode.hangout => 'Default pet mode. It idles nearby and shows small autonomous reactions.',
+        DeskPetMode.play => 'More active, energetic scenes and playful attention-seeking behavior.',
+        DeskPetMode.cuddle => 'Affectionate mode with hearts, kisses, and softer reactions.',
+        DeskPetMode.nap => 'Sleepier behavior with longer pauses and drowsy expressions.',
+        DeskPetMode.needy => 'Wants attention and reacts like it is trying to get noticed.',
+      };
+    }
+
 class DeskCompanionStudioScreen extends StatefulWidget {
   const DeskCompanionStudioScreen({super.key});
 
@@ -150,6 +203,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _bannerSpeed = 35;
   double _brushSize = 2;
   DeskExpression _selectedExpression = DeskExpression.happy;
+  DeskPersonality _selectedPersonality = DeskPersonality.curious;
+  DeskPetMode _selectedPetMode = DeskPetMode.hangout;
   Timer? _liveSyncTimer;
 
   @override
@@ -180,6 +235,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final controller = context.watch<DeskCompanionController>();
     _syncTextController(_relayBaseUrlController, controller.relayBaseUrl);
     _syncTextController(_deviceTokenController, controller.deviceToken);
+    final currentPersonality =
+      _personalityFromCommand(controller.petPersonality) ??
+        _selectedPersonality;
+    final currentPetMode =
+      _petModeFromCommand(controller.activePetMode) ?? _selectedPetMode;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Desk Companion')),
@@ -429,6 +489,97 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Pet companion',
+                  subtitle:
+                      'Current personality: ${currentPersonality.label}. Active pet mode: ${currentPetMode.label}.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Personality',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskPersonality.values
+                            .map(
+                              (personality) => ChoiceChip(
+                                label: Text(personality.label),
+                                selected: _selectedPersonality == personality,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedPersonality =
+                                              personality,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedPersonality.description,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy || !controller.canControlDevice
+                              ? null
+                              : () => _sendPersonality(controller),
+                          icon: const Icon(Icons.pets_outlined),
+                          label: Text(
+                            'Set ${_selectedPersonality.label} personality',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Interactive mode',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskPetMode.values
+                            .map(
+                              (petMode) => ChoiceChip(
+                                label: Text(petMode.label),
+                                selected: _selectedPetMode == petMode,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedPetMode = petMode,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedPetMode.description,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: controller.busy || !controller.canControlDevice
+                              ? null
+                              : () => _triggerPetMode(controller),
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: Text('Activate ${_selectedPetMode.label} mode'),
+                        ),
                       ),
                     ],
                   ),
@@ -1180,6 +1331,20 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  Future<void> _sendPersonality(DeskCompanionController controller) async {
+    await _perform(
+      () => controller.setPetPersonality(_selectedPersonality.command),
+      success: '${_selectedPersonality.label} personality set.',
+    );
+  }
+
+  Future<void> _triggerPetMode(DeskCompanionController controller) async {
+    await _perform(
+      () => controller.triggerPetMode(_selectedPetMode.command),
+      success: '${_selectedPetMode.label} mode activated.',
+    );
+  }
+
   Future<void> _sendCanvas(DeskCompanionController controller) async {
     final payload = OledBitmapCodec.fromBitmap(
       bitmap: _drawBitmap,
@@ -1286,6 +1451,24 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       return '${age.inMinutes}m ago';
     }
     return '${age.inHours}h ago';
+  }
+
+  DeskPersonality? _personalityFromCommand(String value) {
+    for (final personality in DeskPersonality.values) {
+      if (personality.command == value.trim()) {
+        return personality;
+      }
+    }
+    return null;
+  }
+
+  DeskPetMode? _petModeFromCommand(String value) {
+    for (final petMode in DeskPetMode.values) {
+      if (petMode.command == value.trim()) {
+        return petMode;
+      }
+    }
+    return null;
   }
 }
 
