@@ -67,7 +67,10 @@ The ESP32 posts:
   "relayUrl": "https://relay.example.com",
   "deviceToken": "desk-01",
   "personality": "curious",
-  "petMode": "hangout"
+  "petMode": "hangout",
+  "bondLevel": 50,
+  "energyLevel": 72,
+  "boredomLevel": 28
 }
 ```
 
@@ -84,7 +87,10 @@ Standard BLE status notifications contain:
   "ssid": "Home WiFi",
   "ip": "192.168.1.55",
   "personality": "curious",
-  "petMode": "hangout"
+  "petMode": "hangout",
+  "bondLevel": 50,
+  "energyLevel": 72,
+  "boredomLevel": 28
 }
 ```
 
@@ -171,9 +177,29 @@ Supported pet modes in the first version:
 - `play`
 - `cuddle`
 - `nap`
+- `party`
 - `needy`
 
 These commands set the device's autonomous idle behavior and also trigger a short reaction scene before returning to the current content.
+
+- `care_action`
+
+```json
+{
+  "type": "care_action",
+  "action": "pet"
+}
+```
+
+Supported care actions:
+
+- `pet`
+- `cheer`
+- `comfort`
+- `dance`
+- `surprise`
+
+Care actions temporarily trigger a reaction scene and also adjust the companion's internal relationship and needs stats.
 
 - `set_note`
 
@@ -254,5 +280,7 @@ Remote relay image delivery uses `set_image` with a base64 payload instead.
 ## Pet behavior notes
 
 - The device now keeps a persistent `personality` and `petMode` in preferences.
+- The device also keeps persistent `bondLevel`, `energyLevel`, and `boredomLevel` values in preferences.
 - While the display is idle, the firmware can trigger short autonomous pet-like reactions based on those settings.
+- The firmware can shift itself into `party`, `nap`, or `needy` behavior as those needs change over time.
 - Notes, banners, and hardware button interactions can trigger a brief emotional reaction before the device returns to its previous display mode.

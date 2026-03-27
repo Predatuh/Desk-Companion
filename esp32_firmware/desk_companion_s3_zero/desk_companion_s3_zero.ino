@@ -65,6 +65,7 @@ String relayUrl = "";
 String deviceToken = "";
 String petPersonality = "curious";
 String activePetMode = "hangout";
+String activeCareAction = "";
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -79,12 +80,24 @@ unsigned long lastRelayStatusPushMs = 0;
 unsigned long lastRelaySuccessMs = 0;
 unsigned long lastWifiCheckMs = 0;
 unsigned long lastWifiBeginMs = 0;
+unsigned long lastCompanionTickMs = 0;
+unsigned long lastPetBeatMs = 0;
 bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
+uint8_t petCycleStep = 0;
 String availableWifiNetworks[10];
 int availableWifiNetworkCount = 0;
+DisplayMode transientResumeMode = MODE_IDLE;
+String transientResumeStatus = "Ready";
+String transientResumeExpression = "happy";
+String transientResumeFlower = "rose";
+bool transientActive = false;
+unsigned long transientEndsAt = 0;
+int bondLevel = 50;
+int energyLevel = 72;
+int boredomLevel = 28;
 
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
@@ -126,10 +139,20 @@ void renderCurrentMode();
 String petDisplayLabel(const String& value);
 String normalizePetPersonality(const String& value);
 String normalizePetMode(const String& value);
+String normalizeCareAction(const String& value);
 String petAmbientStatus();
+int clampLevel(int value);
+String pickAutonomousPetExpression();
+String pickReactionExpression(const String& trigger);
+String currentAttentionStatus();
 void persistPetState();
 void setPetPersonality(const String& personality, bool persist = true);
 void triggerPetMode(const String& petMode, bool persist = true);
+void sendCareAction(const String& action);
+void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus);
+void restoreTransientMode();
+void updateCompanionNeeds();
+void updatePetBehavior();
 void setIdleStatus(const String& value);
 void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "");
@@ -296,7 +319,10 @@ String buildStatusJson() {
   json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
   json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
-  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\"";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"bondLevel\":" + String(bondLevel) + ",";
+  json += "\"energyLevel\":" + String(energyLevel) + ",";
+  json += "\"boredomLevel\":" + String(boredomLevel);
   json += "}";
   return json;
 }
@@ -308,7 +334,10 @@ String buildBleStatusJson() {
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
-  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\"";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"bondLevel\":" + String(bondLevel) + ",";
+  json += "\"energyLevel\":" + String(energyLevel) + ",";
+  json += "\"boredomLevel\":" + String(boredomLevel);
   json += "}";
   return json;
 }
@@ -321,6 +350,9 @@ String buildBleStatusWithNetworksJson() {
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
   json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
+  json += "\"bondLevel\":" + String(bondLevel) + ",";
+  json += "\"energyLevel\":" + String(energyLevel) + ",";
+  json += "\"boredomLevel\":" + String(boredomLevel) + ",";
   json += "\"wifiNetworks\":[";
   for (int i = 0; i < availableWifiNetworkCount; i++) {
     if (i > 0) {
@@ -413,13 +445,29 @@ String normalizePetMode(const String& value) {
       trimmed == "play" ||
       trimmed == "cuddle" ||
       trimmed == "nap" ||
+      trimmed == "party" ||
       trimmed == "needy") {
     return trimmed;
   }
   return "hangout";
 }
 
+String normalizeCareAction(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "pet" ||
+      trimmed == "cheer" ||
+      trimmed == "comfort" ||
+      trimmed == "dance" ||
+      trimmed == "surprise") {
+    return trimmed;
+  }
+  return "pet";
+}
+
 String petAmbientStatus() {
+  if (!activeCareAction.isEmpty()) {
+    return currentAttentionStatus();
+  }
   if (activePetMode == "play") {
     return "Feeling playful";
   }
@@ -429,17 +477,193 @@ String petAmbientStatus() {
   if (activePetMode == "nap") {
     return "Drifting off";
   }
+  if (activePetMode == "party") {
+    return "In party mode";
+  }
   if (activePetMode == "needy") {
     return "Seeking attention";
   }
   return petDisplayLabel(petPersonality) + " mood";
 }
 
+int clampLevel(int value) {
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 100) {
+    return 100;
+  }
+  return value;
+}
+
+String currentAttentionStatus() {
+  if (activeCareAction == "pet") {
+    return "Loved the pat";
+  }
+  if (activeCareAction == "cheer") {
+    return "Feeling brighter";
+  }
+  if (activeCareAction == "comfort") {
+    return "Feeling safe";
+  }
+  if (activeCareAction == "dance") {
+    return "Party time";
+  }
+  if (activeCareAction == "surprise") {
+    return "Feeling sparkly";
+  }
+  if (bondLevel < 30) {
+    return "Needs attention";
+  }
+  if (energyLevel < 25) {
+    return "Running low";
+  }
+  if (boredomLevel > 70) {
+    return "Wants a game";
+  }
+  return petDisplayLabel(petPersonality) + " mood";
+}
+
+String pickAutonomousPetExpression() {
+  const uint8_t cycle = petCycleStep++ % 4;
+  if (activePetMode == "party") {
+    if (cycle == 0) return "star_eyes";
+    if (cycle == 1) return "laugh";
+    if (cycle == 2) return "excited";
+    return "tongue";
+  }
+  if (activePetMode == "play") {
+    if (cycle == 0) return "excited";
+    if (cycle == 1) return "laugh";
+    if (cycle == 2) return "wink";
+    return "tongue";
+  }
+  if (activePetMode == "cuddle") {
+    if (cycle == 0) return "love";
+    if (cycle == 1) return "kiss";
+    if (cycle == 2) return "heart";
+    return "smile";
+  }
+  if (activePetMode == "nap") {
+    if (cycle == 0) return "sleepy";
+    if (cycle == 1) return "smile";
+    if (cycle == 2) return "thinking";
+    return "sleepy";
+  }
+  if (activePetMode == "needy") {
+    if (cycle == 0) return "sad";
+    if (cycle == 1) return "look_around";
+    if (cycle == 2) return "kiss";
+    return "surprised";
+  }
+  if (petPersonality == "playful") {
+    if (cycle == 0) return "excited";
+    if (cycle == 1) return "laugh";
+    if (cycle == 2) return "wink";
+    return "tongue";
+  }
+  if (petPersonality == "cuddly") {
+    if (cycle == 0) return "love";
+    if (cycle == 1) return "heart";
+    if (cycle == 2) return "kiss";
+    return "smile";
+  }
+  if (petPersonality == "sleepy") {
+    if (cycle == 0) return "sleepy";
+    if (cycle == 1) return "smile";
+    if (cycle == 2) return "thinking";
+    return "sleepy";
+  }
+  if (cycle == 0) return "look_around";
+  if (cycle == 1) return "thinking";
+  if (cycle == 2) return "confused";
+  return "surprised";
+}
+
+String pickReactionExpression(const String& trigger) {
+  if (trigger == "dance") {
+    return "star_eyes";
+  }
+  if (trigger == "pet") {
+    return petPersonality == "cuddly" ? "love" : "heart";
+  }
+  if (trigger == "cheer") {
+    return "excited";
+  }
+  if (trigger == "comfort") {
+    return petPersonality == "sleepy" ? "smile" : "kiss";
+  }
+  if (trigger == "surprise") {
+    const uint8_t cycle = petCycleStep++ % 4;
+    if (cycle == 0) return "surprised";
+    if (cycle == 1) return "star_eyes";
+    if (cycle == 2) return "laugh";
+    return "tongue";
+  }
+  if (trigger == "button_clear") {
+    return "sad";
+  }
+  if (trigger == "button_next") {
+    return petPersonality == "playful" ? "wink" : "surprised";
+  }
+  if (trigger == "note") {
+    return petPersonality == "cuddly" ? "love" : "thinking";
+  }
+  if (trigger == "banner") {
+    return activePetMode == "party" ? "laugh" : "kiss";
+  }
+  if (trigger == "personality" || trigger == "pet_mode") {
+    return pickAutonomousPetExpression();
+  }
+  return "happy";
+}
+
 void persistPetState() {
   preferences.begin("desk-cfg", false);
   preferences.putString("pet_personality", petPersonality);
   preferences.putString("pet_mode", activePetMode);
+  preferences.putInt("bond_level", bondLevel);
+  preferences.putInt("energy_level", energyLevel);
+  preferences.putInt("boredom_level", boredomLevel);
   preferences.end();
+}
+
+void restoreTransientMode() {
+  if (!transientActive) {
+    return;
+  }
+
+  transientActive = false;
+  currentMode = transientResumeMode;
+  currentExpression = transientResumeExpression;
+  currentFlower = transientResumeFlower;
+  statusText = currentMode == MODE_IDLE ? currentAttentionStatus() : transientResumeStatus;
+  expressionPhase = 0;
+  activeCareAction = "";
+  renderCurrentMode();
+  publishStatus();
+}
+
+void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus) {
+  if (transientActive) {
+    restoreTransientMode();
+  }
+
+  transientResumeMode = currentMode;
+  transientResumeStatus = currentMode == MODE_IDLE ? currentAttentionStatus() : statusText;
+  transientResumeExpression = currentExpression;
+  transientResumeFlower = currentFlower;
+  transientActive = true;
+  transientEndsAt = millis() + durationMs;
+  lastPetBeatMs = millis();
+
+  currentExpression = expression;
+  expressionPhase = 0;
+  lastExpressionTickMs = 0;
+  currentMode = MODE_EXPRESSION;
+  statusText = nextStatus;
+  renderCurrentMode();
+  publishStatus();
 }
 
 void setPetPersonality(const String& personality, bool persist) {
@@ -447,23 +671,122 @@ void setPetPersonality(const String& personality, bool persist) {
   if (persist) {
     persistPetState();
   }
-  statusText = petDisplayLabel(petPersonality) + " personality";
-  if (currentMode == MODE_IDLE) {
-    renderCurrentMode();
-  }
-  publishStatus();
+  startTransientExpression(
+    pickReactionExpression("personality"),
+    2200,
+    petDisplayLabel(petPersonality) + " personality"
+  );
 }
 
 void triggerPetMode(const String& petMode, bool persist) {
   activePetMode = normalizePetMode(petMode);
+  if (activePetMode == "party") {
+    boredomLevel = clampLevel(boredomLevel - 20);
+    energyLevel = clampLevel(energyLevel - 8);
+  }
   if (persist) {
     persistPetState();
   }
-  statusText = petDisplayLabel(activePetMode) + " mode";
-  if (currentMode == MODE_IDLE) {
-    renderCurrentMode();
+  startTransientExpression(
+    pickReactionExpression("pet_mode"),
+    2600,
+    petDisplayLabel(activePetMode) + " mode"
+  );
+}
+
+void sendCareAction(const String& action) {
+  activeCareAction = normalizeCareAction(action);
+
+  if (activeCareAction == "pet") {
+    bondLevel = clampLevel(bondLevel + 8);
+    boredomLevel = clampLevel(boredomLevel - 8);
+  } else if (activeCareAction == "cheer") {
+    energyLevel = clampLevel(energyLevel + 10);
+    boredomLevel = clampLevel(boredomLevel - 6);
+  } else if (activeCareAction == "comfort") {
+    bondLevel = clampLevel(bondLevel + 5);
+    energyLevel = clampLevel(energyLevel + 4);
+  } else if (activeCareAction == "dance") {
+    activePetMode = "party";
+    energyLevel = clampLevel(energyLevel - 10);
+    boredomLevel = clampLevel(boredomLevel - 18);
+  } else if (activeCareAction == "surprise") {
+    boredomLevel = clampLevel(boredomLevel - 12);
+    energyLevel = clampLevel(energyLevel - 4);
   }
-  publishStatus();
+
+  persistPetState();
+  startTransientExpression(
+    pickReactionExpression(activeCareAction),
+    activeCareAction == "dance" ? 3600 : 2200,
+    currentAttentionStatus()
+  );
+}
+
+void updateCompanionNeeds() {
+  if (millis() - lastCompanionTickMs < 60000UL) {
+    return;
+  }
+
+  lastCompanionTickMs = millis();
+  boredomLevel = clampLevel(boredomLevel + 2);
+  energyLevel = clampLevel(energyLevel - 1);
+  if (bondLevel > 10) {
+    bondLevel = clampLevel(bondLevel - 1);
+  }
+
+  if (energyLevel <= 20) {
+    activePetMode = "nap";
+  } else if (boredomLevel >= 80) {
+    activePetMode = "needy";
+  } else if (activePetMode == "needy" && boredomLevel <= 40) {
+    activePetMode = "hangout";
+  }
+
+  persistPetState();
+}
+
+void updatePetBehavior() {
+  updateCompanionNeeds();
+
+  const unsigned long now = millis();
+  if (transientActive && now >= transientEndsAt) {
+    restoreTransientMode();
+    return;
+  }
+
+  if (currentMode != MODE_IDLE || transientActive) {
+    return;
+  }
+
+  unsigned long intervalMs = 18000UL;
+  if (activePetMode == "party") {
+    intervalMs = 9000UL;
+  } else if (activePetMode == "play") {
+    intervalMs = 12000UL;
+  } else if (activePetMode == "nap") {
+    intervalMs = 26000UL;
+  } else if (activePetMode == "needy") {
+    intervalMs = 14000UL;
+  } else if (petPersonality == "playful") {
+    intervalMs = 13000UL;
+  } else if (petPersonality == "sleepy") {
+    intervalMs = 24000UL;
+  }
+
+  if (bondLevel < 30) {
+    intervalMs = 12000UL;
+  }
+  if (boredomLevel > 75) {
+    intervalMs = 10000UL;
+  }
+
+  if (now - lastPetBeatMs < intervalMs) {
+    return;
+  }
+
+  startTransientExpression(pickAutonomousPetExpression(), 2200, currentAttentionStatus());
+}
 }
 
 bool decodeBase64IntoImage(const String& input) {
@@ -776,6 +1099,12 @@ void renderIdle() {
     drawEye(rightX, eyeY, 26, 18, 5, pupilDx * 2, 0);
     drawSmile(SCREEN_WIDTH / 2, mouthY - 2, 26);
     display.fillCircle(14 + (idleOrbit % 4) * 2, 50 - (idleOrbit % 2) * 2, 2, SH110X_WHITE);
+  } else if (activePetMode == "party") {
+    drawEye(leftX, eyeY, 26, 18, 5, pupilDx * 2, 0);
+    drawEye(rightX, eyeY, 26, 18, 5, -pupilDx * 2, 0);
+    drawSmile(SCREEN_WIDTH / 2, mouthY - 2, 28);
+    drawIconStar(16, 14 + (idleOrbit % 2) * 2, 3);
+    drawIconStar(112, 16 + ((idleOrbit + 1) % 2) * 2, 3);
   } else {
     drawEye(leftX, eyeY, 24, 16, 5, pupilDx * 2, 1);
     drawEye(rightX, eyeY, 24, 16, 5, -pupilDx, -1);
@@ -1088,6 +1417,17 @@ void renderExpressionFrame() {
     drawHappyArc(RX, EY, EW);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
   }
+  else if (currentExpression == "confused") {
+    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int browTwitch = (int)(wave * 3.0f);
+    drawEye(LX, EY - 2, EW, EH + 4, ER, -2, 0);
+    drawEye(RX, EY + 3, EW - 6, EH - 6, ER - 2, 2, 0);
+    drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
+    drawBrow(RX - 8, EY - 9, RX + 14, EY - 13 + browTwitch);
+    for (int tt = 0; tt < 3; tt++) {
+      display.drawLine(SCREEN_WIDTH/2 - 12, MY + 4 + tt, SCREEN_WIDTH/2 + 12, MY - 2 + tt, SH110X_WHITE);
+    }
+  }
   // ── Look around: smooth sinusoidal pupil sweep ──
   else if (currentExpression == "look_around") {
     // True sine sweep — much smoother than lookup table
@@ -1130,6 +1470,24 @@ void renderExpressionFrame() {
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
   }
+  else if (currentExpression == "laugh") {
+    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int shakeX = (int)(wave * 3.0f) - 1;
+    drawHappyArc(LX + shakeX, EY, EW);
+    drawHappyArc(RX + shakeX, EY, EW);
+    int mw = 20 + (int)(wave * 4.0f);
+    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2, MY - 5, mw, 12, 4, SH110X_WHITE);
+    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2 + 2, MY - 3, mw - 4, 8, 3, SH110X_BLACK);
+  }
+  else if (currentExpression == "star_eyes") {
+    drawEye(LX, EY, EW, EH, ER, 0, 0);
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int starR = 5 + (int)(twinkle * 2.0f);
+    drawIconStar(LX, EY, starR);
+    drawIconStar(RX, EY, starR);
+    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
+  }
   // ── Excited: wide bouncing eyes, can't-hold-the-smile ──
   else if (currentExpression == "excited") {
     float bounce = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
@@ -1140,6 +1498,20 @@ void renderExpressionFrame() {
     drawBrow(LX - 14, EY - 20 - eyeShift, LX + 14, EY - 20 - eyeShift);
     drawBrow(RX - 14, EY - 20 - eyeShift, RX + 14, EY - 20 - eyeShift);
     drawSmile(SCREEN_WIDTH / 2, MY - 2 - (int)(bounce * 2.0f), 28);
+  }
+  else if (currentExpression == "tongue") {
+    for (int tt = 0; tt < 3; tt++) {
+      display.drawLine(LX - EW/2, EY + tt, LX + EW/2, EY + tt, SH110X_WHITE);
+    }
+    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    for (int tt = 0; tt < 2; tt++) {
+      display.drawLine(SCREEN_WIDTH/2 - 10, MY - 2 + tt, SCREEN_WIDTH/2, MY + 2 + tt, SH110X_WHITE);
+      display.drawLine(SCREEN_WIDTH/2, MY + 2 + tt, SCREEN_WIDTH/2 + 10, MY - 2 + tt, SH110X_WHITE);
+    }
+    float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int tongueH = 8 + (int)(wobble * 3.0f);
+    display.fillRoundRect(SCREEN_WIDTH/2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
+    display.fillCircle(SCREEN_WIDTH/2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
   }
   // ── Default / Idle personality: neutral face with micro-movements ──
   else {
@@ -1167,6 +1539,8 @@ void renderExpressionFrame() {
 void setIdleStatus(const String& value) {
   statusText = value;
   currentMode = MODE_IDLE;
+  transientActive = false;
+  activeCareAction = "";
   renderCurrentMode();
   publishStatus();
 }
@@ -1184,6 +1558,9 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   preferences.putString("note_icons", currentNoteIcons);
   preferences.putString("note_flower", flowerAccent);
   preferences.end();
+  bondLevel = clampLevel(bondLevel + 4);
+  boredomLevel = clampLevel(boredomLevel - 10);
+  persistPetState();
 
   // Push into circular queue, evicting oldest when full
   if (noteQueueCount < NOTE_QUEUE_MAX) {
@@ -1205,16 +1582,21 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
+  startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
 }
 
 void setBanner(const String& text, int speed) {
   currentBanner = text;
   bannerSpeed = speed;
   bannerOffset = SCREEN_WIDTH;
+  boredomLevel = clampLevel(boredomLevel - 6);
+  energyLevel = clampLevel(energyLevel - 2);
+  persistPetState();
   currentMode = MODE_BANNER;
   statusText = "Banner running";
   renderCurrentMode();
   publishStatus();
+  startTransientExpression(pickReactionExpression("banner"), 1800, "Showing off");
 }
 
 void setExpression(const String& expression) {
@@ -1572,6 +1954,9 @@ void tryStoredPrefs() {
   activePetMode = normalizePetMode(
     preferences.getString("pet_mode", activePetMode)
   );
+  bondLevel = clampLevel(preferences.getInt("bond_level", bondLevel));
+  energyLevel = clampLevel(preferences.getInt("energy_level", energyLevel));
+  boredomLevel = clampLevel(preferences.getInt("boredom_level", boredomLevel));
   // Restore last note
   const String savedNote = preferences.getString("note_text", "");
   if (!savedNote.isEmpty()) {
@@ -1664,6 +2049,11 @@ void handleCommandJson(const String& body) {
 
   if (type == "trigger_pet_mode") {
     triggerPetMode(extractJsonStringField(body, "petMode", "hangout"));
+    return;
+  }
+
+  if (type == "care_action") {
+    sendCareAction(extractJsonStringField(body, "action", "pet"));
     return;
   }
 
@@ -1924,6 +2314,10 @@ void handleButtons() {
       statusText = "Showing note";
       renderCurrentMode();
       publishStatus();
+      bondLevel = clampLevel(bondLevel + 2);
+      boredomLevel = clampLevel(boredomLevel - 4);
+      persistPetState();
+      startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
     }
   }
   btnNextLast = nextNow;
@@ -1948,6 +2342,10 @@ void handleButtons() {
       setIdleStatus("Ready");
       renderCurrentMode();
       publishStatus();
+      energyLevel = clampLevel(energyLevel + 4);
+      boredomLevel = clampLevel(boredomLevel + 6);
+      persistPetState();
+      startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
     }
   }
   if (clearNow == HIGH) {
@@ -2039,6 +2437,8 @@ void loop() {
       renderFlowerFrame();
     }
   }
+
+  updatePetBehavior();
 
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {

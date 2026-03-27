@@ -28,6 +28,9 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _wifiNetworksKey = 'lastWifiNetworks';
   static const String _petPersonalityKey = 'petPersonality';
   static const String _activePetModeKey = 'activePetMode';
+  static const String _bondLevelKey = 'bondLevel';
+  static const String _energyLevelKey = 'energyLevel';
+  static const String _boredomLevelKey = 'boredomLevel';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -38,6 +41,9 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
+  int _bondLevel = 50;
+  int _energyLevel = 72;
+  int _boredomLevel = 28;
   List<String> _availableWifiNetworks = const [];
   String? _lastRelayError;
   int _relayPendingCount = 0;
@@ -71,6 +77,9 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceToken => _deviceToken;
   String get petPersonality => _petPersonality;
   String get activePetMode => _activePetMode;
+  int get bondLevel => _bondLevel;
+  int get energyLevel => _energyLevel;
+  int get boredomLevel => _boredomLevel;
   List<String> get availableWifiNetworks => _availableWifiNetworks;
   int get relayPendingCount => _relayPendingCount;
   DateTime? get relayLastCommandAt => _relayLastCommandAt;
@@ -164,6 +173,9 @@ class DeskCompanionController extends ChangeNotifier {
       (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
     _activePetMode =
       (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
+    _bondLevel = prefs.getInt(_bondLevelKey) ?? _bondLevel;
+    _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
+    _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
     final savedNetworks = prefs.getStringList(_wifiNetworksKey);
     if (savedNetworks != null && savedNetworks.isNotEmpty) {
       _availableWifiNetworks = savedNetworks;
@@ -199,6 +211,9 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_modeKey, _mode);
     await prefs.setString(_petPersonalityKey, _petPersonality);
     await prefs.setString(_activePetModeKey, _activePetMode);
+    await prefs.setInt(_bondLevelKey, _bondLevel);
+    await prefs.setInt(_energyLevelKey, _energyLevel);
+    await prefs.setInt(_boredomLevelKey, _boredomLevel);
     if (_availableWifiNetworks.isNotEmpty) {
       await prefs.setStringList(_wifiNetworksKey, _availableWifiNetworks);
     }
@@ -499,6 +514,17 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendCareAction(String action) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'care_action', 'action': action},
+        mode: _mode,
+        bleLabel: 'Care action sent over BLE.',
+        relayLabel: 'Care action queued through relay.',
+      );
+    });
+  }
+
   Future<void> sendLiveBitmap(Uint8List bitmap) async {
     if (!isBleConnected) {
       return;
@@ -739,6 +765,21 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingPetMode = (payload['petMode'] as String? ?? '').trim();
     if (incomingPetMode.isNotEmpty) {
       _activePetMode = incomingPetMode;
+    }
+
+    final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();
+    if (incomingBondLevel != null) {
+      _bondLevel = incomingBondLevel;
+    }
+
+    final incomingEnergyLevel = (payload['energyLevel'] as num?)?.toInt();
+    if (incomingEnergyLevel != null) {
+      _energyLevel = incomingEnergyLevel;
+    }
+
+    final incomingBoredomLevel = (payload['boredomLevel'] as num?)?.toInt();
+    if (incomingBoredomLevel != null) {
+      _boredomLevel = incomingBoredomLevel;
     }
 
     final wifiNetworks = payload['wifiNetworks'];

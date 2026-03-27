@@ -39,6 +39,7 @@ extension DeskFlowerExt on DeskFlower {
 enum DeskExpression {
   happy,
   smile,
+  confused,
   lookAround,
   kiss,
   heart,
@@ -49,13 +50,17 @@ enum DeskExpression {
   love,
   thinking,
   wink,
+  laugh,
+  starEyes,
   excited,
+  tongue,
 }
 
 extension DeskExpressionLabel on DeskExpression {
   String get label => switch (this) {
         DeskExpression.happy => 'Happy',
         DeskExpression.smile => 'Smiling',
+      DeskExpression.confused => 'Confused',
         DeskExpression.lookAround => 'Look around',
         DeskExpression.kiss => 'Blow kisses',
         DeskExpression.heart => 'Big heart',
@@ -66,12 +71,16 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'In love',
         DeskExpression.thinking => 'Thinking',
         DeskExpression.wink => 'Wink',
+        DeskExpression.laugh => 'Laughing',
+        DeskExpression.starEyes => 'Star eyes',
         DeskExpression.excited => 'Excited',
+        DeskExpression.tongue => 'Tongue out',
       };
 
   String get command => switch (this) {
         DeskExpression.happy => 'happy',
         DeskExpression.smile => 'smile',
+      DeskExpression.confused => 'confused',
         DeskExpression.lookAround => 'look_around',
         DeskExpression.kiss => 'kiss',
         DeskExpression.heart => 'heart',
@@ -82,12 +91,16 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'love',
         DeskExpression.thinking => 'thinking',
         DeskExpression.wink => 'wink',
+        DeskExpression.laugh => 'laugh',
+        DeskExpression.starEyes => 'star_eyes',
         DeskExpression.excited => 'excited',
+        DeskExpression.tongue => 'tongue',
       };
 
   String get subtitle => switch (this) {
         DeskExpression.happy => 'Bright open eyes with a cheerful grin.',
         DeskExpression.smile => 'Soft smile with squinted arc eyes.',
+      DeskExpression.confused => 'Asymmetric brows and a tilted puzzled mouth.',
         DeskExpression.lookAround => 'Pupils drift left and right like a curious bot.',
         DeskExpression.kiss => 'One wink, hearts float up from the lips.',
         DeskExpression.heart => 'A big pulsing heart that fills the screen.',
@@ -98,62 +111,96 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'Heart-shaped pupils and a giant grin.',
         DeskExpression.thinking => 'One squinted eye, gaze up, thought bubble.',
         DeskExpression.wink => 'One eye closes playfully, slight smile.',
+        DeskExpression.laugh => 'Eyes crinkle shut, huge open-mouth laugh.',
+        DeskExpression.starEyes => 'Star-shaped pupils shimmer with amazement.',
         DeskExpression.excited => 'Wide bouncing eyes, can\'t stop smiling.',
+        DeskExpression.tongue => 'One wink and a cheeky tongue poke.',
       };
 }
 
-    enum DeskPersonality { playful, cuddly, sleepy, curious }
+enum DeskPersonality { playful, cuddly, sleepy, curious }
 
-    extension DeskPersonalityExt on DeskPersonality {
-      String get label => switch (this) {
+extension DeskPersonalityExt on DeskPersonality {
+  String get label => switch (this) {
         DeskPersonality.playful => 'Playful',
         DeskPersonality.cuddly => 'Cuddly',
         DeskPersonality.sleepy => 'Sleepy',
         DeskPersonality.curious => 'Curious',
       };
 
-      String get command => switch (this) {
+  String get command => switch (this) {
         DeskPersonality.playful => 'playful',
         DeskPersonality.cuddly => 'cuddly',
         DeskPersonality.sleepy => 'sleepy',
         DeskPersonality.curious => 'curious',
       };
 
-      String get description => switch (this) {
+  String get description => switch (this) {
         DeskPersonality.playful => 'Chases attention, reacts fast, and leans toward excited little scenes.',
         DeskPersonality.cuddly => 'Warm, affectionate, and likely to answer you with hearts and soft faces.',
         DeskPersonality.sleepy => 'Calmer and slower, with heavier eyelids and relaxed reactions.',
         DeskPersonality.curious => 'Watches the room, looks around, and reacts like a tiny thoughtful companion.',
       };
-    }
+}
 
-    enum DeskPetMode { hangout, play, cuddle, nap, needy }
+enum DeskPetMode { hangout, play, cuddle, nap, needy, party }
 
-    extension DeskPetModeExt on DeskPetMode {
-      String get label => switch (this) {
+extension DeskPetModeExt on DeskPetMode {
+  String get label => switch (this) {
         DeskPetMode.hangout => 'Hangout',
         DeskPetMode.play => 'Play',
         DeskPetMode.cuddle => 'Cuddle',
         DeskPetMode.nap => 'Nap',
         DeskPetMode.needy => 'Needy',
+        DeskPetMode.party => 'Party',
       };
 
-      String get command => switch (this) {
+  String get command => switch (this) {
         DeskPetMode.hangout => 'hangout',
         DeskPetMode.play => 'play',
         DeskPetMode.cuddle => 'cuddle',
         DeskPetMode.nap => 'nap',
         DeskPetMode.needy => 'needy',
+        DeskPetMode.party => 'party',
       };
 
-      String get description => switch (this) {
+  String get description => switch (this) {
         DeskPetMode.hangout => 'Default pet mode. It idles nearby and shows small autonomous reactions.',
         DeskPetMode.play => 'More active, energetic scenes and playful attention-seeking behavior.',
         DeskPetMode.cuddle => 'Affectionate mode with hearts, kisses, and softer reactions.',
         DeskPetMode.nap => 'Sleepier behavior with longer pauses and drowsy expressions.',
         DeskPetMode.needy => 'Wants attention and reacts like it is trying to get noticed.',
+        DeskPetMode.party => 'Celebratory mode inspired by desk companions that dance, show off, and get extra excited.',
       };
-    }
+}
+
+enum DeskCareAction { pet, cheer, comfort, dance, surprise }
+
+extension DeskCareActionExt on DeskCareAction {
+  String get label => switch (this) {
+        DeskCareAction.pet => 'Pet',
+        DeskCareAction.cheer => 'Cheer up',
+        DeskCareAction.comfort => 'Comfort',
+        DeskCareAction.dance => 'Dance',
+        DeskCareAction.surprise => 'Surprise me',
+      };
+
+  String get command => switch (this) {
+        DeskCareAction.pet => 'pet',
+        DeskCareAction.cheer => 'cheer',
+        DeskCareAction.comfort => 'comfort',
+        DeskCareAction.dance => 'dance',
+        DeskCareAction.surprise => 'surprise',
+      };
+
+  String get description => switch (this) {
+        DeskCareAction.pet => 'Simulates a head pat or affectionate touch response.',
+        DeskCareAction.cheer => 'Gives it a happy little boost when it feels flat.',
+        DeskCareAction.comfort => 'Settles it down like a reassuring companion moment.',
+        DeskCareAction.dance => 'Triggers a high-energy party reaction.',
+        DeskCareAction.surprise => 'Lets the companion choose a playful reaction on its own.',
+      };
+}
 
 class DeskCompanionStudioScreen extends StatefulWidget {
   const DeskCompanionStudioScreen({super.key});
@@ -189,6 +236,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskExpression _selectedExpression = DeskExpression.happy;
   DeskPersonality _selectedPersonality = DeskPersonality.curious;
   DeskPetMode _selectedPetMode = DeskPetMode.hangout;
+  DeskCareAction _selectedCareAction = DeskCareAction.pet;
   Timer? _liveSyncTimer;
 
   @override
@@ -555,6 +603,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _ChipLabel(label: 'Bond ${controller.bondLevel}%'),
+                          _ChipLabel(label: 'Energy ${controller.energyLevel}%'),
+                          _ChipLabel(label: 'Boredom ${controller.boredomLevel}%'),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
@@ -563,6 +621,45 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               : () => _triggerPetMode(controller),
                           icon: const Icon(Icons.auto_awesome_outlined),
                           label: Text('Activate ${_selectedPetMode.label} mode'),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Care action',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskCareAction.values
+                            .map(
+                              (action) => ChoiceChip(
+                                label: Text(action.label),
+                                selected: _selectedCareAction == action,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedCareAction = action,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedCareAction.description,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy || !controller.canControlDevice
+                              ? null
+                              : () => _sendCareAction(controller),
+                          icon: const Icon(Icons.favorite_outline),
+                          label: Text('Send ${_selectedCareAction.label} action'),
                         ),
                       ),
                     ],
@@ -1326,6 +1423,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     await _perform(
       () => controller.triggerPetMode(_selectedPetMode.command),
       success: '${_selectedPetMode.label} mode activated.',
+    );
+  }
+
+  Future<void> _sendCareAction(DeskCompanionController controller) async {
+    await _perform(
+      () => controller.sendCareAction(_selectedCareAction.command),
+      success: '${_selectedCareAction.label} action sent.',
     );
   }
 

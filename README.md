@@ -94,7 +94,7 @@ node server.js
 
 The ESP32 stores the relay base URL and token, then polls the relay for queued commands.
 
-The firmware also stores a pet personality and active pet mode so the device can keep acting like a small companion when the app is not actively controlling it.
+The firmware also stores a pet personality, active pet mode, and lightweight companion stats like bond, energy, and boredom so the device can keep acting like a small companion when the app is not actively controlling it. The app can now send care interactions such as petting, cheering up, comforting, dancing, and surprises, and the device reacts before returning to its current display mode.
 
 Firmware note:
 
