@@ -1094,7 +1094,7 @@ void setIdleStatus(const String& value) {
   publishStatus();
 }
 
-void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "") {
+void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent) {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
   currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);

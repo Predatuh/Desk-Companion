@@ -251,18 +251,22 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ? null
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
-                                      : controller.canControlDevice
-                                          ? () => controller.refreshDeviceStatus()
+                                      : controller.hasRelayTarget
+                                          ? () => _connectRelay(controller)
                                           : null,
                               icon: Icon(
                                 controller.isBleConnected
                                     ? Icons.link_off
-                                    : Icons.refresh,
+                                    : controller.isRelayOnline
+                                        ? Icons.cloud_done_outlined
+                                        : Icons.cloud_sync_outlined,
                               ),
                               label: Text(
                                 controller.isBleConnected
                                     ? 'Disconnect'
-                                    : 'Refresh status',
+                                    : controller.isRelayOnline
+                                        ? 'Refresh relay'
+                                        : 'Connect relay',
                               ),
                             ),
                           ),
@@ -381,9 +385,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             child: OutlinedButton.icon(
                               onPressed: controller.busy || !controller.hasRelayTarget
                                   ? null
-                                  : () => _checkRelayStatus(controller),
-                              icon: const Icon(Icons.cloud_sync_outlined),
-                              label: const Text('Check relay'),
+                                  : () => _connectRelay(controller),
+                              icon: Icon(
+                                controller.isRelayOnline
+                                    ? Icons.cloud_done_outlined
+                                    : Icons.cloud_sync_outlined,
+                              ),
+                              label: Text(
+                                controller.isRelayOnline
+                                    ? 'Refresh relay'
+                                    : 'Connect relay',
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -556,7 +568,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy
+                              onPressed: controller.busy || !controller.canControlDevice
                                   ? null
                                   : () => _sendNote(controller),
                               icon: const Icon(Icons.favorite_border),
@@ -566,7 +578,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: controller.busy
+                              onPressed: controller.busy || !controller.canControlDevice
                                   ? null
                                   : () => _perform(
                                         () => controller.clearDisplay(),
@@ -609,7 +621,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: controller.busy
+                          onPressed: controller.busy || !controller.canControlDevice
                               ? null
                               : () => _sendBanner(controller),
                           icon: const Icon(Icons.view_carousel_outlined),
@@ -653,7 +665,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: controller.busy
+                          onPressed: controller.busy || !controller.canControlDevice
                               ? null
                               : () => _perform(
                                     () => controller.sendFlower(
@@ -702,7 +714,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: controller.busy
+                          onPressed: controller.busy || !controller.canControlDevice
                               ? null
                               : () => _sendExpression(controller),
                           icon: const Icon(Icons.face_retouching_natural),
@@ -821,7 +833,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: controller.busy
+                              onPressed: controller.busy || !controller.canControlDevice
                                   ? null
                                   : () => _sendCanvas(controller),
                               icon: const Icon(Icons.draw_outlined),
@@ -906,7 +918,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed:
-                                  controller.busy || _selectedImage == null
+                                  controller.busy ||
+                                          _selectedImage == null ||
+                                          !controller.canControlDevice
                                       ? null
                                       : () => _sendImage(controller),
                               icon: const Icon(Icons.send_outlined),
@@ -1064,13 +1078,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  Future<void> _checkRelayStatus(DeskCompanionController controller) async {
+  Future<void> _connectRelay(DeskCompanionController controller) async {
     try {
       final ok = await controller.refreshDeviceStatus();
       if (!mounted) {
         return;
       }
-      _showMessage(ok ? 'Relay status refreshed.' : 'No relay status available yet.');
+      _showMessage(
+        ok
+            ? 'Relay connected. Remote sending is ready.'
+            : 'Device is not connected through the relay right now.',
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -1202,9 +1220,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       return 'Relay: not configured';
     }
     if (!controller.relayStatusKnown) {
-      return 'Relay: configured';
+      return 'Relay: ready to connect';
     }
-    return controller.isRelayOnline ? 'Relay: online' : 'Relay: waiting';
+    return controller.isRelayOnline ? 'Relay: connected' : 'Relay: not connected';
   }
 
   String _relayStatusText(DeskCompanionController controller) {
@@ -1215,7 +1233,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (lastSeenAt == null) {
       return controller.isBleConnected
           ? 'Relay is configured. Remote sends will use it when BLE is not available.'
-          : 'Relay is configured. Refresh status to confirm the device is checking in.';
+          : 'Relay is configured. Press Connect relay to verify the device is online.';
     }
 
     final age = DateTime.now().difference(lastSeenAt);

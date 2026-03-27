@@ -70,7 +70,7 @@ class DeskCompanionController extends ChangeNotifier {
   bool get isBleConnected => _bleState == CompanionBleState.connected;
   bool get hasRelayTarget =>
       _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
-  bool get canControlDevice => isBleConnected || hasRelayTarget;
+  bool get canControlDevice => isBleConnected || _relayOnline;
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
