@@ -69,6 +69,9 @@ String activeCareAction = "";
 String companionHair = "none";
 String companionEars = "none";
 String companionMustache = "none";
+String companionGlasses = "none";
+String companionHeadwear = "none";
+String companionPiercing = "none";
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -146,6 +149,9 @@ String normalizeCareAction(const String& value);
 String normalizeCompanionHair(const String& value);
 String normalizeCompanionEars(const String& value);
 String normalizeCompanionMustache(const String& value);
+String normalizeCompanionGlasses(const String& value);
+String normalizeCompanionHeadwear(const String& value);
+String normalizeCompanionPiercing(const String& value);
 String petAmbientStatus();
 int clampLevel(int value);
 String activePetBehavior();
@@ -331,6 +337,9 @@ String buildStatusJson() {
   json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
   json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
   json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
+  json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
+  json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
+  json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -349,6 +358,9 @@ String buildBleStatusJson() {
   json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
   json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
   json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
+  json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
+  json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
+  json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -367,6 +379,9 @@ String buildBleStatusWithNetworksJson() {
   json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
   json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
   json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
+  json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
+  json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
+  json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel) + ",";
@@ -509,6 +524,39 @@ String normalizeCompanionMustache(const String& value) {
   if (trimmed == "none" ||
       trimmed == "classic" ||
       trimmed == "curled") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String normalizeCompanionGlasses(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "round" ||
+      trimmed == "square" ||
+      trimmed == "visor") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String normalizeCompanionHeadwear(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "bow" ||
+      trimmed == "beanie" ||
+      trimmed == "crown") {
+    return trimmed;
+  }
+  return "none";
+}
+
+String normalizeCompanionPiercing(const String& value) {
+  const String trimmed = value.length() == 0 ? "" : value;
+  if (trimmed == "none" ||
+      trimmed == "brow" ||
+      trimmed == "nose" ||
+      trimmed == "lip") {
     return trimmed;
   }
   return "none";
@@ -686,6 +734,9 @@ void persistPetState() {
   preferences.putString("companion_hair", companionHair);
   preferences.putString("companion_ears", companionEars);
   preferences.putString("companion_mustache", companionMustache);
+  preferences.putString("companion_glasses", companionGlasses);
+  preferences.putString("companion_headwear", companionHeadwear);
+  preferences.putString("companion_piercing", companionPiercing);
   preferences.putInt("bond_level", bondLevel);
   preferences.putInt("energy_level", energyLevel);
   preferences.putInt("boredom_level", boredomLevel);
@@ -1342,6 +1393,35 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     }
   }
 
+  if (companionHeadwear == "bow") {
+    display.drawTriangle(faceCenterX - 4, eyeY - 24, faceCenterX - 16, eyeY - 18, faceCenterX - 8, eyeY - 12, SH110X_WHITE);
+    display.drawTriangle(faceCenterX + 4, eyeY - 24, faceCenterX + 16, eyeY - 18, faceCenterX + 8, eyeY - 12, SH110X_WHITE);
+    display.drawCircle(faceCenterX, eyeY - 18, 2, SH110X_WHITE);
+  } else if (companionHeadwear == "beanie") {
+    display.drawRoundRect(faceCenterX - 24, eyeY - 28, 48, 12, 5, SH110X_WHITE);
+    display.drawLine(faceCenterX - 20, eyeY - 15, faceCenterX + 20, eyeY - 15, SH110X_WHITE);
+    display.drawCircle(faceCenterX, eyeY - 30, 3, SH110X_WHITE);
+  } else if (companionHeadwear == "crown") {
+    display.drawLine(faceCenterX - 20, eyeY - 18, faceCenterX + 20, eyeY - 18, SH110X_WHITE);
+    display.drawLine(faceCenterX - 20, eyeY - 18, faceCenterX - 12, eyeY - 30, SH110X_WHITE);
+    display.drawLine(faceCenterX - 12, eyeY - 30, faceCenterX - 2, eyeY - 18, SH110X_WHITE);
+    display.drawLine(faceCenterX - 2, eyeY - 18, faceCenterX + 6, eyeY - 32, SH110X_WHITE);
+    display.drawLine(faceCenterX + 6, eyeY - 32, faceCenterX + 14, eyeY - 18, SH110X_WHITE);
+    display.drawLine(faceCenterX + 14, eyeY - 18, faceCenterX + 20, eyeY - 28, SH110X_WHITE);
+  }
+
+  if (companionGlasses == "round") {
+    display.drawCircle(leftX, eyeY, 12, SH110X_WHITE);
+    display.drawCircle(rightX, eyeY, 12, SH110X_WHITE);
+    display.drawLine(leftX + 12, eyeY, rightX - 12, eyeY, SH110X_WHITE);
+  } else if (companionGlasses == "square") {
+    display.drawRoundRect(leftX - 14, eyeY - 11, 28, 22, 4, SH110X_WHITE);
+    display.drawRoundRect(rightX - 14, eyeY - 11, 28, 22, 4, SH110X_WHITE);
+    display.drawLine(leftX + 14, eyeY, rightX - 14, eyeY, SH110X_WHITE);
+  } else if (companionGlasses == "visor") {
+    display.drawRoundRect(leftX - 18, eyeY - 12, (rightX - leftX) + 36, 20, 6, SH110X_WHITE);
+  }
+
   if (companionMustache == "classic") {
     display.drawLine(faceCenterX - 16, mouthY - 3, faceCenterX - 4, mouthY - 1, SH110X_WHITE);
     display.drawLine(faceCenterX - 16, mouthY - 2, faceCenterX - 4, mouthY, SH110X_WHITE);
@@ -1352,6 +1432,15 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     display.drawLine(faceCenterX + 2, mouthY - 1, faceCenterX + 14, mouthY - 2, SH110X_WHITE);
     display.drawCircle(faceCenterX - 16, mouthY - 3, 2, SH110X_WHITE);
     display.drawCircle(faceCenterX + 16, mouthY - 3, 2, SH110X_WHITE);
+  }
+
+  if (companionPiercing == "brow") {
+    display.drawLine(rightX + 6, eyeY - 14, rightX + 14, eyeY - 12, SH110X_WHITE);
+    display.drawPixel(rightX + 8, eyeY - 13, SH110X_WHITE);
+  } else if (companionPiercing == "nose") {
+    display.drawCircle(faceCenterX + 4, mouthY - 10, 2, SH110X_WHITE);
+  } else if (companionPiercing == "lip") {
+    display.drawCircle(faceCenterX + 8, mouthY + 2, 2, SH110X_WHITE);
   }
 }
 
@@ -2051,6 +2140,15 @@ void tryStoredPrefs() {
   companionMustache = normalizeCompanionMustache(
     preferences.getString("companion_mustache", companionMustache)
   );
+  companionGlasses = normalizeCompanionGlasses(
+    preferences.getString("companion_glasses", companionGlasses)
+  );
+  companionHeadwear = normalizeCompanionHeadwear(
+    preferences.getString("companion_headwear", companionHeadwear)
+  );
+  companionPiercing = normalizeCompanionPiercing(
+    preferences.getString("companion_piercing", companionPiercing)
+  );
   bondLevel = clampLevel(preferences.getInt("bond_level", bondLevel));
   energyLevel = clampLevel(preferences.getInt("energy_level", energyLevel));
   boredomLevel = clampLevel(preferences.getInt("boredom_level", boredomLevel));
@@ -2158,6 +2256,15 @@ void handleCommandJson(const String& body) {
     );
     companionMustache = normalizeCompanionMustache(
       extractJsonStringField(body, "mustache", companionMustache)
+    );
+    companionGlasses = normalizeCompanionGlasses(
+      extractJsonStringField(body, "glasses", companionGlasses)
+    );
+    companionHeadwear = normalizeCompanionHeadwear(
+      extractJsonStringField(body, "headwear", companionHeadwear)
+    );
+    companionPiercing = normalizeCompanionPiercing(
+      extractJsonStringField(body, "piercing", companionPiercing)
     );
     persistPetState();
     if (currentMode == MODE_IDLE) {

@@ -71,6 +71,9 @@ The ESP32 posts:
   "hair": "none",
   "ears": "none",
   "mustache": "none",
+  "glasses": "none",
+  "headwear": "none",
+  "piercing": "none",
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -94,6 +97,9 @@ Standard BLE status notifications contain:
   "hair": "none",
   "ears": "none",
   "mustache": "none",
+  "glasses": "none",
+  "headwear": "none",
+  "piercing": "none",
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -196,7 +202,10 @@ These commands set the device's active companion mode. `off` disables companion 
   "type": "set_companion_style",
   "hair": "spiky",
   "ears": "cat",
-  "mustache": "curled"
+  "mustache": "curled",
+  "glasses": "round",
+  "headwear": "bow",
+  "piercing": "brow"
 }
 ```
 
@@ -205,6 +214,9 @@ Supported style options:
 - `hair`: `none`, `tuft`, `bangs`, `spiky`
 - `ears`: `none`, `cat`, `bear`, `bunny`
 - `mustache`: `none`, `classic`, `curled`
+- `glasses`: `none`, `round`, `square`, `visor`
+- `headwear`: `none`, `bow`, `beanie`, `crown`
+- `piercing`: `none`, `brow`, `nose`, `lip`
 
 Style changes persist on the device and are applied to the idle face and emotion scenes.
 
@@ -306,7 +318,7 @@ Remote relay image delivery uses `set_image` with a base64 payload instead.
 ## Pet behavior notes
 
 - The device now keeps a persistent `personality` and `petMode` in preferences.
-- The device also keeps persistent appearance settings for `hair`, `ears`, and `mustache`.
+- The device also keeps persistent appearance settings for `hair`, `ears`, `mustache`, `glasses`, `headwear`, and `piercing`.
 - The device also keeps persistent `bondLevel`, `energyLevel`, and `boredomLevel` values in preferences.
 - While the display is idle, the firmware can trigger short autonomous pet-like reactions based on the current companion mode.
 - Notes, banners, and hardware button interactions can trigger a brief emotional reaction before the device returns to its previous display mode.

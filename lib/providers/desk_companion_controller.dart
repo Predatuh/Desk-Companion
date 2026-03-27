@@ -34,6 +34,9 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _hairKey = 'companionHair';
   static const String _earsKey = 'companionEars';
   static const String _mustacheKey = 'companionMustache';
+  static const String _glassesKey = 'companionGlasses';
+  static const String _headwearKey = 'companionHeadwear';
+  static const String _piercingKey = 'companionPiercing';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -47,6 +50,9 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionHair = 'none';
   String _companionEars = 'none';
   String _companionMustache = 'none';
+  String _companionGlasses = 'none';
+  String _companionHeadwear = 'none';
+  String _companionPiercing = 'none';
   int _bondLevel = 50;
   int _energyLevel = 72;
   int _boredomLevel = 28;
@@ -86,6 +92,9 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionHair => _companionHair;
   String get companionEars => _companionEars;
   String get companionMustache => _companionMustache;
+  String get companionGlasses => _companionGlasses;
+  String get companionHeadwear => _companionHeadwear;
+  String get companionPiercing => _companionPiercing;
   int get bondLevel => _bondLevel;
   int get energyLevel => _energyLevel;
   int get boredomLevel => _boredomLevel;
@@ -186,6 +195,12 @@ class DeskCompanionController extends ChangeNotifier {
     _companionEars = (prefs.getString(_earsKey) ?? _companionEars).trim();
     _companionMustache =
         (prefs.getString(_mustacheKey) ?? _companionMustache).trim();
+    _companionGlasses =
+      (prefs.getString(_glassesKey) ?? _companionGlasses).trim();
+    _companionHeadwear =
+      (prefs.getString(_headwearKey) ?? _companionHeadwear).trim();
+    _companionPiercing =
+      (prefs.getString(_piercingKey) ?? _companionPiercing).trim();
     _bondLevel = prefs.getInt(_bondLevelKey) ?? _bondLevel;
     _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
     _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
@@ -227,6 +242,9 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_hairKey, _companionHair);
     await prefs.setString(_earsKey, _companionEars);
     await prefs.setString(_mustacheKey, _companionMustache);
+    await prefs.setString(_glassesKey, _companionGlasses);
+    await prefs.setString(_headwearKey, _companionHeadwear);
+    await prefs.setString(_piercingKey, _companionPiercing);
     await prefs.setInt(_bondLevelKey, _bondLevel);
     await prefs.setInt(_energyLevelKey, _energyLevel);
     await prefs.setInt(_boredomLevelKey, _boredomLevel);
@@ -545,6 +563,9 @@ class DeskCompanionController extends ChangeNotifier {
     required String hair,
     required String ears,
     required String mustache,
+    required String glasses,
+    required String headwear,
+    required String piercing,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -553,6 +574,9 @@ class DeskCompanionController extends ChangeNotifier {
           'hair': hair,
           'ears': ears,
           'mustache': mustache,
+          'glasses': glasses,
+          'headwear': headwear,
+          'piercing': piercing,
         },
         mode: _mode,
         bleLabel: 'Companion style sent over BLE.',
@@ -561,6 +585,9 @@ class DeskCompanionController extends ChangeNotifier {
       _companionHair = hair.trim();
       _companionEars = ears.trim();
       _companionMustache = mustache.trim();
+      _companionGlasses = glasses.trim();
+      _companionHeadwear = headwear.trim();
+      _companionPiercing = piercing.trim();
       await _persistRelayPreferences();
       notifyListeners();
     });
@@ -821,6 +848,21 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingMustache = (payload['mustache'] as String? ?? '').trim();
     if (incomingMustache.isNotEmpty) {
       _companionMustache = incomingMustache;
+    }
+
+    final incomingGlasses = (payload['glasses'] as String? ?? '').trim();
+    if (incomingGlasses.isNotEmpty) {
+      _companionGlasses = incomingGlasses;
+    }
+
+    final incomingHeadwear = (payload['headwear'] as String? ?? '').trim();
+    if (incomingHeadwear.isNotEmpty) {
+      _companionHeadwear = incomingHeadwear;
+    }
+
+    final incomingPiercing = (payload['piercing'] as String? ?? '').trim();
+    if (incomingPiercing.isNotEmpty) {
+      _companionPiercing = incomingPiercing;
     }
 
     final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();

@@ -229,6 +229,60 @@ extension DeskMustacheStyleExt on DeskMustacheStyle {
       };
 }
 
+enum DeskGlassesStyle { none, round, square, visor }
+
+extension DeskGlassesStyleExt on DeskGlassesStyle {
+  String get label => switch (this) {
+        DeskGlassesStyle.none => 'None',
+        DeskGlassesStyle.round => 'Round',
+        DeskGlassesStyle.square => 'Square',
+        DeskGlassesStyle.visor => 'Visor',
+      };
+
+  String get command => switch (this) {
+        DeskGlassesStyle.none => 'none',
+        DeskGlassesStyle.round => 'round',
+        DeskGlassesStyle.square => 'square',
+        DeskGlassesStyle.visor => 'visor',
+      };
+}
+
+enum DeskHeadwearStyle { none, bow, beanie, crown }
+
+extension DeskHeadwearStyleExt on DeskHeadwearStyle {
+  String get label => switch (this) {
+        DeskHeadwearStyle.none => 'None',
+        DeskHeadwearStyle.bow => 'Bow',
+        DeskHeadwearStyle.beanie => 'Beanie',
+        DeskHeadwearStyle.crown => 'Crown',
+      };
+
+  String get command => switch (this) {
+        DeskHeadwearStyle.none => 'none',
+        DeskHeadwearStyle.bow => 'bow',
+        DeskHeadwearStyle.beanie => 'beanie',
+        DeskHeadwearStyle.crown => 'crown',
+      };
+}
+
+enum DeskPiercingStyle { none, brow, nose, lip }
+
+extension DeskPiercingStyleExt on DeskPiercingStyle {
+  String get label => switch (this) {
+        DeskPiercingStyle.none => 'None',
+        DeskPiercingStyle.brow => 'Brow',
+        DeskPiercingStyle.nose => 'Nose',
+        DeskPiercingStyle.lip => 'Lip',
+      };
+
+  String get command => switch (this) {
+        DeskPiercingStyle.none => 'none',
+        DeskPiercingStyle.brow => 'brow',
+        DeskPiercingStyle.nose => 'nose',
+        DeskPiercingStyle.lip => 'lip',
+      };
+}
+
 enum DeskCareAction { pet, cheer, comfort, dance, surprise }
 
 extension DeskCareActionExt on DeskCareAction {
@@ -295,6 +349,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskHairStyle _selectedHairStyle = DeskHairStyle.none;
   DeskEarsStyle _selectedEarsStyle = DeskEarsStyle.none;
   DeskMustacheStyle _selectedMustacheStyle = DeskMustacheStyle.none;
+  DeskGlassesStyle _selectedGlassesStyle = DeskGlassesStyle.none;
+  DeskHeadwearStyle _selectedHeadwearStyle = DeskHeadwearStyle.none;
+  DeskPiercingStyle _selectedPiercingStyle = DeskPiercingStyle.none;
   Timer? _liveSyncTimer;
 
   @override
@@ -789,6 +846,75 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                     ? null
                                     : (_) => setState(
                                           () => _selectedMustacheStyle = mustache,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Glasses',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskGlassesStyle.values
+                            .map(
+                              (glasses) => ChoiceChip(
+                                label: Text(glasses.label),
+                                selected: _selectedGlassesStyle == glasses,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedGlassesStyle = glasses,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Headwear',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskHeadwearStyle.values
+                            .map(
+                              (headwear) => ChoiceChip(
+                                label: Text(headwear.label),
+                                selected: _selectedHeadwearStyle == headwear,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedHeadwearStyle = headwear,
+                                        ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Piercing',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskPiercingStyle.values
+                            .map(
+                              (piercing) => ChoiceChip(
+                                label: Text(piercing.label),
+                                selected: _selectedPiercingStyle == piercing,
+                                onSelected: controller.busy
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedPiercingStyle = piercing,
                                         ),
                               ),
                             )
@@ -1582,6 +1708,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         hair: _selectedHairStyle.command,
         ears: _selectedEarsStyle.command,
         mustache: _selectedMustacheStyle.command,
+        glasses: _selectedGlassesStyle.command,
+        headwear: _selectedHeadwearStyle.command,
+        piercing: _selectedPiercingStyle.command,
       ),
       success: 'Companion appearance applied.',
     );
