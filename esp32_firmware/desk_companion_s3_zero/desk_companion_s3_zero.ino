@@ -74,6 +74,7 @@ unsigned long lastDecorTickMs = 0;
 unsigned long lastExpressionTickMs = 0;
 unsigned long lastRelayPollMs = 0;
 unsigned long lastRelayStatusPushMs = 0;
+unsigned long lastRelaySuccessMs = 0;
 unsigned long lastWifiCheckMs = 0;
 unsigned long lastWifiBeginMs = 0;
 bool wifiJoinActive = false;
@@ -337,6 +338,11 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     secureInited = true;
   }
 
+  // Always start a fresh outbound connection. Reused keep-alive sockets have
+  // proven unreliable for long-lived relay polling on the ESP32.
+  relaySecureClient.stop();
+  relayHttpClient.stop();
+
   String finalUrl = url;
   if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
     finalUrl = "https://" + finalUrl.substring(7);
@@ -349,7 +355,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   }
 
   if (started) {
-    client.setReuse(true);
+    client.setReuse(false);
     client.setTimeout(timeoutMs);
   }
   return started;
@@ -1676,14 +1682,16 @@ void pushRelayStatus() {
   }
 
   client.addHeader("Content-Type", "application/json");
-  client.addHeader("Connection", "keep-alive");
+  client.addHeader("Connection", "close");
 
   const String body = buildStatusJson();
   const int code = client.POST(body);
   if (code > 0) {
     client.getString();
+    lastRelaySuccessMs = millis();
   } else {
     relaySecureClient.stop();
+    relayHttpClient.stop();
   }
 
   client.end();
@@ -1709,16 +1717,19 @@ void pollRelay() {
     return;
   }
 
-  client.addHeader("Connection", "keep-alive");
+  client.addHeader("Connection", "close");
 
   const int code = client.GET();
   if (code == 200) {
     const String command = client.getString();
+    lastRelaySuccessMs = millis();
     handleCommandJson(command);
   } else if (code > 0) {
     client.getString();
+    lastRelaySuccessMs = millis();
   } else {
     relaySecureClient.stop();
+    relayHttpClient.stop();
   }
 
   client.end();
@@ -1992,6 +2003,29 @@ void loop() {
 
   if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
     pushRelayStatus();
+  }
+
+  if (WiFi.status() == WL_CONNECTED &&
+      !relayUrl.isEmpty() &&
+      !deviceToken.isEmpty() &&
+      lastRelaySuccessMs > 0 &&
+      millis() - lastRelaySuccessMs >= 45000) {
+    relaySecureClient.stop();
+    relayHttpClient.stop();
+    relayStatusDirty = true;
+    if (millis() - lastRelaySuccessMs >= 90000 &&
+        !currentSsid.isEmpty() &&
+        storedWifiPass.length() > 0 &&
+        !wifiJoinInProgress()) {
+      statusText = "Relay stalled, reconnecting Wi-Fi";
+      publishStatus();
+      WiFi.disconnect(false, false);
+      delay(100);
+      WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+      markWifiJoinStarted();
+      lastWifiCheckMs = millis();
+      lastRelaySuccessMs = millis();
+    }
   }
 
   pollRelay();

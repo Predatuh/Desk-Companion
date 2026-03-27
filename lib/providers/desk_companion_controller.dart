@@ -36,6 +36,8 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceToken = '';
   List<String> _availableWifiNetworks = const [];
   String? _lastRelayError;
+  int _relayPendingCount = 0;
+  DateTime? _relayLastCommandAt;
   DateTime? _relayLastSeenAt;
   DateTime? _relayLastStatusAt;
   bool _relayOnline = false;
@@ -64,6 +66,8 @@ class DeskCompanionController extends ChangeNotifier {
   String get relayBaseUrl => _relayBaseUrl;
   String get deviceToken => _deviceToken;
   List<String> get availableWifiNetworks => _availableWifiNetworks;
+  int get relayPendingCount => _relayPendingCount;
+  DateTime? get relayLastCommandAt => _relayLastCommandAt;
   DateTime? get relayLastSeenAt => _relayLastSeenAt;
   DateTime? get relayLastStatusAt => _relayLastStatusAt;
   bool get isRelayOnline => _relayOnline;
@@ -617,6 +621,12 @@ class DeskCompanionController extends ChangeNotifier {
         return false;
       }
 
+      _relayPendingCount = (payload['pending'] as num?)?.toInt() ?? 0;
+      final lastCommandAtValue = payload['lastCommandAt'] as String?;
+      _relayLastCommandAt = lastCommandAtValue == null
+          ? null
+          : DateTime.tryParse(lastCommandAtValue)?.toLocal();
+
       final lastPullAtValue = payload['lastPullAt'] as String?;
       _relayLastSeenAt = lastPullAtValue == null
           ? null
@@ -818,6 +828,8 @@ class DeskCompanionController extends ChangeNotifier {
       _startRelayPollTimer();
     } else {
       _relayPollTimer?.cancel();
+      _relayPendingCount = 0;
+      _relayLastCommandAt = null;
       _relayStatusKnown = false;
       _relayOnline = false;
       _relayLastSeenAt = null;

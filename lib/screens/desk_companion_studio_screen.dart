@@ -230,6 +230,28 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
+                      if (controller.hasRelayTarget) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Token: ${controller.deviceToken} | Pending: ${controller.relayPendingCount}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (controller.relayLastCommandAt != null)
+                          Text(
+                            'Last command queued: ${_relativeTimeLabel(controller.relayLastCommandAt!)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        if (controller.relayLastSeenAt != null)
+                          Text(
+                            'Last command poll: ${_relativeTimeLabel(controller.relayLastSeenAt!)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        if (controller.relayLastStatusAt != null)
+                          Text(
+                            'Last status post: ${_relativeTimeLabel(controller.relayLastStatusAt!)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
                       const SizedBox(height: 14),
                       Row(
                         children: [
@@ -1253,6 +1275,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             ? '${age.inMinutes}m ago'
             : '${age.inHours}h ago';
     return 'Last device check-in over Wi-Fi: $ageLabel';
+  }
+
+  String _relativeTimeLabel(DateTime value) {
+    final age = DateTime.now().difference(value);
+    if (age.inMinutes < 1) {
+      return '${age.inSeconds}s ago';
+    }
+    if (age.inHours < 1) {
+      return '${age.inMinutes}m ago';
+    }
+    return '${age.inHours}h ago';
   }
 }
 
