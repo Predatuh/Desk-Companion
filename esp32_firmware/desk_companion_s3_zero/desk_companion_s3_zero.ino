@@ -82,6 +82,7 @@ unsigned long lastWifiCheckMs = 0;
 unsigned long lastWifiBeginMs = 0;
 unsigned long lastCompanionTickMs = 0;
 unsigned long lastPetBeatMs = 0;
+unsigned long petModeShowcaseUntilMs = 0;
 bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
@@ -98,6 +99,11 @@ unsigned long transientEndsAt = 0;
 int bondLevel = 50;
 int energyLevel = 72;
 int boredomLevel = 28;
+bool petModeShowcaseActive = false;
+DisplayMode petModeResumeMode = MODE_IDLE;
+String petModeResumeStatus = "Ready";
+String petModeResumeExpression = "happy";
+String petModeResumeFlower = "rose";
 
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
@@ -151,6 +157,9 @@ void triggerPetMode(const String& petMode, bool persist = true);
 void sendCareAction(const String& action);
 void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus);
 void restoreTransientMode();
+void beginPetModeShowcase(unsigned long durationMs);
+void cancelPetModeShowcase();
+void restorePetModeShowcase();
 void updateCompanionNeeds();
 void updatePetBehavior();
 void setIdleStatus(const String& value);
@@ -644,6 +653,43 @@ void restoreTransientMode() {
   publishStatus();
 }
 
+void beginPetModeShowcase(unsigned long durationMs) {
+  if (!petModeShowcaseActive) {
+    petModeResumeMode = currentMode;
+    petModeResumeStatus = statusText;
+    petModeResumeExpression = currentExpression;
+    petModeResumeFlower = currentFlower;
+  }
+
+  petModeShowcaseActive = true;
+  petModeShowcaseUntilMs = millis() + durationMs;
+  lastPetBeatMs = 0;
+  currentMode = MODE_IDLE;
+  statusText = petDisplayLabel(activePetMode) + " mode";
+  renderCurrentMode();
+  publishStatus();
+}
+
+void cancelPetModeShowcase() {
+  petModeShowcaseActive = false;
+  petModeShowcaseUntilMs = 0;
+}
+
+void restorePetModeShowcase() {
+  if (!petModeShowcaseActive) {
+    return;
+  }
+
+  petModeShowcaseActive = false;
+  petModeShowcaseUntilMs = 0;
+  currentMode = petModeResumeMode;
+  currentExpression = petModeResumeExpression;
+  currentFlower = petModeResumeFlower;
+  statusText = currentMode == MODE_IDLE ? currentAttentionStatus() : petModeResumeStatus;
+  renderCurrentMode();
+  publishStatus();
+}
+
 void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus) {
   if (transientActive) {
     restoreTransientMode();
@@ -687,9 +733,11 @@ void triggerPetMode(const String& petMode, bool persist) {
   if (persist) {
     persistPetState();
   }
+
+  beginPetModeShowcase(activePetMode == "party" ? 60000UL : 45000UL);
   startTransientExpression(
     pickReactionExpression("pet_mode"),
-    2600,
+    6000,
     petDisplayLabel(activePetMode) + " mode"
   );
 }
@@ -759,7 +807,15 @@ void updatePetBehavior() {
     return;
   }
 
+  if (petModeShowcaseActive && now >= petModeShowcaseUntilMs) {
+    restorePetModeShowcase();
+    return;
+  }
+
   unsigned long intervalMs = 18000UL;
+  if (petModeShowcaseActive) {
+    intervalMs = 7000UL;
+  }
   if (activePetMode == "party") {
     intervalMs = 9000UL;
   } else if (activePetMode == "play") {
@@ -786,7 +842,6 @@ void updatePetBehavior() {
   }
 
   startTransientExpression(pickAutonomousPetExpression(), 2200, currentAttentionStatus());
-}
 }
 
 bool decodeBase64IntoImage(const String& input) {
@@ -1546,6 +1601,7 @@ void setIdleStatus(const String& value) {
 }
 
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent) {
+  cancelPetModeShowcase();
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
   currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);
@@ -1586,6 +1642,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
 }
 
 void setBanner(const String& text, int speed) {
+  cancelPetModeShowcase();
   currentBanner = text;
   bannerSpeed = speed;
   bannerOffset = SCREEN_WIDTH;
@@ -1600,6 +1657,7 @@ void setBanner(const String& text, int speed) {
 }
 
 void setExpression(const String& expression) {
+  cancelPetModeShowcase();
   currentExpression = expression;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
@@ -1610,6 +1668,7 @@ void setExpression(const String& expression) {
 }
 
 void setImageReady() {
+  cancelPetModeShowcase();
   currentMode = MODE_IMAGE;
   statusText = "Image ready";
   renderCurrentMode();
@@ -1617,6 +1676,7 @@ void setImageReady() {
 }
 
 void setFlower(const String& flowerType) {
+  cancelPetModeShowcase();
   currentFlower = flowerType;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
