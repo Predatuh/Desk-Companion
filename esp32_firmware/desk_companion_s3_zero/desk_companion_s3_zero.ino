@@ -83,16 +83,8 @@ bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
 uint8_t expressionPhase = 0;
-uint8_t petCycleStep = 0;
 String availableWifiNetworks[10];
 int availableWifiNetworkCount = 0;
-DisplayMode transientResumeMode = MODE_IDLE;
-String transientResumeStatus = "Ready";
-String transientResumeExpression = "happy";
-String transientResumeFlower = "rose";
-bool transientActive = false;
-unsigned long transientEndsAt = 0;
-unsigned long lastPetBeatMs = 0;
 
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
@@ -135,14 +127,9 @@ String petDisplayLabel(const String& value);
 String normalizePetPersonality(const String& value);
 String normalizePetMode(const String& value);
 String petAmbientStatus();
-String pickAutonomousPetExpression();
-String pickReactionExpression(const String& trigger);
 void persistPetState();
 void setPetPersonality(const String& personality, bool persist = true);
 void triggerPetMode(const String& petMode, bool persist = true);
-void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus);
-void restoreTransientMode();
-void updatePetBehavior();
 void setIdleStatus(const String& value);
 void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "");
@@ -448,92 +435,6 @@ String petAmbientStatus() {
   return petDisplayLabel(petPersonality) + " mood";
 }
 
-String pickAutonomousPetExpression() {
-  const uint8_t cycle = petCycleStep++ % 3;
-  if (activePetMode == "play") {
-    if (cycle == 0) return "excited";
-    if (cycle == 1) return "laugh";
-    return "wink";
-  }
-  if (activePetMode == "cuddle") {
-    if (cycle == 0) return "love";
-    if (cycle == 1) return "kiss";
-    return "smile";
-  }
-  if (activePetMode == "nap") {
-    if (cycle == 0) return "sleepy";
-    if (cycle == 1) return "smile";
-    return "sleepy";
-  }
-  if (activePetMode == "needy") {
-    if (cycle == 0) return "sad";
-    if (cycle == 1) return "look_around";
-    return "kiss";
-  }
-
-  if (petPersonality == "playful") {
-    if (cycle == 0) return "excited";
-    if (cycle == 1) return "laugh";
-    return "wink";
-  }
-  if (petPersonality == "cuddly") {
-    if (cycle == 0) return "love";
-    if (cycle == 1) return "heart";
-    return "kiss";
-  }
-  if (petPersonality == "sleepy") {
-    if (cycle == 0) return "sleepy";
-    if (cycle == 1) return "smile";
-    return "thinking";
-  }
-
-  if (cycle == 0) return "look_around";
-  if (cycle == 1) return "thinking";
-  return "surprised";
-}
-
-String pickReactionExpression(const String& trigger) {
-  if (trigger == "button_clear") {
-    return "sad";
-  }
-
-  if (activePetMode == "play") {
-    if (trigger == "button_next") return "wink";
-    return "excited";
-  }
-  if (activePetMode == "cuddle") {
-    if (trigger == "banner") return "kiss";
-    return "love";
-  }
-  if (activePetMode == "nap") {
-    if (trigger == "note") return "surprised";
-    return "sleepy";
-  }
-  if (activePetMode == "needy") {
-    if (trigger == "note") return "heart";
-    return "kiss";
-  }
-
-  if (petPersonality == "playful") {
-    if (trigger == "button_next") return "wink";
-    if (trigger == "banner") return "laugh";
-    return "excited";
-  }
-  if (petPersonality == "cuddly") {
-    if (trigger == "banner") return "kiss";
-    if (trigger == "button_next") return "heart";
-    return "love";
-  }
-  if (petPersonality == "sleepy") {
-    if (trigger == "banner") return "surprised";
-    return "smile";
-  }
-
-  if (trigger == "note") return "thinking";
-  if (trigger == "button_next") return "surprised";
-  return "look_around";
-}
-
 void persistPetState() {
   preferences.begin("desk-cfg", false);
   preferences.putString("pet_personality", petPersonality);
@@ -541,53 +442,16 @@ void persistPetState() {
   preferences.end();
 }
 
-void restoreTransientMode() {
-  if (!transientActive) {
-    return;
-  }
-
-  transientActive = false;
-  currentMode = transientResumeMode;
-  currentExpression = transientResumeExpression;
-  currentFlower = transientResumeFlower;
-  statusText = currentMode == MODE_IDLE ? petAmbientStatus() : transientResumeStatus;
-  expressionPhase = 0;
-  renderCurrentMode();
-  publishStatus();
-}
-
-void startTransientExpression(const String& expression, unsigned long durationMs, const String& nextStatus) {
-  if (transientActive) {
-    restoreTransientMode();
-  }
-
-  transientResumeMode = currentMode;
-  transientResumeStatus = currentMode == MODE_IDLE ? petAmbientStatus() : statusText;
-  transientResumeExpression = currentExpression;
-  transientResumeFlower = currentFlower;
-  transientActive = true;
-  transientEndsAt = millis() + durationMs;
-  lastPetBeatMs = millis();
-
-  currentExpression = expression;
-  expressionPhase = 0;
-  lastExpressionTickMs = 0;
-  currentMode = MODE_EXPRESSION;
-  statusText = nextStatus;
-  renderCurrentMode();
-  publishStatus();
-}
-
 void setPetPersonality(const String& personality, bool persist) {
   petPersonality = normalizePetPersonality(personality);
   if (persist) {
     persistPetState();
   }
-  startTransientExpression(
-    pickReactionExpression("personality"),
-    2200,
-    petDisplayLabel(petPersonality) + " personality"
-  );
+  statusText = petDisplayLabel(petPersonality) + " personality";
+  if (currentMode == MODE_IDLE) {
+    renderCurrentMode();
+  }
+  publishStatus();
 }
 
 void triggerPetMode(const String& petMode, bool persist) {
@@ -595,44 +459,11 @@ void triggerPetMode(const String& petMode, bool persist) {
   if (persist) {
     persistPetState();
   }
-  startTransientExpression(
-    pickReactionExpression("pet_mode"),
-    2600,
-    petDisplayLabel(activePetMode) + " mode"
-  );
-}
-
-void updatePetBehavior() {
-  const unsigned long now = millis();
-  if (transientActive && now >= transientEndsAt) {
-    restoreTransientMode();
-    return;
+  statusText = petDisplayLabel(activePetMode) + " mode";
+  if (currentMode == MODE_IDLE) {
+    renderCurrentMode();
   }
-
-  if (currentMode != MODE_IDLE || transientActive) {
-    return;
-  }
-
-  unsigned long intervalMs = 18000UL;
-  if (activePetMode == "play") {
-    intervalMs = 12000UL;
-  } else if (activePetMode == "cuddle") {
-    intervalMs = 18000UL;
-  } else if (activePetMode == "nap") {
-    intervalMs = 26000UL;
-  } else if (activePetMode == "needy") {
-    intervalMs = 14000UL;
-  } else if (petPersonality == "playful") {
-    intervalMs = 13000UL;
-  } else if (petPersonality == "sleepy") {
-    intervalMs = 24000UL;
-  }
-
-  if (now - lastPetBeatMs < intervalMs) {
-    return;
-  }
-
-  startTransientExpression(pickAutonomousPetExpression(), 2200, petAmbientStatus());
+  publishStatus();
 }
 
 bool decodeBase64IntoImage(const String& input) {
@@ -1394,7 +1225,6 @@ void renderExpressionFrame() {
 void setIdleStatus(const String& value) {
   statusText = value;
   currentMode = MODE_IDLE;
-  transientActive = false;
   renderCurrentMode();
   publishStatus();
 }
@@ -1433,7 +1263,6 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
-  startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
 }
 
 void setBanner(const String& text, int speed) {
@@ -1444,7 +1273,6 @@ void setBanner(const String& text, int speed) {
   statusText = "Banner running";
   renderCurrentMode();
   publishStatus();
-  startTransientExpression(pickReactionExpression("banner"), 1800, "Showing off");
 }
 
 void setExpression(const String& expression) {
@@ -2154,7 +1982,6 @@ void handleButtons() {
       statusText = "Showing note";
       renderCurrentMode();
       publishStatus();
-      startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
     }
   }
   btnNextLast = nextNow;
@@ -2179,7 +2006,6 @@ void handleButtons() {
       setIdleStatus("Ready");
       renderCurrentMode();
       publishStatus();
-      startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
     }
   }
   if (clearNow == HIGH) {
@@ -2271,8 +2097,6 @@ void loop() {
       renderFlowerFrame();
     }
   }
-
-  updatePetBehavior();
 
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {
