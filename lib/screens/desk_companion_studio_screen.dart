@@ -147,7 +147,7 @@ enum DeskPetMode { hangout, play, cuddle, nap, needy, party }
 
 extension DeskPetModeExt on DeskPetMode {
   String get label => switch (this) {
-        DeskPetMode.hangout => 'Hangout',
+      DeskPetMode.hangout => 'Hangout / Off',
         DeskPetMode.play => 'Play',
         DeskPetMode.cuddle => 'Cuddle',
         DeskPetMode.nap => 'Nap',
@@ -165,12 +165,12 @@ extension DeskPetModeExt on DeskPetMode {
       };
 
   String get description => switch (this) {
-        DeskPetMode.hangout => 'Default pet mode. It idles nearby and shows small autonomous reactions.',
-        DeskPetMode.play => 'More active, energetic scenes and playful attention-seeking behavior.',
-        DeskPetMode.cuddle => 'Affectionate mode with hearts, kisses, and softer reactions.',
-        DeskPetMode.nap => 'Sleepier behavior with longer pauses and drowsy expressions.',
-        DeskPetMode.needy => 'Wants attention and reacts like it is trying to get noticed.',
-        DeskPetMode.party => 'Celebratory mode inspired by desk companions that dance, show off, and get extra excited.',
+      DeskPetMode.hangout => 'Default companion state. Use this to return to normal behavior and turn off a special mode.',
+      DeskPetMode.play => 'Persistent playful mode with energetic scenes and more active attention-seeking behavior.',
+      DeskPetMode.cuddle => 'Persistent affectionate mode with hearts, kisses, and softer reactions.',
+      DeskPetMode.nap => 'Persistent sleepy mode with longer pauses and drowsy expressions.',
+      DeskPetMode.needy => 'Persistent attention-seeking mode that acts like it wants you to notice it.',
+      DeskPetMode.party => 'Persistent party mode inspired by desk companions that dance, show off, and stay extra excited.',
       };
 }
 
@@ -576,7 +576,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       const SizedBox(height: 18),
                       Text(
-                        'Interactive mode',
+                        'Companion mode',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
@@ -620,7 +620,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               ? null
                               : () => _triggerPetMode(controller),
                           icon: const Icon(Icons.auto_awesome_outlined),
-                          label: Text('Activate ${_selectedPetMode.label} mode'),
+                          label: Text('Set ${_selectedPetMode.label} mode'),
                         ),
                       ),
                       const SizedBox(height: 18),
