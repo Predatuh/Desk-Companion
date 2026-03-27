@@ -823,11 +823,6 @@ static inline float ease(int phase, int max) {
   return t < 0.5f ? 2.0f * t : 2.0f * (1.0f - t);
 }
 
-// Interpolate between two ints
-static inline int lerp(int a, int b, float t) {
-  return a + (int)((b - a) * t);
-}
-
 // Large EMO-style rounded-rect eye with smooth pupil
 void drawEye(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy) {
   int clampedH = h < 3 ? 3 : h;
@@ -1093,18 +1088,6 @@ void renderExpressionFrame() {
     drawHappyArc(RX, EY, EW);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
   }
-  // ── Confused: asymmetric eyes, brow twitch, slanted mouth ──
-  else if (currentExpression == "confused") {
-    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f; // double speed
-    int browTwitch = (int)(wave * 3.0f);
-    drawEye(LX, EY - 2, EW, EH + 4, ER, -2, 0);
-    drawEye(RX, EY + 3, EW - 6, EH - 6, ER - 2, 2, 0);
-    drawBrow(LX - 14, EY - 15 - browTwitch, LX + 10, EY - 11);
-    drawBrow(RX - 8, EY - 9, RX + 14, EY - 13 + browTwitch);
-    for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 12, MY + 4 + tt, SCREEN_WIDTH/2 + 12, MY - 2 + tt, SH110X_WHITE);
-    }
-  }
   // ── Look around: smooth sinusoidal pupil sweep ──
   else if (currentExpression == "look_around") {
     // True sine sweep — much smoother than lookup table
@@ -1147,28 +1130,6 @@ void renderExpressionFrame() {
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawSmile(SCREEN_WIDTH / 2, MY - 2, 20);
   }
-  // ── Laugh: eyes squinted shut into arcs, huge open mouth ──
-  else if (currentExpression == "laugh") {
-    float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f; // shaking
-    int shakeX = (int)(wave * 3.0f) - 1;
-    drawHappyArc(LX + shakeX, EY, EW);
-    drawHappyArc(RX + shakeX, EY, EW);
-    // Big open mouth
-    int mw = 20 + (int)(wave * 4.0f);
-    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2, MY - 5, mw, 12, 4, SH110X_WHITE);
-    display.fillRoundRect(SCREEN_WIDTH/2 - mw/2 + 2, MY - 3, mw - 4, 8, 3, SH110X_BLACK);
-  }
-  // ── Star eyes: star-shaped pupils shimmer ──
-  else if (currentExpression == "star_eyes") {
-    drawEye(LX, EY, EW, EH, ER, 0, 0);
-    drawEye(RX, EY, EW, EH, ER, 0, 0);
-    // Star overlay on each eye
-    float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
-    int starR = 5 + (int)(twinkle * 2.0f);
-    drawIconStar(LX, EY, starR);
-    drawIconStar(RX, EY, starR);
-    drawSmile(SCREEN_WIDTH / 2, MY - 2, 24);
-  }
   // ── Excited: wide bouncing eyes, can't-hold-the-smile ──
   else if (currentExpression == "excited") {
     float bounce = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
@@ -1179,25 +1140,6 @@ void renderExpressionFrame() {
     drawBrow(LX - 14, EY - 20 - eyeShift, LX + 14, EY - 20 - eyeShift);
     drawBrow(RX - 14, EY - 20 - eyeShift, RX + 14, EY - 20 - eyeShift);
     drawSmile(SCREEN_WIDTH / 2, MY - 2 - (int)(bounce * 2.0f), 28);
-  }
-  // ── Tongue: wink + tongue sticking out ──
-  else if (currentExpression == "tongue") {
-    // Left eye wink
-    for (int tt = 0; tt < 3; tt++) {
-      display.drawLine(LX - EW/2, EY + tt, LX + EW/2, EY + tt, SH110X_WHITE);
-    }
-    drawEye(RX, EY, EW, EH, ER, 0, 0);
-    // Mouth with tongue
-    // Upper lip: small smile
-    for (int tt = 0; tt < 2; tt++) {
-      display.drawLine(SCREEN_WIDTH/2 - 10, MY - 2 + tt, SCREEN_WIDTH/2, MY + 2 + tt, SH110X_WHITE);
-      display.drawLine(SCREEN_WIDTH/2, MY + 2 + tt, SCREEN_WIDTH/2 + 10, MY - 2 + tt, SH110X_WHITE);
-    }
-    // Tongue: rounded rect hanging below
-    float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int tongueH = 8 + (int)(wobble * 3.0f);
-    display.fillRoundRect(SCREEN_WIDTH/2 - 6, MY + 3, 12, tongueH, 4, SH110X_WHITE);
-    display.fillCircle(SCREEN_WIDTH/2, MY + 3 + tongueH - 3, 2, SH110X_BLACK);
   }
   // ── Default / Idle personality: neutral face with micro-movements ──
   else {

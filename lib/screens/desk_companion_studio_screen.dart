@@ -39,7 +39,6 @@ extension DeskFlowerExt on DeskFlower {
 enum DeskExpression {
   happy,
   smile,
-  confused,
   lookAround,
   kiss,
   heart,
@@ -50,17 +49,13 @@ enum DeskExpression {
   love,
   thinking,
   wink,
-  laugh,
-  starEyes,
   excited,
-  tongue,
 }
 
 extension DeskExpressionLabel on DeskExpression {
   String get label => switch (this) {
         DeskExpression.happy => 'Happy',
         DeskExpression.smile => 'Smiling',
-        DeskExpression.confused => 'Confused',
         DeskExpression.lookAround => 'Look around',
         DeskExpression.kiss => 'Blow kisses',
         DeskExpression.heart => 'Big heart',
@@ -71,16 +66,12 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'In love',
         DeskExpression.thinking => 'Thinking',
         DeskExpression.wink => 'Wink',
-        DeskExpression.laugh => 'Laughing',
-        DeskExpression.starEyes => 'Star eyes',
         DeskExpression.excited => 'Excited',
-        DeskExpression.tongue => 'Tongue out',
       };
 
   String get command => switch (this) {
         DeskExpression.happy => 'happy',
         DeskExpression.smile => 'smile',
-        DeskExpression.confused => 'confused',
         DeskExpression.lookAround => 'look_around',
         DeskExpression.kiss => 'kiss',
         DeskExpression.heart => 'heart',
@@ -91,16 +82,12 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'love',
         DeskExpression.thinking => 'thinking',
         DeskExpression.wink => 'wink',
-        DeskExpression.laugh => 'laugh',
-        DeskExpression.starEyes => 'star_eyes',
         DeskExpression.excited => 'excited',
-        DeskExpression.tongue => 'tongue',
       };
 
   String get subtitle => switch (this) {
         DeskExpression.happy => 'Bright open eyes with a cheerful grin.',
         DeskExpression.smile => 'Soft smile with squinted arc eyes.',
-        DeskExpression.confused => 'Asymmetric brows and a tilted puzzled mouth.',
         DeskExpression.lookAround => 'Pupils drift left and right like a curious bot.',
         DeskExpression.kiss => 'One wink, hearts float up from the lips.',
         DeskExpression.heart => 'A big pulsing heart that fills the screen.',
@@ -111,10 +98,7 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.love => 'Heart-shaped pupils and a giant grin.',
         DeskExpression.thinking => 'One squinted eye, gaze up, thought bubble.',
         DeskExpression.wink => 'One eye closes playfully, slight smile.',
-        DeskExpression.laugh => 'Eyes crinkle shut, huge open-mouth laugh.',
-        DeskExpression.starEyes => 'Star-shaped pupils shimmer with amazement.',
         DeskExpression.excited => 'Wide bouncing eyes, can\'t stop smiling.',
-        DeskExpression.tongue => 'One wink and a cheeky tongue poke.',
       };
 }
 
