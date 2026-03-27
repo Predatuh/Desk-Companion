@@ -252,21 +252,21 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
                                       : controller.hasRelayTarget
-                                          ? () => _connectRelay(controller)
+                                          ? () => _connectWifiDevice(controller)
                                           : null,
                               icon: Icon(
                                 controller.isBleConnected
                                     ? Icons.link_off
-                                    : controller.isRelayOnline
-                                        ? Icons.cloud_done_outlined
-                                        : Icons.cloud_sync_outlined,
+                                    : controller.isRemoteConnected
+                                        ? Icons.wifi_tethering
+                                        : Icons.wifi_find_outlined,
                               ),
                               label: Text(
                                 controller.isBleConnected
                                     ? 'Disconnect'
-                                    : controller.isRelayOnline
-                                        ? 'Refresh relay'
-                                        : 'Connect relay',
+                                    : controller.isRemoteConnected
+                                        ? 'Refresh Wi-Fi link'
+                                        : 'Connect over Wi-Fi',
                               ),
                             ),
                           ),
@@ -279,7 +279,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 _SectionCard(
                   title: 'Remote setup',
                   subtitle:
-                      'Provision Wi-Fi and relay settings over BLE once, then remote sends go through the hosted relay from anywhere.',
+                      'Provision Wi-Fi and relay settings over BLE once. After that, the device should stay on Wi-Fi and talk to the hosted relay on its own.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -385,16 +385,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             child: OutlinedButton.icon(
                               onPressed: controller.busy || !controller.hasRelayTarget
                                   ? null
-                                  : () => _connectRelay(controller),
+                                  : () => _connectWifiDevice(controller),
                               icon: Icon(
-                                controller.isRelayOnline
-                                    ? Icons.cloud_done_outlined
-                                    : Icons.cloud_sync_outlined,
+                                controller.isRemoteConnected
+                                    ? Icons.wifi_tethering
+                                    : Icons.wifi_find_outlined,
                               ),
                               label: Text(
-                                controller.isRelayOnline
-                                    ? 'Refresh relay'
-                                    : 'Connect relay',
+                                controller.isRemoteConnected
+                                    ? 'Refresh Wi-Fi link'
+                                    : 'Connect to device',
                               ),
                             ),
                           ),
@@ -1078,16 +1078,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  Future<void> _connectRelay(DeskCompanionController controller) async {
+  Future<void> _connectWifiDevice(DeskCompanionController controller) async {
     try {
-      final ok = await controller.refreshDeviceStatus();
+      final ok = await controller.connectRemoteDevice();
       if (!mounted) {
         return;
       }
       _showMessage(
         ok
-            ? 'Relay connected. Remote sending is ready.'
-            : 'Device is not connected through the relay right now.',
+            ? 'Device connected over Wi-Fi. Remote sending is ready.'
+            : 'The device is not online through the relay right now.',
       );
     } catch (error) {
       if (!mounted) {
@@ -1217,12 +1217,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   String _relayChipLabel(DeskCompanionController controller) {
     if (!controller.hasRelayTarget) {
-      return 'Relay: not configured';
+      return 'Wi-Fi link: not configured';
     }
     if (!controller.relayStatusKnown) {
-      return 'Relay: ready to connect';
+      return 'Wi-Fi link: ready';
     }
-    return controller.isRelayOnline ? 'Relay: connected' : 'Relay: not connected';
+    return controller.isRemoteConnected
+        ? 'Wi-Fi link: connected'
+        : 'Wi-Fi link: not connected';
   }
 
   String _relayStatusText(DeskCompanionController controller) {
@@ -1232,8 +1234,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final lastSeenAt = controller.relayLastSeenAt;
     if (lastSeenAt == null) {
       return controller.isBleConnected
-          ? 'Relay is configured. Remote sends will use it when BLE is not available.'
-          : 'Relay is configured. Press Connect relay to verify the device is online.';
+          ? 'Remote delivery is configured. The device should stay linked through Wi-Fi and the relay after BLE setup.'
+          : 'Remote delivery is configured. Press Connect over Wi-Fi to confirm the device is online.';
     }
 
     final age = DateTime.now().difference(lastSeenAt);
@@ -1242,7 +1244,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         : age.inHours < 1
             ? '${age.inMinutes}m ago'
             : '${age.inHours}h ago';
-    return 'Last relay check-in: $ageLabel';
+    return 'Last device check-in over Wi-Fi: $ageLabel';
   }
 }
 

@@ -65,6 +65,7 @@ class DeskCompanionController extends ChangeNotifier {
   List<String> get availableWifiNetworks => _availableWifiNetworks;
   DateTime? get relayLastSeenAt => _relayLastSeenAt;
   bool get isRelayOnline => _relayOnline;
+  bool get isRemoteConnected => _relayOnline;
   bool get relayStatusKnown => _relayStatusKnown;
   bool get busy => _busy;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
@@ -370,6 +371,17 @@ class DeskCompanionController extends ChangeNotifier {
         return _fetchRelayStatus();
       }
       return false;
+    });
+    return result ?? false;
+  }
+
+  Future<bool> connectRemoteDevice() async {
+    final result = await _runBusy<bool>(() async {
+      if (!hasRelayTarget) {
+        _setStatus('Relay URL and device token are required first.');
+        return false;
+      }
+      return _fetchRelayStatus();
     });
     return result ?? false;
   }

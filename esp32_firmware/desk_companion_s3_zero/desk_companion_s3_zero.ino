@@ -1962,6 +1962,20 @@ void loop() {
       lastWifiCheckMs = millis();
       publishStatus();
     }
+
+    if (!currentSsid.isEmpty() &&
+        storedWifiPass.length() > 0 &&
+        !wifiJoinInProgress() &&
+        millis() - lastWifiCheckMs >= 60000) {
+      statusText = "Retrying Wi-Fi";
+      publishStatus();
+      WiFi.mode(WIFI_STA);
+      delay(100);
+      WiFi.setAutoReconnect(true);
+      WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+      markWifiJoinStarted();
+      lastWifiCheckMs = millis();
+    }
   }
 
   if (wifiScanPending) {
