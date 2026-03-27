@@ -37,6 +37,7 @@ class DeskCompanionController extends ChangeNotifier {
   List<String> _availableWifiNetworks = const [];
   String? _lastRelayError;
   DateTime? _relayLastSeenAt;
+  DateTime? _relayLastStatusAt;
   bool _relayOnline = false;
   bool _relayStatusKnown = false;
   bool _busy = false;
@@ -64,6 +65,7 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceToken => _deviceToken;
   List<String> get availableWifiNetworks => _availableWifiNetworks;
   DateTime? get relayLastSeenAt => _relayLastSeenAt;
+  DateTime? get relayLastStatusAt => _relayLastStatusAt;
   bool get isRelayOnline => _relayOnline;
   bool get isRemoteConnected => _relayOnline;
   bool get relayStatusKnown => _relayStatusKnown;
@@ -615,19 +617,32 @@ class DeskCompanionController extends ChangeNotifier {
         return false;
       }
 
-      final updatedAtValue = payload['updatedAt'] as String?;
-      _relayLastSeenAt = updatedAtValue == null
+      final lastPullAtValue = payload['lastPullAt'] as String?;
+      _relayLastSeenAt = lastPullAtValue == null
           ? null
-          : DateTime.tryParse(updatedAtValue)?.toLocal();
+          : DateTime.tryParse(lastPullAtValue)?.toLocal();
+      final lastStatusAtValue = payload['lastStatusAt'] as String?;
+      _relayLastStatusAt = lastStatusAtValue == null
+          ? null
+          : DateTime.tryParse(lastStatusAtValue)?.toLocal();
       _relayOnline = _relayLastSeenAt != null &&
-          DateTime.now().difference(_relayLastSeenAt!) <= const Duration(minutes: 2);
+          DateTime.now().difference(_relayLastSeenAt!) <=
+              const Duration(seconds: 30);
       _relayStatusKnown = true;
 
       final lastStatus = payload['lastStatus'];
       if (lastStatus is Map<String, dynamic>) {
         _applyStatusMap(lastStatus);
-      } else if (!_relayOnline) {
-        _setStatus('Device is not pushing to relay.');
+      }
+
+      if (!_relayOnline) {
+        if (_relayLastStatusAt != null) {
+          _setStatus(
+            'Device reached the relay, but it is not polling for commands yet.',
+          );
+        } else {
+          _setStatus('Device is not checking in to the relay.');
+        }
       }
 
       notifyListeners();
@@ -722,10 +737,19 @@ class DeskCompanionController extends ChangeNotifier {
           return;
         }
         final pending = (payload['pending'] as int?) ?? 0;
+        final lastPullAtValue = payload['lastPullAt'] as String?;
+        final lastPullAt = lastPullAtValue == null
+            ? null
+            : DateTime.tryParse(lastPullAtValue)?.toLocal();
+        final isActivelyPolling = lastPullAt != null &&
+            DateTime.now().difference(lastPullAt) <=
+                const Duration(seconds: 30);
         if (pending == 0) {
           _setStatus('Delivered. $successLabel');
+        } else if (!isActivelyPolling) {
+          _setStatus('Queued on relay. Device is not polling remotely.');
         } else {
-          _setStatus('Queued on relay. Device has not picked it up yet.');
+          _setStatus('Queued on relay. Waiting for the next device poll.');
         }
       } catch (_) {
         // Ignore follow-up failures; the last send status is good enough.
@@ -797,6 +821,7 @@ class DeskCompanionController extends ChangeNotifier {
       _relayStatusKnown = false;
       _relayOnline = false;
       _relayLastSeenAt = null;
+      _relayLastStatusAt = null;
     }
   }
 

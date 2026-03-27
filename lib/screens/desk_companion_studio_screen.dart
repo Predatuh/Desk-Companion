@@ -264,9 +264,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               label: Text(
                                 controller.isBleConnected
                                     ? 'Disconnect'
-                                    : controller.isRemoteConnected
-                                        ? 'Refresh Wi-Fi link'
-                                        : 'Connect over Wi-Fi',
+                                    : 'Connect over Wi-Fi',
                               ),
                             ),
                           ),
@@ -393,7 +391,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               ),
                               label: Text(
                                 controller.isRemoteConnected
-                                    ? 'Refresh Wi-Fi link'
+                                    ? 'Connect to device'
                                     : 'Connect to device',
                               ),
                             ),
@@ -1233,6 +1231,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     }
     final lastSeenAt = controller.relayLastSeenAt;
     if (lastSeenAt == null) {
+      final lastStatusAt = controller.relayLastStatusAt;
+      if (lastStatusAt != null) {
+        final age = DateTime.now().difference(lastStatusAt);
+        final ageLabel = age.inMinutes < 1
+            ? '${age.inSeconds}s ago'
+            : age.inHours < 1
+                ? '${age.inMinutes}m ago'
+                : '${age.inHours}h ago';
+        return 'Device posted status $ageLabel, but the relay command link is not active yet.';
+      }
       return controller.isBleConnected
           ? 'Remote delivery is configured. The device should stay linked through Wi-Fi and the relay after BLE setup.'
           : 'Remote delivery is configured. Press Connect over Wi-Fi to confirm the device is online.';

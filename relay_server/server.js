@@ -14,6 +14,9 @@ function getDevice(token) {
     devices.set(token, {
       queue: [],
       lastStatus: null,
+      lastCommandAt: null,
+      lastPullAt: null,
+      lastStatusAt: null,
       updatedAt: null,
     });
   }
@@ -36,6 +39,9 @@ async function loadDevices() {
       devices.set(token, {
         queue: Array.isArray(value.queue) ? value.queue : [],
         lastStatus: value.lastStatus ?? null,
+        lastCommandAt: value.lastCommandAt ?? null,
+        lastPullAt: value.lastPullAt ?? null,
+        lastStatusAt: value.lastStatusAt ?? null,
         updatedAt: value.updatedAt ?? null,
       });
     }
@@ -120,8 +126,10 @@ const server = http.createServer(async (req, res) => {
       if (!body.command || typeof body.command !== 'object') {
         return sendJson(res, 400, { error: 'missing_command' });
       }
+      const now = new Date().toISOString();
       device.queue.push(body.command);
-      device.updatedAt = new Date().toISOString();
+      device.lastCommandAt = now;
+      device.updatedAt = now;
       queuePersist();
       return sendJson(res, 202, {
         queued: true,
@@ -131,8 +139,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && action === 'pull') {
+      const now = new Date().toISOString();
       const nextCommand = device.queue.shift();
-      device.updatedAt = new Date().toISOString();
+      device.lastPullAt = now;
+      device.updatedAt = now;
       queuePersist();
       if (!nextCommand) {
         res.writeHead(204);
@@ -143,8 +153,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && action === 'status') {
       const body = JSON.parse((await readBody(req)) || '{}');
+      const now = new Date().toISOString();
       device.lastStatus = body;
-      device.updatedAt = new Date().toISOString();
+      device.lastStatusAt = now;
+      device.updatedAt = now;
       queuePersist();
       return sendJson(res, 200, { stored: true, token });
     }
@@ -154,6 +166,9 @@ const server = http.createServer(async (req, res) => {
         token,
         pending: device.queue.length,
         updatedAt: device.updatedAt,
+        lastCommandAt: device.lastCommandAt,
+        lastPullAt: device.lastPullAt,
+        lastStatusAt: device.lastStatusAt,
         lastStatus: device.lastStatus,
       });
     }
