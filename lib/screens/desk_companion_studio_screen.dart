@@ -9,6 +9,7 @@ import '../models/companion_image_payload.dart';
 import '../providers/desk_companion_controller.dart';
 import '../theme/companion_theme.dart';
 import '../utils/oled_bitmap_codec.dart';
+import '../widgets/companion_face_preview.dart';
 import '../widgets/note_card_preview.dart';
 import '../widgets/oled_drawing_pad.dart';
 
@@ -177,7 +178,7 @@ extension DeskPetModeExt on DeskPetMode {
       };
 }
 
-enum DeskHairStyle { none, tuft, bangs, spiky }
+enum DeskHairStyle { none, tuft, bangs, spiky, swoop, bob, messy }
 
 extension DeskHairStyleExt on DeskHairStyle {
   String get label => switch (this) {
@@ -185,6 +186,9 @@ extension DeskHairStyleExt on DeskHairStyle {
         DeskHairStyle.tuft => 'Tuft',
         DeskHairStyle.bangs => 'Bangs',
         DeskHairStyle.spiky => 'Spiky',
+        DeskHairStyle.swoop => 'Swoop',
+        DeskHairStyle.bob => 'Bob',
+        DeskHairStyle.messy => 'Messy',
       };
 
   String get command => switch (this) {
@@ -192,6 +196,9 @@ extension DeskHairStyleExt on DeskHairStyle {
         DeskHairStyle.tuft => 'tuft',
         DeskHairStyle.bangs => 'bangs',
         DeskHairStyle.spiky => 'spiky',
+        DeskHairStyle.swoop => 'swoop',
+        DeskHairStyle.bob => 'bob',
+        DeskHairStyle.messy => 'messy',
       };
 }
 
@@ -213,19 +220,35 @@ extension DeskEarsStyleExt on DeskEarsStyle {
       };
 }
 
-enum DeskMustacheStyle { none, classic, curled }
+enum DeskMustacheStyle {
+  none,
+  classic,
+  curled,
+  handlebar,
+  walrus,
+  pencil,
+  imperial,
+}
 
 extension DeskMustacheStyleExt on DeskMustacheStyle {
   String get label => switch (this) {
         DeskMustacheStyle.none => 'None',
         DeskMustacheStyle.classic => 'Classic',
         DeskMustacheStyle.curled => 'Curled',
+        DeskMustacheStyle.handlebar => 'Handlebar',
+        DeskMustacheStyle.walrus => 'Walrus',
+        DeskMustacheStyle.pencil => 'Pencil',
+        DeskMustacheStyle.imperial => 'Imperial',
       };
 
   String get command => switch (this) {
         DeskMustacheStyle.none => 'none',
         DeskMustacheStyle.classic => 'classic',
         DeskMustacheStyle.curled => 'curled',
+        DeskMustacheStyle.handlebar => 'handlebar',
+        DeskMustacheStyle.walrus => 'walrus',
+        DeskMustacheStyle.pencil => 'pencil',
+        DeskMustacheStyle.imperial => 'imperial',
       };
 }
 
@@ -352,6 +375,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskGlassesStyle _selectedGlassesStyle = DeskGlassesStyle.none;
   DeskHeadwearStyle _selectedHeadwearStyle = DeskHeadwearStyle.none;
   DeskPiercingStyle _selectedPiercingStyle = DeskPiercingStyle.none;
+  double _selectedHairSize = 100;
+  double _selectedMustacheSize = 100;
+  bool _behaviorDraftDirty = false;
+  bool _appearanceDraftDirty = false;
   Timer? _liveSyncTimer;
 
   @override
@@ -377,6 +404,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (mounted) setState(() {});
   }
 
+  void _syncBehaviorDraft(
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+  ) {
+    if (_behaviorDraftDirty) {
+      return;
+    }
+    _selectedPersonality = currentPersonality;
+    _selectedPetMode = currentPetMode;
+  }
+
+  void _syncAppearanceDraft(DeskCompanionController controller) {
+    if (_appearanceDraftDirty) {
+      return;
+    }
+    _selectedHairStyle =
+        _hairStyleFromCommand(controller.companionHair) ?? _selectedHairStyle;
+    _selectedEarsStyle =
+        _earsStyleFromCommand(controller.companionEars) ?? _selectedEarsStyle;
+    _selectedMustacheStyle =
+        _mustacheStyleFromCommand(controller.companionMustache) ??
+            _selectedMustacheStyle;
+    _selectedGlassesStyle =
+        _glassesStyleFromCommand(controller.companionGlasses) ??
+            _selectedGlassesStyle;
+    _selectedHeadwearStyle =
+        _headwearStyleFromCommand(controller.companionHeadwear) ??
+            _selectedHeadwearStyle;
+    _selectedPiercingStyle =
+        _piercingStyleFromCommand(controller.companionPiercing) ??
+            _selectedPiercingStyle;
+    _selectedHairSize = controller.companionHairSize.toDouble();
+    _selectedMustacheSize = controller.companionMustacheSize.toDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DeskCompanionController>();
@@ -387,6 +450,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         _selectedPersonality;
     final currentPetMode =
       _petModeFromCommand(controller.activePetMode) ?? _selectedPetMode;
+    _syncBehaviorDraft(controller, currentPersonality, currentPetMode);
+    _syncAppearanceDraft(controller);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Desk Companion')),
@@ -642,82 +707,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
-                  title: 'Pet companion',
+                  title: 'Companion behavior',
                   subtitle:
-                      'Current personality: ${currentPersonality.label}. Active pet mode: ${currentPetMode.label}.',
+                      'Choose the vibe and reactions here without mirroring the selected mode back on the display.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Personality',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskPersonality.values
-                            .map(
-                              (personality) => ChoiceChip(
-                                label: Text(personality.label),
-                                selected: _selectedPersonality == personality,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedPersonality =
-                                              personality,
-                                        ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _selectedPersonality.description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _sendPersonality(controller),
-                          icon: const Icon(Icons.pets_outlined),
-                          label: Text(
-                            'Set ${_selectedPersonality.label} personality',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Companion mode',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskPetMode.values
-                            .map(
-                              (petMode) => ChoiceChip(
-                                label: Text(petMode.label),
-                                selected: _selectedPetMode == petMode,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedPetMode = petMode,
-                                        ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _selectedPetMode.description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -725,200 +720,437 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           _ChipLabel(label: 'Bond ${controller.bondLevel}%'),
                           _ChipLabel(label: 'Energy ${controller.energyLevel}%'),
                           _ChipLabel(label: 'Boredom ${controller.boredomLevel}%'),
+                          _ChipLabel(
+                            label: controller.canControlDevice
+                                ? 'Linked'
+                                : 'Waiting for link',
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _triggerPetMode(controller),
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: Text('Set ${_selectedPetMode.label} mode'),
+                      const SizedBox(height: 16),
+                      _StudioGroup(
+                        title: 'Personality',
+                        subtitle: _selectedPersonality.description,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskPersonality.values
+                                  .map(
+                                    (personality) => ChoiceChip(
+                                      label: Text(personality.label),
+                                      selected:
+                                          _selectedPersonality == personality,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _behaviorDraftDirty = true;
+                                                _selectedPersonality =
+                                                    personality;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: controller.busy ||
+                                        !controller.canControlDevice
+                                    ? null
+                                    : () => _sendPersonality(controller),
+                                icon: const Icon(Icons.pets_outlined),
+                                label: const Text('Apply personality'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Care action',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskCareAction.values
-                            .map(
-                              (action) => ChoiceChip(
-                                label: Text(action.label),
-                                selected: _selectedCareAction == action,
-                                onSelected: controller.busy
+                      const SizedBox(height: 14),
+                      _StudioGroup(
+                        title: 'Mode',
+                        subtitle: _selectedPetMode.description,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskPetMode.values
+                                  .map(
+                                    (petMode) => ChoiceChip(
+                                      label: Text(petMode.label),
+                                      selected: _selectedPetMode == petMode,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _behaviorDraftDirty = true;
+                                                _selectedPetMode = petMode;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: controller.busy ||
+                                        !controller.canControlDevice
                                     ? null
-                                    : (_) => setState(
-                                          () => _selectedCareAction = action,
-                                        ),
+                                    : () => _triggerPetMode(controller),
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: const Text('Apply mode'),
                               ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _selectedCareAction.description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _sendCareAction(controller),
-                          icon: const Icon(Icons.favorite_outline),
-                          label: Text('Send ${_selectedCareAction.label} action'),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Appearance',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Hair',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskHairStyle.values
-                            .map(
-                              (hair) => ChoiceChip(
-                                label: Text(hair.label),
-                                selected: _selectedHairStyle == hair,
-                                onSelected: controller.busy
+                      const SizedBox(height: 14),
+                      _StudioGroup(
+                        title: 'Care',
+                        subtitle: _selectedCareAction.description,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskCareAction.values
+                                  .map(
+                                    (action) => ChoiceChip(
+                                      label: Text(action.label),
+                                      selected:
+                                          _selectedCareAction == action,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(
+                                                () => _selectedCareAction =
+                                                    action,
+                                              ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: controller.busy ||
+                                        !controller.canControlDevice
                                     ? null
-                                    : (_) => setState(
-                                          () => _selectedHairStyle = hair,
-                                        ),
+                                    : () => _sendCareAction(controller),
+                                icon: const Icon(Icons.favorite_outline),
+                                label: const Text('Send care action'),
                               ),
-                            )
-                            .toList(growable: false),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Ears',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskEarsStyle.values
-                            .map(
-                              (ears) => ChoiceChip(
-                                label: Text(ears.label),
-                                selected: _selectedEarsStyle == ears,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedEarsStyle = ears,
-                                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Style studio',
+                  subtitle:
+                      'Preview appearance locally before sending it to the companion.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBF8),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: CompanionTheme.blush),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Live preview',
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const Spacer(),
+                                const _ChipLabel(label: 'Local only'),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Nothing sends until you tap Apply appearance.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: CompanionTheme.ink,
+                                borderRadius: BorderRadius.circular(18),
                               ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Mustache',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskMustacheStyle.values
-                            .map(
-                              (mustache) => ChoiceChip(
-                                label: Text(mustache.label),
-                                selected: _selectedMustacheStyle == mustache,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedMustacheStyle = mustache,
-                                        ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: CompanionFacePreview(
+                                  personality: _selectedPersonality.command,
+                                  petMode: _selectedPetMode.command,
+                                  hair: _selectedHairStyle.command,
+                                  ears: _selectedEarsStyle.command,
+                                  mustache: _selectedMustacheStyle.command,
+                                  glasses: _selectedGlassesStyle.command,
+                                  headwear: _selectedHeadwearStyle.command,
+                                  piercing: _selectedPiercingStyle.command,
+                                  hairSize: _selectedHairSize.round(),
+                                  mustacheSize:
+                                      _selectedMustacheSize.round(),
+                                ),
                               ),
-                            )
-                            .toList(growable: false),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _ChipLabel(
+                                  label:
+                                      'Hair ${_selectedHairStyle.label} ${_selectedHairSize.round()}%',
+                                ),
+                                _ChipLabel(
+                                  label:
+                                      'Mustache ${_selectedMustacheStyle.label} ${_selectedMustacheSize.round()}%',
+                                ),
+                                _ChipLabel(
+                                  label: 'Ears ${_selectedEarsStyle.label}',
+                                ),
+                                _ChipLabel(
+                                  label:
+                                      'Glasses ${_selectedGlassesStyle.label}',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Glasses',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      const SizedBox(height: 16),
+                      _StudioGroup(
+                        title: 'Top layer',
+                        subtitle:
+                            'Hair, ears, and headwear shape the silhouette first.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hair',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskHairStyle.values
+                                  .map(
+                                    (hair) => ChoiceChip(
+                                      label: Text(hair.label),
+                                      selected: _selectedHairStyle == hair,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedHairStyle = hair;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Hair size ${_selectedHairSize.round()}%',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            Slider(
+                              min: 70,
+                              max: 170,
+                              divisions: 20,
+                              value: _selectedHairSize,
+                              onChanged: controller.busy
+                                  ? null
+                                  : (value) => setState(() {
+                                        _appearanceDraftDirty = true;
+                                        _selectedHairSize = value;
+                                      }),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Ears',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskEarsStyle.values
+                                  .map(
+                                    (ears) => ChoiceChip(
+                                      label: Text(ears.label),
+                                      selected: _selectedEarsStyle == ears,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedEarsStyle = ears;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Headwear',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskHeadwearStyle.values
+                                  .map(
+                                    (headwear) => ChoiceChip(
+                                      label: Text(headwear.label),
+                                      selected:
+                                          _selectedHeadwearStyle == headwear,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedHeadwearStyle =
+                                                    headwear;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskGlassesStyle.values
-                            .map(
-                              (glasses) => ChoiceChip(
-                                label: Text(glasses.label),
-                                selected: _selectedGlassesStyle == glasses,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedGlassesStyle = glasses,
-                                        ),
-                              ),
-                            )
-                            .toList(growable: false),
+                      const SizedBox(height: 14),
+                      _StudioGroup(
+                        title: 'Face details',
+                        subtitle:
+                            'Glasses and piercings sit over the face without changing the expression.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Glasses',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskGlassesStyle.values
+                                  .map(
+                                    (glasses) => ChoiceChip(
+                                      label: Text(glasses.label),
+                                      selected:
+                                          _selectedGlassesStyle == glasses,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedGlassesStyle =
+                                                    glasses;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Piercing',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskPiercingStyle.values
+                                  .map(
+                                    (piercing) => ChoiceChip(
+                                      label: Text(piercing.label),
+                                      selected:
+                                          _selectedPiercingStyle == piercing,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedPiercingStyle =
+                                                    piercing;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Headwear',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskHeadwearStyle.values
-                            .map(
-                              (headwear) => ChoiceChip(
-                                label: Text(headwear.label),
-                                selected: _selectedHeadwearStyle == headwear,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedHeadwearStyle = headwear,
-                                        ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Piercing',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskPiercingStyle.values
-                            .map(
-                              (piercing) => ChoiceChip(
-                                label: Text(piercing.label),
-                                selected: _selectedPiercingStyle == piercing,
-                                onSelected: controller.busy
-                                    ? null
-                                    : (_) => setState(
-                                          () => _selectedPiercingStyle = piercing,
-                                        ),
-                              ),
-                            )
-                            .toList(growable: false),
+                      const SizedBox(height: 14),
+                      _StudioGroup(
+                        title: 'Mustache studio',
+                        subtitle:
+                            'Try fuller options and resize them live before you send.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mustache',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: DeskMustacheStyle.values
+                                  .map(
+                                    (mustache) => ChoiceChip(
+                                      label: Text(mustache.label),
+                                      selected:
+                                          _selectedMustacheStyle == mustache,
+                                      onSelected: controller.busy
+                                          ? null
+                                          : (_) => setState(() {
+                                                _appearanceDraftDirty = true;
+                                                _selectedMustacheStyle =
+                                                    mustache;
+                                              }),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Mustache size ${_selectedMustacheSize.round()}%',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            Slider(
+                              min: 70,
+                              max: 170,
+                              divisions: 20,
+                              value: _selectedMustacheSize,
+                              onChanged: controller.busy
+                                  ? null
+                                  : (value) => setState(() {
+                                        _appearanceDraftDirty = true;
+                                        _selectedMustacheSize = value;
+                                      }),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
@@ -1684,15 +1916,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Future<void> _sendPersonality(DeskCompanionController controller) async {
     await _perform(
       () => controller.setPetPersonality(_selectedPersonality.command),
-      success: '${_selectedPersonality.label} personality set.',
+      success: 'Companion personality updated.',
     );
+    _behaviorDraftDirty = false;
   }
 
   Future<void> _triggerPetMode(DeskCompanionController controller) async {
     await _perform(
       () => controller.triggerPetMode(_selectedPetMode.command),
-      success: '${_selectedPetMode.label} mode set.',
+      success: 'Companion mode updated.',
     );
+    _behaviorDraftDirty = false;
   }
 
   Future<void> _sendCareAction(DeskCompanionController controller) async {
@@ -1711,9 +1945,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         glasses: _selectedGlassesStyle.command,
         headwear: _selectedHeadwearStyle.command,
         piercing: _selectedPiercingStyle.command,
+        hairSize: _selectedHairSize.round(),
+        mustacheSize: _selectedMustacheSize.round(),
       ),
       success: 'Companion appearance applied.',
     );
+    _appearanceDraftDirty = false;
   }
 
   Future<void> _sendCanvas(DeskCompanionController controller) async {
@@ -1841,6 +2078,60 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     }
     return null;
   }
+
+  DeskHairStyle? _hairStyleFromCommand(String value) {
+    for (final hair in DeskHairStyle.values) {
+      if (hair.command == value.trim()) {
+        return hair;
+      }
+    }
+    return null;
+  }
+
+  DeskEarsStyle? _earsStyleFromCommand(String value) {
+    for (final ears in DeskEarsStyle.values) {
+      if (ears.command == value.trim()) {
+        return ears;
+      }
+    }
+    return null;
+  }
+
+  DeskMustacheStyle? _mustacheStyleFromCommand(String value) {
+    for (final mustache in DeskMustacheStyle.values) {
+      if (mustache.command == value.trim()) {
+        return mustache;
+      }
+    }
+    return null;
+  }
+
+  DeskGlassesStyle? _glassesStyleFromCommand(String value) {
+    for (final glasses in DeskGlassesStyle.values) {
+      if (glasses.command == value.trim()) {
+        return glasses;
+      }
+    }
+    return null;
+  }
+
+  DeskHeadwearStyle? _headwearStyleFromCommand(String value) {
+    for (final headwear in DeskHeadwearStyle.values) {
+      if (headwear.command == value.trim()) {
+        return headwear;
+      }
+    }
+    return null;
+  }
+
+  DeskPiercingStyle? _piercingStyleFromCommand(String value) {
+    for (final piercing in DeskPiercingStyle.values) {
+      if (piercing.command == value.trim()) {
+        return piercing;
+      }
+    }
+    return null;
+  }
 }
 
 class _SectionCard extends StatelessWidget {
@@ -1888,6 +2179,41 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+    );
+  }
+}
+
+class _StudioGroup extends StatelessWidget {
+  const _StudioGroup({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBF8),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: CompanionTheme.blush),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
     );
   }
 }

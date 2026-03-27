@@ -37,6 +37,8 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _glassesKey = 'companionGlasses';
   static const String _headwearKey = 'companionHeadwear';
   static const String _piercingKey = 'companionPiercing';
+  static const String _hairSizeKey = 'companionHairSize';
+  static const String _mustacheSizeKey = 'companionMustacheSize';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -53,6 +55,8 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionGlasses = 'none';
   String _companionHeadwear = 'none';
   String _companionPiercing = 'none';
+  int _companionHairSize = 100;
+  int _companionMustacheSize = 100;
   int _bondLevel = 50;
   int _energyLevel = 72;
   int _boredomLevel = 28;
@@ -95,6 +99,8 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionGlasses => _companionGlasses;
   String get companionHeadwear => _companionHeadwear;
   String get companionPiercing => _companionPiercing;
+  int get companionHairSize => _companionHairSize;
+  int get companionMustacheSize => _companionMustacheSize;
   int get bondLevel => _bondLevel;
   int get energyLevel => _energyLevel;
   int get boredomLevel => _boredomLevel;
@@ -201,6 +207,9 @@ class DeskCompanionController extends ChangeNotifier {
       (prefs.getString(_headwearKey) ?? _companionHeadwear).trim();
     _companionPiercing =
       (prefs.getString(_piercingKey) ?? _companionPiercing).trim();
+    _companionHairSize = prefs.getInt(_hairSizeKey) ?? _companionHairSize;
+    _companionMustacheSize =
+        prefs.getInt(_mustacheSizeKey) ?? _companionMustacheSize;
     _bondLevel = prefs.getInt(_bondLevelKey) ?? _bondLevel;
     _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
     _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
@@ -245,6 +254,8 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_glassesKey, _companionGlasses);
     await prefs.setString(_headwearKey, _companionHeadwear);
     await prefs.setString(_piercingKey, _companionPiercing);
+    await prefs.setInt(_hairSizeKey, _companionHairSize);
+    await prefs.setInt(_mustacheSizeKey, _companionMustacheSize);
     await prefs.setInt(_bondLevelKey, _bondLevel);
     await prefs.setInt(_energyLevelKey, _energyLevel);
     await prefs.setInt(_boredomLevelKey, _boredomLevel);
@@ -566,6 +577,8 @@ class DeskCompanionController extends ChangeNotifier {
     required String glasses,
     required String headwear,
     required String piercing,
+    required int hairSize,
+    required int mustacheSize,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -577,6 +590,8 @@ class DeskCompanionController extends ChangeNotifier {
           'glasses': glasses,
           'headwear': headwear,
           'piercing': piercing,
+          'hairSize': hairSize,
+          'mustacheSize': mustacheSize,
         },
         mode: _mode,
         bleLabel: 'Companion style sent over BLE.',
@@ -588,6 +603,8 @@ class DeskCompanionController extends ChangeNotifier {
       _companionGlasses = glasses.trim();
       _companionHeadwear = headwear.trim();
       _companionPiercing = piercing.trim();
+      _companionHairSize = hairSize;
+      _companionMustacheSize = mustacheSize;
       await _persistRelayPreferences();
       notifyListeners();
     });
@@ -863,6 +880,16 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingPiercing = (payload['piercing'] as String? ?? '').trim();
     if (incomingPiercing.isNotEmpty) {
       _companionPiercing = incomingPiercing;
+    }
+
+    final incomingHairSize = (payload['hairSize'] as num?)?.toInt();
+    if (incomingHairSize != null) {
+      _companionHairSize = incomingHairSize;
+    }
+
+    final incomingMustacheSize = (payload['mustacheSize'] as num?)?.toInt();
+    if (incomingMustacheSize != null) {
+      _companionMustacheSize = incomingMustacheSize;
     }
 
     final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();

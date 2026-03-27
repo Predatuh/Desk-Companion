@@ -72,6 +72,8 @@ String companionMustache = "none";
 String companionGlasses = "none";
 String companionHeadwear = "none";
 String companionPiercing = "none";
+int companionHairSize = 100;
+int companionMustacheSize = 100;
 String currentNoteFlowerAccent = "";
 int currentNoteFontSize = 1;
 int currentNoteBorder = 0;      // 0=none 1=rounded 2=stitched 3=hearts 4=dots
@@ -154,6 +156,8 @@ String normalizeCompanionHeadwear(const String& value);
 String normalizeCompanionPiercing(const String& value);
 String petAmbientStatus();
 int clampLevel(int value);
+int clampAppearancePercent(int value);
+int scaleByPercent(int base, int percent);
 String activePetBehavior();
 String pickAutonomousPetExpression();
 String pickReactionExpression(const String& trigger);
@@ -340,6 +344,8 @@ String buildStatusJson() {
   json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
   json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
   json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
+  json += "\"hairSize\":" + String(companionHairSize) + ",";
+  json += "\"mustacheSize\":" + String(companionMustacheSize) + ",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -361,6 +367,8 @@ String buildBleStatusJson() {
   json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
   json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
   json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
+  json += "\"hairSize\":" + String(companionHairSize) + ",";
+  json += "\"mustacheSize\":" + String(companionMustacheSize) + ",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -382,6 +390,8 @@ String buildBleStatusWithNetworksJson() {
   json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
   json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
   json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
+  json += "\"hairSize\":" + String(companionHairSize) + ",";
+  json += "\"mustacheSize\":" + String(companionMustacheSize) + ",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel) + ",";
@@ -502,7 +512,10 @@ String normalizeCompanionHair(const String& value) {
   if (trimmed == "none" ||
       trimmed == "tuft" ||
       trimmed == "bangs" ||
-      trimmed == "spiky") {
+      trimmed == "spiky" ||
+      trimmed == "swoop" ||
+      trimmed == "bob" ||
+      trimmed == "messy") {
     return trimmed;
   }
   return "none";
@@ -523,7 +536,11 @@ String normalizeCompanionMustache(const String& value) {
   const String trimmed = value.length() == 0 ? "" : value;
   if (trimmed == "none" ||
       trimmed == "classic" ||
-      trimmed == "curled") {
+      trimmed == "curled" ||
+      trimmed == "handlebar" ||
+      trimmed == "walrus" ||
+      trimmed == "pencil" ||
+      trimmed == "imperial") {
     return trimmed;
   }
   return "none";
@@ -577,24 +594,24 @@ String petAmbientStatus() {
     return currentAttentionStatus();
   }
   if (activePetMode == "off") {
-    return "Companion off";
+    return "Ready";
   }
   if (activePetMode == "play") {
-    return "Feeling playful";
+    return "Bright-eyed";
   }
   if (activePetMode == "cuddle") {
-    return "Feeling cuddly";
+    return "Close by";
   }
   if (activePetMode == "nap") {
-    return "Drifting off";
+    return "Quiet";
   }
   if (activePetMode == "party") {
-    return "In party mode";
+    return "Sparked up";
   }
   if (activePetMode == "needy") {
-    return "Seeking attention";
+    return "Looking your way";
   }
-  return petDisplayLabel(petPersonality) + " mood";
+  return "Here with you";
 }
 
 int clampLevel(int value) {
@@ -607,32 +624,51 @@ int clampLevel(int value) {
   return value;
 }
 
+int clampAppearancePercent(int value) {
+  if (value < 70) {
+    return 70;
+  }
+  if (value > 170) {
+    return 170;
+  }
+  return value;
+}
+
+int scaleByPercent(int base, int percent) {
+  const int clampedPercent = clampAppearancePercent(percent);
+  const long scaled = (static_cast<long>(base) * clampedPercent) / 100L;
+  if (scaled == 0 && base != 0) {
+    return base > 0 ? 1 : -1;
+  }
+  return static_cast<int>(scaled);
+}
+
 String currentAttentionStatus() {
   if (activeCareAction == "pet") {
-    return "Loved the pat";
+    return "Enjoying the moment";
   }
   if (activeCareAction == "cheer") {
-    return "Feeling brighter";
+    return "Lit up";
   }
   if (activeCareAction == "comfort") {
-    return "Feeling safe";
+    return "Settled in";
   }
   if (activeCareAction == "dance") {
-    return "Party time";
+    return "All spark";
   }
   if (activeCareAction == "surprise") {
-    return "Feeling sparkly";
+    return "Curious";
   }
   if (bondLevel < 30) {
-    return "Needs attention";
+    return "Nearby";
   }
   if (energyLevel < 25) {
-    return "Running low";
+    return "Taking it slow";
   }
   if (boredomLevel > 70) {
-    return "Wants a game";
+    return "Restless";
   }
-  return petDisplayLabel(petPersonality) + " mood";
+  return "Here with you";
 }
 
 String pickAutonomousPetExpression() {
@@ -737,6 +773,8 @@ void persistPetState() {
   preferences.putString("companion_glasses", companionGlasses);
   preferences.putString("companion_headwear", companionHeadwear);
   preferences.putString("companion_piercing", companionPiercing);
+  preferences.putInt("companion_hair_size", companionHairSize);
+  preferences.putInt("companion_mustache_size", companionMustacheSize);
   preferences.putInt("bond_level", bondLevel);
   preferences.putInt("energy_level", energyLevel);
   preferences.putInt("boredom_level", boredomLevel);
@@ -789,7 +827,7 @@ void setPetPersonality(const String& personality, bool persist) {
   startTransientExpression(
     pickReactionExpression("personality"),
     2200,
-    petDisplayLabel(petPersonality) + " personality"
+    petAmbientStatus()
   );
 }
 
@@ -805,7 +843,7 @@ void triggerPetMode(const String& petMode, bool persist) {
   }
 
   currentMode = MODE_IDLE;
-  statusText = petDisplayLabel(activePetMode) + " mode";
+  statusText = petAmbientStatus();
   lastPetBeatMs = 0;
   if (activePetMode == "off") {
     renderCurrentMode();
@@ -815,7 +853,7 @@ void triggerPetMode(const String& petMode, bool persist) {
   startTransientExpression(
     pickReactionExpression("pet_mode"),
     3200,
-    petDisplayLabel(activePetMode) + " mode"
+    petAmbientStatus()
   );
 }
 
@@ -1193,23 +1231,20 @@ void renderImage() {
 
 void renderIdle() {
   display.clearDisplay();
-  display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
   display.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 10, SH110X_WHITE);
-  display.setCursor(8, 7);
-  display.print(petDisplayLabel(petPersonality));
-  display.print(" / ");
-  display.print(petDisplayLabel(activePetMode));
-  display.drawLine(8, 17, SCREEN_WIDTH - 9, 17, SH110X_WHITE);
 
   const int leftX = 38;
   const int rightX = 90;
-  const int eyeY = 30;
-  const int mouthY = 44;
+  const int eyeY = 31;
+  const int mouthY = 47;
   const int pupilOffsets[4] = {-2, 0, 2, 0};
   const int pupilDx = pupilOffsets[idleOrbit % 4];
 
-  if (activePetMode == "nap" || petPersonality == "sleepy") {
+  if (activePetMode == "off") {
+    drawEye(leftX, eyeY, 22, 14, 5, 0, 0);
+    drawEye(rightX, eyeY, 22, 14, 5, 0, 0);
+    display.drawLine(SCREEN_WIDTH / 2 - 7, mouthY, SCREEN_WIDTH / 2 + 7, mouthY, SH110X_WHITE);
+  } else if (activePetMode == "nap" || petPersonality == "sleepy") {
     drawBlinkEye(leftX, eyeY, 24, 4, 4);
     drawBlinkEye(rightX, eyeY, 24, 4, 4);
     display.drawLine(SCREEN_WIDTH / 2 - 8, mouthY, SCREEN_WIDTH / 2 + 8, mouthY, SH110X_WHITE);
@@ -1239,8 +1274,7 @@ void renderIdle() {
     drawOvalMouth(SCREEN_WIDTH / 2, mouthY, 5, 4);
   }
 
-  display.setCursor(26, 54);
-  display.print(petAmbientStatus());
+  drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
   display.display();
 }
 
@@ -1365,6 +1399,8 @@ void drawBrow(int x1, int y1, int x2, int y2) {
 
 void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
   const int faceCenterX = (leftX + rightX) / 2;
+  const int hairSize = clampAppearancePercent(companionHairSize);
+  const int mustacheSize = clampAppearancePercent(companionMustacheSize);
 
   if (companionEars == "cat") {
     display.drawTriangle(leftX - 16, eyeY - 18, leftX - 8, eyeY - 30, leftX + 2, eyeY - 18, SH110X_WHITE);
@@ -1378,18 +1414,38 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
   }
 
   if (companionHair == "tuft") {
-    display.drawLine(faceCenterX - 4, eyeY - 20, faceCenterX, eyeY - 30, SH110X_WHITE);
-    display.drawLine(faceCenterX, eyeY - 30, faceCenterX + 4, eyeY - 20, SH110X_WHITE);
-    display.drawLine(faceCenterX, eyeY - 30, faceCenterX + 1, eyeY - 18, SH110X_WHITE);
+    const int lift = scaleByPercent(12, hairSize);
+    const int spread = scaleByPercent(5, hairSize);
+    display.drawLine(faceCenterX - spread, eyeY - 12, faceCenterX, eyeY - 12 - lift, SH110X_WHITE);
+    display.drawLine(faceCenterX, eyeY - 12 - lift, faceCenterX + spread, eyeY - 12, SH110X_WHITE);
+    display.drawLine(faceCenterX, eyeY - 12 - lift, faceCenterX + 1, eyeY - 8, SH110X_WHITE);
   } else if (companionHair == "bangs") {
-    display.drawLine(leftX - 18, eyeY - 19, rightX + 18, eyeY - 19, SH110X_WHITE);
+    const int topY = eyeY - 12 - scaleByPercent(3, hairSize);
+    display.drawLine(leftX - 18, topY, rightX + 18, topY, SH110X_WHITE);
     for (int x = leftX - 14; x <= rightX + 14; x += 8) {
-      display.drawLine(x, eyeY - 18, x + 3, eyeY - 12, SH110X_WHITE);
+      display.drawLine(x, topY + 1, x + scaleByPercent(3, hairSize), eyeY - 7, SH110X_WHITE);
     }
   } else if (companionHair == "spiky") {
     for (int x = leftX - 14; x <= rightX + 14; x += 10) {
-      display.drawLine(x, eyeY - 18, x + 4, eyeY - 30, SH110X_WHITE);
-      display.drawLine(x + 4, eyeY - 30, x + 8, eyeY - 18, SH110X_WHITE);
+      const int peak = eyeY - 10 - scaleByPercent(9, hairSize);
+      display.drawLine(x, eyeY - 10, x + 4, peak, SH110X_WHITE);
+      display.drawLine(x + 4, peak, x + 8, eyeY - 10, SH110X_WHITE);
+    }
+  } else if (companionHair == "swoop") {
+    const int topY = eyeY - 12 - scaleByPercent(6, hairSize);
+    display.drawLine(leftX - 10, eyeY - 9, faceCenterX + 12, topY, SH110X_WHITE);
+    display.drawLine(faceCenterX + 12, topY, rightX + 18, eyeY - 5, SH110X_WHITE);
+    display.drawLine(leftX - 6, eyeY - 10, faceCenterX + 4, topY + 2, SH110X_WHITE);
+  } else if (companionHair == "bob") {
+    const int topY = eyeY - 11 - scaleByPercent(4, hairSize);
+    display.drawRoundRect(leftX - 18, topY, (rightX - leftX) + 36, 10 + scaleByPercent(4, hairSize), 5, SH110X_WHITE);
+    display.drawLine(leftX - 18, eyeY - 1, leftX - 12, eyeY + 7, SH110X_WHITE);
+    display.drawLine(rightX + 18, eyeY - 1, rightX + 12, eyeY + 7, SH110X_WHITE);
+  } else if (companionHair == "messy") {
+    for (int x = leftX - 10; x <= rightX + 12; x += 9) {
+      const int peak = eyeY - 8 - scaleByPercent(7, hairSize) + ((x / 9) % 2 == 0 ? 0 : 3);
+      display.drawLine(x, eyeY - 8, x + 3, peak, SH110X_WHITE);
+      display.drawLine(x + 3, peak, x + 6, eyeY - 9, SH110X_WHITE);
     }
   }
 
@@ -1423,15 +1479,39 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
   }
 
   if (companionMustache == "classic") {
-    display.drawLine(faceCenterX - 16, mouthY - 3, faceCenterX - 4, mouthY - 1, SH110X_WHITE);
-    display.drawLine(faceCenterX - 16, mouthY - 2, faceCenterX - 4, mouthY, SH110X_WHITE);
-    display.drawLine(faceCenterX + 4, mouthY - 1, faceCenterX + 16, mouthY - 3, SH110X_WHITE);
-    display.drawLine(faceCenterX + 4, mouthY, faceCenterX + 16, mouthY - 2, SH110X_WHITE);
+    const int wing = scaleByPercent(12, mustacheSize);
+    const int inner = scaleByPercent(4, mustacheSize);
+    display.drawLine(faceCenterX - wing, mouthY - 4, faceCenterX - inner, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX - wing, mouthY - 3, faceCenterX - inner, mouthY + 1, SH110X_WHITE);
+    display.drawLine(faceCenterX + inner, mouthY - 1, faceCenterX + wing, mouthY - 4, SH110X_WHITE);
+    display.drawLine(faceCenterX + inner, mouthY + 1, faceCenterX + wing, mouthY - 3, SH110X_WHITE);
   } else if (companionMustache == "curled") {
-    display.drawLine(faceCenterX - 14, mouthY - 2, faceCenterX - 2, mouthY - 1, SH110X_WHITE);
-    display.drawLine(faceCenterX + 2, mouthY - 1, faceCenterX + 14, mouthY - 2, SH110X_WHITE);
-    display.drawCircle(faceCenterX - 16, mouthY - 3, 2, SH110X_WHITE);
-    display.drawCircle(faceCenterX + 16, mouthY - 3, 2, SH110X_WHITE);
+    const int wing = scaleByPercent(12, mustacheSize);
+    display.drawLine(faceCenterX - wing, mouthY - 2, faceCenterX - 2, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX + 2, mouthY - 1, faceCenterX + wing, mouthY - 2, SH110X_WHITE);
+    display.drawCircle(faceCenterX - wing - 2, mouthY - 3, 2, SH110X_WHITE);
+    display.drawCircle(faceCenterX + wing + 2, mouthY - 3, 2, SH110X_WHITE);
+  } else if (companionMustache == "handlebar") {
+    const int wing = scaleByPercent(14, mustacheSize);
+    display.drawLine(faceCenterX - wing, mouthY - 1, faceCenterX - 2, mouthY, SH110X_WHITE);
+    display.drawLine(faceCenterX + 2, mouthY, faceCenterX + wing, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX - wing, mouthY - 1, faceCenterX - wing - 4, mouthY - 5, SH110X_WHITE);
+    display.drawLine(faceCenterX + wing, mouthY - 1, faceCenterX + wing + 4, mouthY - 5, SH110X_WHITE);
+  } else if (companionMustache == "walrus") {
+    const int width = scaleByPercent(14, mustacheSize);
+    const int height = scaleByPercent(4, mustacheSize);
+    display.fillRoundRect(faceCenterX - width, mouthY - 6, width * 2, height + 2, 3, SH110X_WHITE);
+    display.fillRect(faceCenterX - 2, mouthY - 3, 4, height + 4, SH110X_WHITE);
+  } else if (companionMustache == "pencil") {
+    const int width = scaleByPercent(13, mustacheSize);
+    display.drawLine(faceCenterX - width, mouthY - 2, faceCenterX + width, mouthY - 2, SH110X_WHITE);
+    display.drawLine(faceCenterX - width + 2, mouthY - 1, faceCenterX + width - 2, mouthY - 1, SH110X_WHITE);
+  } else if (companionMustache == "imperial") {
+    const int wing = scaleByPercent(12, mustacheSize);
+    display.drawLine(faceCenterX - wing, mouthY - 2, faceCenterX - 1, mouthY - 1, SH110X_WHITE);
+    display.drawLine(faceCenterX + 1, mouthY - 1, faceCenterX + wing, mouthY - 2, SH110X_WHITE);
+    display.drawLine(faceCenterX - wing, mouthY - 2, faceCenterX - wing - 2, mouthY - 9, SH110X_WHITE);
+    display.drawLine(faceCenterX + wing, mouthY - 2, faceCenterX + wing + 2, mouthY - 9, SH110X_WHITE);
   }
 
   if (companionPiercing == "brow") {
@@ -2108,6 +2188,12 @@ void tryStoredPrefs() {
   companionPiercing = normalizeCompanionPiercing(
     preferences.getString("companion_piercing", companionPiercing)
   );
+  companionHairSize = clampAppearancePercent(
+    preferences.getInt("companion_hair_size", companionHairSize)
+  );
+  companionMustacheSize = clampAppearancePercent(
+    preferences.getInt("companion_mustache_size", companionMustacheSize)
+  );
   bondLevel = clampLevel(preferences.getInt("bond_level", bondLevel));
   energyLevel = clampLevel(preferences.getInt("energy_level", energyLevel));
   boredomLevel = clampLevel(preferences.getInt("boredom_level", boredomLevel));
@@ -2224,6 +2310,12 @@ void handleCommandJson(const String& body) {
     );
     companionPiercing = normalizeCompanionPiercing(
       extractJsonStringField(body, "piercing", companionPiercing)
+    );
+    companionHairSize = clampAppearancePercent(
+      extractJsonIntField(body, "hairSize", companionHairSize)
+    );
+    companionMustacheSize = clampAppearancePercent(
+      extractJsonIntField(body, "mustacheSize", companionMustacheSize)
     );
     persistPetState();
     if (currentMode == MODE_IDLE) {

@@ -74,6 +74,8 @@ The ESP32 posts:
   "glasses": "none",
   "headwear": "none",
   "piercing": "none",
+  "hairSize": 100,
+  "mustacheSize": 100,
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -100,6 +102,8 @@ Standard BLE status notifications contain:
   "glasses": "none",
   "headwear": "none",
   "piercing": "none",
+  "hairSize": 100,
+  "mustacheSize": 100,
   "bondLevel": 50,
   "energyLevel": 72,
   "boredomLevel": 28
@@ -205,20 +209,24 @@ These commands set the device's active companion mode. `off` disables companion 
   "mustache": "curled",
   "glasses": "round",
   "headwear": "bow",
-  "piercing": "brow"
+  "piercing": "brow",
+  "hairSize": 110,
+  "mustacheSize": 135
 }
 ```
 
 Supported style options:
 
-- `hair`: `none`, `tuft`, `bangs`, `spiky`
+- `hair`: `none`, `tuft`, `bangs`, `spiky`, `swoop`, `bob`, `messy`
 - `ears`: `none`, `cat`, `bear`, `bunny`
-- `mustache`: `none`, `classic`, `curled`
+- `mustache`: `none`, `classic`, `curled`, `handlebar`, `walrus`, `pencil`, `imperial`
 - `glasses`: `none`, `round`, `square`, `visor`
 - `headwear`: `none`, `bow`, `beanie`, `crown`
 - `piercing`: `none`, `brow`, `nose`, `lip`
+- `hairSize`: integer percentage from `70` to `170`
+- `mustacheSize`: integer percentage from `70` to `170`
 
-Style changes persist on the device and are applied to the idle face and emotion scenes.
+Style changes persist on the device and are applied to the idle face and emotion scenes. The Flutter app now includes a local live preview so users can adjust these values before sending them.
 
 - `care_action`
 
