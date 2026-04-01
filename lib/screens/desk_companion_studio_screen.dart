@@ -1874,6 +1874,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final usesNativeClassicSend =
         _selectedVisualModel.isDeviceSupported && _selectedScene == CompanionScene.none;
     final supportsLiveBleScene = !usesNativeClassicSend && controller.isBleConnected;
+    final streamsLiveBleScene =
+      supportsLiveBleScene && !_appearancePreviewReferencePose;
     final previewPersonality = _appearancePreviewReferencePose
         ? _selectedPersonality.command
         : currentPersonality.command;
@@ -1885,8 +1887,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final previewMode = _appearancePreviewReferencePose ? 'Reference pose' : 'Live mood';
     final guideLabel = usesNativeClassicSend
         ? 'Classic native send is ready.'
-        : supportsLiveBleScene
+      : streamsLiveBleScene
             ? 'BLE is connected, so this scene can stream live to the OLED.'
+        : supportsLiveBleScene
+          ? 'Reference pose stays on a still frame so BLE is not wasted on identical redraws.'
             : 'Without BLE, non-classic scenes fall back to a still bitmap snapshot.';
     final detailSummary = switch (_selectedVisualModel) {
       CompanionVisualModel.classic =>
@@ -2068,50 +2072,56 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           _updateSelectedVisualModel(controller, value);
                         },
                       ),
-                      const SizedBox(height: 10),
-                      _buildStudioDropdown(
-                        context,
-                        label: 'Scene',
-                        value: _selectedScene,
-                        values: CompanionScene.values,
-                        labelBuilder: (value) => value.label,
-                        enabled: !controller.busy,
-                        onChanged: (value) => setState(() {
-                          _appearanceDraftDirty = true;
-                          _selectedScene = value;
-                          _persistStudioPreviewState(controller);
-                        }),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildStudioDropdown<bool>(
-                        context,
-                        label: 'Preview mode',
-                        value: _appearancePreviewReferencePose,
-                        values: const [true, false],
-                        labelBuilder: (value) => value ? 'Reference pose' : 'Live mood',
-                        enabled: !controller.busy,
-                        onChanged: (value) => setState(() => _appearancePreviewReferencePose = value),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildStudioDropdown(
-                        context,
-                        label: 'Expression / mood',
-                        value: _selectedExpression,
-                        values: DeskExpression.values,
-                        labelBuilder: (value) => value.label,
-                        enabled: !controller.busy,
-                        onChanged: (value) => setState(() {
-                          _selectedExpression = value;
-                          if (_appearancePreviewReferencePose) {
-                            _appearancePreviewReferencePose = false;
-                          }
-                        }),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _selectedScene.description,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                      if (_selectedVisualModel != CompanionVisualModel.classic) ...[
+                        const SizedBox(height: 10),
+                        _buildStudioDropdown(
+                          context,
+                          label: 'Scene',
+                          value: _selectedScene,
+                          values: CompanionScene.values,
+                          labelBuilder: (value) => value.label,
+                          enabled: !controller.busy,
+                          onChanged: (value) => setState(() {
+                            _appearanceDraftDirty = true;
+                            _selectedScene = value;
+                            _persistStudioPreviewState(controller);
+                          }),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _selectedScene.description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Classic keeps scene editing out of the way here. Use Expression studio for mood changes and the fullscreen editor for face alignment.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      if (_selectedVisualModel == CompanionVisualModel.stickFigure) ...[
+                        const SizedBox(height: 10),
+                        _buildStudioDropdown(
+                          context,
+                          label: 'Expression / mood',
+                          value: _selectedExpression,
+                          values: DeskExpression.values,
+                          labelBuilder: (value) => value.label,
+                          enabled: !controller.busy,
+                          onChanged: (value) => setState(() {
+                            _selectedExpression = value;
+                            if (_appearancePreviewReferencePose) {
+                              _appearancePreviewReferencePose = false;
+                            }
+                          }),
+                        ),
+                      ] else if (_selectedVisualModel == CompanionVisualModel.robot) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Robot currently follows scene timing only, so mood controls stay hidden until the robot motion language is expanded.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Text(
                         detailSummary,
@@ -2203,7 +2213,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   icon: Icon(
                     usesNativeClassicSend
                         ? Icons.face_retouching_natural
-                        : supportsLiveBleScene
+                      : streamsLiveBleScene
                             ? (_scenePlaybackActive
                                 ? Icons.stop_circle_outlined
                                 : Icons.play_circle_outline)
@@ -2212,7 +2222,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   label: Text(
                     usesNativeClassicSend
                         ? 'Apply appearance'
-                        : supportsLiveBleScene
+                      : streamsLiveBleScene
                             ? (_scenePlaybackActive
                                 ? 'Stop live scene'
                                 : 'Start live scene')
@@ -2226,7 +2236,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           Text(
             usesNativeClassicSend
                 ? 'Classic appearance sends as a native device command.'
-                : supportsLiveBleScene
+                : streamsLiveBleScene
                     ? 'The app is now streaming the full scene animation over BLE instead of flattening it to a still frame.'
                     : 'App-first models can still be sent over Wi-Fi or relay, but only as a single snapshot because live scene streaming requires BLE.',
             style: Theme.of(context).textTheme.bodySmall,
@@ -2583,6 +2593,15 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       return;
     }
 
+    if (_appearancePreviewReferencePose) {
+      await _sendStudioPreviewSnapshot(
+        controller,
+        currentPersonality,
+        currentPetMode,
+      );
+      return;
+    }
+
     if (_scenePlaybackActive) {
       _stopLiveScenePlayback();
       _showMessage('Live scene streaming stopped.');
@@ -2618,6 +2637,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         },
       CompanionVisualModel.robot => const Duration(milliseconds: 4200),
     };
+  }
+
+  Duration _scenePlaybackFrameInterval() {
+    if (_appearancePreviewReferencePose) {
+      return const Duration(milliseconds: 160);
+    }
+
+    switch (_selectedVisualModel) {
+      case CompanionVisualModel.classic:
+        return const Duration(milliseconds: 90);
+      case CompanionVisualModel.stickFigure:
+        final energyTrim = ((_stickFigureEnergy.round() - 40) / 15).floor();
+        var intervalMs = switch (_selectedScene) {
+          CompanionScene.holdHands => 70,
+          CompanionScene.hug ||
+          CompanionScene.kiss ||
+          CompanionScene.shyLeanIn => 76,
+          CompanionScene.wave || CompanionScene.bow => 64,
+          CompanionScene.none => 78,
+        };
+        intervalMs -= energyTrim.clamp(0, 3) * 4;
+        if (intervalMs < 58) {
+          intervalMs = 58;
+        }
+        return Duration(milliseconds: intervalMs);
+      case CompanionVisualModel.robot:
+        final intervalMs = switch (_selectedScene) {
+          CompanionScene.holdHands ||
+          CompanionScene.hug ||
+          CompanionScene.kiss ||
+          CompanionScene.shyLeanIn => 72,
+          CompanionScene.wave || CompanionScene.bow => 66,
+          CompanionScene.none => 76,
+        };
+        return Duration(milliseconds: intervalMs);
+    }
   }
 
   double _currentScenePlaybackProgress() {
@@ -2662,7 +2717,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         currentPersonality,
         currentPetMode,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 90));
+      await Future<void>.delayed(_scenePlaybackFrameInterval());
     }
 
     if (_scenePlaybackToken == playbackToken) {
@@ -3679,7 +3734,7 @@ class _FullscreenAppearanceEditorState
 
   _AppearanceEditorSection _defaultSectionForModel(CompanionVisualModel model) {
     return switch (model) {
-      CompanionVisualModel.classic => _AppearanceEditorSection.scene,
+      CompanionVisualModel.classic => _AppearanceEditorSection.silhouette,
       CompanionVisualModel.stickFigure => _AppearanceEditorSection.motion,
       CompanionVisualModel.robot => _AppearanceEditorSection.scene,
     };
@@ -3900,7 +3955,11 @@ class _FullscreenAppearanceEditorState
   Widget _buildScenePanel(BuildContext context) {
     return _EditorPanel(
       title: 'Scene setup',
-      subtitle: 'Pick the model, the relationship scene, and how the preview should behave. This is the only section you need for stick figures and robots.',
+      subtitle: _visualModel == CompanionVisualModel.classic
+          ? 'Classic keeps the scene page intentionally sparse so accessory and face edits do not get buried under irrelevant controls.'
+          : _visualModel == CompanionVisualModel.stickFigure
+              ? 'Pick the relationship scene and scene mood here. Preview mode stays pinned above so alignment work is always one tap away.'
+              : 'Robot currently focuses on scene selection only. Extra robot-only mood controls stay hidden until they have a real effect.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3917,60 +3976,57 @@ class _FullscreenAppearanceEditorState
             _visualModel.description,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 14),
-          _buildChoiceWrap(
-            context,
-            'Scene',
-            CompanionScene.values,
-            _scene,
-            (value) => setState(() => _scene = value),
-            (value) => value.label,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _scene.description,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 14),
-          Text('Preview mode', style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                label: const Text('Reference pose'),
-                selected: _referencePose,
-                onSelected: (_) => setState(() => _referencePose = true),
-              ),
-              ChoiceChip(
-                label: const Text('Live mood'),
-                selected: !_referencePose,
-                onSelected: (_) => setState(() => _referencePose = false),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildChoiceWrap(
-            context,
-            'Expression / mood',
-            DeskExpression.values,
-            _selectedExpression,
-            (value) => setState(() {
-              _selectedExpression = value;
-              if (_referencePose) {
-                _referencePose = false;
-              }
-            }),
-            (value) => value.label,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _referencePose
-                ? 'Reference pose is best for alignment work and accessory placement.'
-                : 'Live mood is currently previewing ${_selectedExpression.label.toLowerCase()} so you can judge the real animated face inside the scene.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (_visualModel != CompanionVisualModel.classic) ...[
+            const SizedBox(height: 14),
+            _buildChoiceWrap(
+              context,
+              'Scene',
+              CompanionScene.values,
+              _scene,
+              (value) => setState(() => _scene = value),
+              (value) => value.label,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _scene.description,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ] else ...[
+            const SizedBox(height: 14),
+            Text(
+              'Classic mode does not use relationship scenes here. Preview mode stays pinned above, and mood changes belong in Expression studio.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (_visualModel == CompanionVisualModel.stickFigure) ...[
+            const SizedBox(height: 14),
+            _buildChoiceWrap(
+              context,
+              'Expression / mood',
+              DeskExpression.values,
+              _selectedExpression,
+              (value) => setState(() {
+                _selectedExpression = value;
+                if (_referencePose) {
+                  _referencePose = false;
+                }
+              }),
+              (value) => value.label,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _referencePose
+                  ? 'Reference pose is best for silhouette alignment and fixed accessory placement.'
+                  : 'Live mood is previewing ${_selectedExpression.label.toLowerCase()} inside the active stick-figure scene.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ] else if (_visualModel == CompanionVisualModel.robot) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Robot stays scene-first for now. The preview chips above still let you freeze the pose when you need alignment work.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 10),
           Text(
             _visualModel.isDeviceSupported
