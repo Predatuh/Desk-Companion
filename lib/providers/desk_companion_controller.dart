@@ -1196,7 +1196,8 @@ class DeskCompanionController extends ChangeNotifier {
     }
 
     if (normalized.contains('wi-fi list updated') ||
-        normalized.contains('no wi-fi found')) {
+        normalized.contains('no wi-fi found') ||
+        normalized.contains('wi-fi scan failed')) {
       _wifiScanPending = false;
     }
 

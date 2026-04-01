@@ -2104,17 +2104,39 @@ void scanWifiNetworks() {
   statusText = "Scanning Wi-Fi";
   publishStatus();
 
-  const bool wasConnected = WiFi.status() == WL_CONNECTED;
-  if (wasConnected) {
+  const bool shouldRestoreWifi =
+      !currentSsid.isEmpty() && storedWifiPass.length() > 0;
+  if (wifiJoinInProgress()) {
+    markWifiJoinFinished();
+  }
+  if (bootWifiRestorePending) {
+    bootWifiRestorePending = false;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
     WiFi.disconnect(false, false);
     delay(300);
+  } else {
+    WiFi.disconnect(false, false);
+    delay(150);
   }
 
   WiFi.mode(WIFI_STA);
+  delay(120);
   WiFi.scanDelete();
   availableWifiNetworkCount = 0;
 
-  const int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+  int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+  if (foundNetworks < 0) {
+    Serial.printf("[WIFI] Scan failed with code %d, retrying once.\n", foundNetworks);
+    statusText = String("Retrying Wi-Fi scan (") + String(foundNetworks) + ")";
+    publishStatus();
+    WiFi.scanDelete();
+    delay(250);
+    WiFi.mode(WIFI_STA);
+    delay(120);
+    foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+  }
 
   for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
     const String ssid = WiFi.SSID(i);
@@ -2134,16 +2156,21 @@ void scanWifiNetworks() {
   }
   WiFi.scanDelete();
 
-  if (wasConnected && !currentSsid.isEmpty()) {
-    preferences.begin("desk-cfg", true);
-    const String storedPass = preferences.getString("pass", "");
-    preferences.end();
-    WiFi.begin(currentSsid.c_str(), storedPass.c_str());
+  if (shouldRestoreWifi) {
+    WiFi.mode(WIFI_STA);
+    delay(100);
     WiFi.setAutoReconnect(true);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    markWifiJoinStarted();
+    lastWifiCheckMs = millis();
   }
 
-  statusText =
-      availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+  if (foundNetworks < 0) {
+    statusText = String("Wi-Fi scan failed (") + String(foundNetworks) + ")";
+  } else {
+    statusText =
+        availableWifiNetworkCount > 0 ? "Wi-Fi list updated" : "No Wi-Fi found";
+  }
   publishStatusWithNetworks();
 }
 
