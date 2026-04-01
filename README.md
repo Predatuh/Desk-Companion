@@ -51,19 +51,30 @@ flutter run
 
 Sketch path:
 
-- `desk_companion/esp32_firmware/desk_companion_s3_zero/desk_companion_s3_zero.ino`
+- regular ESP32-S3 build: `desk_companion/esp32_firmware/desk_companion_s3_zero/desk_companion_s3_zero.ino`
+- ESP32-S3 Mini build: `desk_companion/esp32_firmware/mini/mini.ino`
 
 Arduino libraries required:
 
 - `ESP32 BLE Arduino`
 - `Adafruit GFX Library`
-- `Adafruit SSD1306`
+- `Adafruit SH110X`
 
 Display assumptions:
 
-- 128x64 SSD1306 OLED
-- I2C address `0x3C`
-- default ESP32-S3 I2C pins unless overridden in the sketch
+- 128x64 SH1106-compatible OLED
+- I2C address `0x3C` or `0x3D`
+- the sketch now probes the board default I2C pins plus common ESP32-S3 pin pairs (`8/9`, `5/6`, `6/7`, `4/5`)
+- if no OLED is detected, the firmware now continues booting headless so BLE and Wi-Fi can still come up for recovery
+
+ESP32-S3 Mini flashing note:
+
+- if the boot log says `Detected size(4096k) smaller than the size in the binary image header(16384k)`, the sketch was compiled for a 16 MB board but the module only has 4 MB flash
+- build `desk_companion/esp32_firmware/mini/mini.ino` for the Mini instead of reusing the regular S3 sketch target
+- rebuild the Mini sketch for a 4 MB target before flashing again; this is a board configuration mismatch, not an application crash inside the sketch
+- in Arduino IDE / Arduino CLI, use an ESP32-S3 board profile with `Flash Size = 4MB`
+- for 4 MB boards, use a 4 MB partition scheme such as `Huge APP (3MB No OTA/1MB SPIFFS)` if available; avoid 16 MB partition layouts
+- if you want readable boot logs over USB, enable `USB CDC On Boot` when using an ESP32-S3 USB-native board
 
 ## BLE protocol
 

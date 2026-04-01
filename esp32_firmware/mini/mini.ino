@@ -10,6 +10,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
+#include <esp_system.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
 #include <string>
@@ -58,8 +59,12 @@
 #define NOTE_TEXT_MAX 80
 #endif
 
+#ifndef BOOT_WIFI_DELAY_MS
+#define BOOT_WIFI_DELAY_MS 4000UL
+#endif
+
 #ifndef DESK_COMPANION_DEVICE_NAME
-#define DESK_COMPANION_DEVICE_NAME "Desk Companion S3"
+#define DESK_COMPANION_DEVICE_NAME "Desk Companion Mini"
 #endif
 
 static const char* DEVICE_NAME = DESK_COMPANION_DEVICE_NAME;
@@ -164,6 +169,8 @@ String pendingWifiPass = "";
 bool wifiScanPending = false;
 bool wifiWasConnected = false;
 String storedWifiPass = "";
+bool bootWifiRestorePending = false;
+unsigned long bootCompletedAtMs = 0;
 
 uint8_t imageBuffer[SCREEN_WIDTH * SCREEN_HEIGHT / 8] = {0};
 size_t expectedImageBytes = 0;
@@ -2108,6 +2115,7 @@ void scanWifiNetworks() {
   availableWifiNetworkCount = 0;
 
   const int foundNetworks = WiFi.scanNetworks(false, false, false, 300);
+
   for (int i = 0; i < foundNetworks && availableWifiNetworkCount < 10; i++) {
     const String ssid = WiFi.SSID(i);
     if (ssid.isEmpty()) {
@@ -2965,7 +2973,8 @@ void handleButtons() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== Desk Companion S3 boot ===");
+  Serial.println("\n=== Desk Companion Mini boot ===");
+  Serial.printf("[BOOT] Reset reason: %d\n", static_cast<int>(esp_reset_reason()));
 
   WiFi.persistent(false);
 
@@ -2977,28 +2986,12 @@ void setup() {
   setupBle();
 
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
-    WiFi.mode(WIFI_STA);
-    delay(100);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
-    markWifiJoinStarted();
-
-    const unsigned long startedAt = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 15000) {
-      delay(500);
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      ipAddress = WiFi.localIP().toString();
-      wifiWasConnected = true;
-      markWifiJoinFinished();
-      statusText = "Wi-Fi connected";
-      pushRelayStatus();
-    } else {
-      markWifiJoinFinished();
-    }
+    bootWifiRestorePending = true;
+    statusText = "Wi-Fi queued";
+    Serial.println("[BOOT] Deferring Wi-Fi reconnect until boot settles.");
   }
 
+  bootCompletedAtMs = millis();
   lastWifiCheckMs = millis();
 
   renderCurrentMode();
@@ -3047,6 +3040,24 @@ void loop() {
   }
 
   updatePetBehavior();
+
+  if (bootWifiRestorePending &&
+      !currentSsid.isEmpty() &&
+      storedWifiPass.length() > 0 &&
+      !wifiJoinInProgress() &&
+      WiFi.status() != WL_CONNECTED &&
+      millis() - bootCompletedAtMs >= BOOT_WIFI_DELAY_MS) {
+    bootWifiRestorePending = false;
+    statusText = "Starting Wi-Fi";
+    publishStatus();
+    Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
+    WiFi.mode(WIFI_STA);
+    delay(100);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    markWifiJoinStarted();
+    lastWifiCheckMs = millis();
+  }
 
   const bool wifiNow = WiFi.status() == WL_CONNECTED;
   if (wifiNow) {

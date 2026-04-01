@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/companion_image_payload.dart';
+import '../models/companion_scene.dart';
+import '../models/companion_visual_model.dart';
 
 enum CompanionBleState { disconnected, scanning, connecting, connected }
 
@@ -20,7 +22,11 @@ class DeskCompanionController extends ChangeNotifier {
   static const String commandUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002';
   static const String statusUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003';
   static const String imageUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004';
-  static const String targetName = 'Desk Companion S3';
+  static const String targetName = 'Desk Companion';
+  static const List<String> targetNames = [
+    'Desk Companion S3',
+    'Desk Companion Mini',
+  ];
   static const String _relayBaseUrlKey = 'relayBaseUrl';
   static const String _deviceTokenKey = 'deviceToken';
   static const String _connectedSsidKey = 'lastSsid';
@@ -28,6 +34,11 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _wifiNetworksKey = 'lastWifiNetworks';
   static const String _petPersonalityKey = 'petPersonality';
   static const String _activePetModeKey = 'activePetMode';
+  static const String _visualModelKey = 'companionVisualModel';
+  static const String _sceneKey = 'companionScene';
+  static const String _stickFigureScaleKey = 'stickFigureScale';
+  static const String _stickFigureSpacingKey = 'stickFigureSpacing';
+  static const String _stickFigureEnergyKey = 'stickFigureEnergy';
   static const String _bondLevelKey = 'bondLevel';
   static const String _energyLevelKey = 'energyLevel';
   static const String _boredomLevelKey = 'boredomLevel';
@@ -39,6 +50,18 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _piercingKey = 'companionPiercing';
   static const String _hairSizeKey = 'companionHairSize';
   static const String _mustacheSizeKey = 'companionMustacheSize';
+  static const String _hairWidthKey = 'companionHairWidth';
+  static const String _hairHeightKey = 'companionHairHeight';
+  static const String _hairThicknessKey = 'companionHairThickness';
+  static const String _hairOffsetXKey = 'companionHairOffsetX';
+  static const String _hairOffsetYKey = 'companionHairOffsetY';
+  static const String _eyeOffsetYKey = 'companionEyeOffsetY';
+  static const String _mouthOffsetYKey = 'companionMouthOffsetY';
+  static const String _mustacheWidthKey = 'companionMustacheWidth';
+  static const String _mustacheHeightKey = 'companionMustacheHeight';
+  static const String _mustacheThicknessKey = 'companionMustacheThickness';
+  static const String _mustacheOffsetXKey = 'companionMustacheOffsetX';
+  static const String _mustacheOffsetYKey = 'companionMustacheOffsetY';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -49,6 +72,8 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
+  String _companionVisualModel = CompanionVisualModel.classic.command;
+  String _companionScene = CompanionScene.none.command;
   String _companionHair = 'none';
   String _companionEars = 'none';
   String _companionMustache = 'none';
@@ -57,10 +82,26 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionPiercing = 'none';
   int _companionHairSize = 100;
   int _companionMustacheSize = 100;
+  int _companionHairWidth = 100;
+  int _companionHairHeight = 100;
+  int _companionHairThickness = 100;
+  int _companionHairOffsetX = 0;
+  int _companionHairOffsetY = 0;
+  int _companionEyeOffsetY = 0;
+  int _companionMouthOffsetY = 0;
+  int _companionMustacheWidth = 100;
+  int _companionMustacheHeight = 100;
+  int _companionMustacheThickness = 100;
+  int _companionMustacheOffsetX = 0;
+  int _companionMustacheOffsetY = 0;
+  int _stickFigureScale = 100;
+  int _stickFigureSpacing = 100;
+  int _stickFigureEnergy = 55;
   int _bondLevel = 50;
   int _energyLevel = 72;
   int _boredomLevel = 28;
   List<String> _availableWifiNetworks = const [];
+  String _wifiIpAddress = '';
   String? _lastRelayError;
   int _relayPendingCount = 0;
   DateTime? _relayLastCommandAt;
@@ -69,6 +110,8 @@ class DeskCompanionController extends ChangeNotifier {
   bool _relayOnline = false;
   bool _relayStatusKnown = false;
   bool _busy = false;
+  bool _wifiScanPending = false;
+  bool _wifiConnectPending = false;
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _commandCharacteristic;
@@ -93,6 +136,8 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceToken => _deviceToken;
   String get petPersonality => _petPersonality;
   String get activePetMode => _activePetMode;
+  String get companionVisualModel => _companionVisualModel;
+  String get companionScene => _companionScene;
   String get companionHair => _companionHair;
   String get companionEars => _companionEars;
   String get companionMustache => _companionMustache;
@@ -101,10 +146,26 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionPiercing => _companionPiercing;
   int get companionHairSize => _companionHairSize;
   int get companionMustacheSize => _companionMustacheSize;
+  int get companionHairWidth => _companionHairWidth;
+  int get companionHairHeight => _companionHairHeight;
+  int get companionHairThickness => _companionHairThickness;
+  int get companionHairOffsetX => _companionHairOffsetX;
+  int get companionHairOffsetY => _companionHairOffsetY;
+  int get companionEyeOffsetY => _companionEyeOffsetY;
+  int get companionMouthOffsetY => _companionMouthOffsetY;
+  int get companionMustacheWidth => _companionMustacheWidth;
+  int get companionMustacheHeight => _companionMustacheHeight;
+  int get companionMustacheThickness => _companionMustacheThickness;
+  int get companionMustacheOffsetX => _companionMustacheOffsetX;
+  int get companionMustacheOffsetY => _companionMustacheOffsetY;
+  int get stickFigureScale => _stickFigureScale;
+  int get stickFigureSpacing => _stickFigureSpacing;
+  int get stickFigureEnergy => _stickFigureEnergy;
   int get bondLevel => _bondLevel;
   int get energyLevel => _energyLevel;
   int get boredomLevel => _boredomLevel;
   List<String> get availableWifiNetworks => _availableWifiNetworks;
+  String get wifiIpAddress => _wifiIpAddress;
   int get relayPendingCount => _relayPendingCount;
   DateTime? get relayLastCommandAt => _relayLastCommandAt;
   DateTime? get relayLastSeenAt => _relayLastSeenAt;
@@ -113,6 +174,10 @@ class DeskCompanionController extends ChangeNotifier {
   bool get isRemoteConnected => _relayOnline;
   bool get relayStatusKnown => _relayStatusKnown;
   bool get busy => _busy;
+  bool get wifiScanPending => _wifiScanPending;
+  bool get wifiConnectPending => _wifiConnectPending;
+  bool get wifiConnected =>
+      _connectedSsid.isNotEmpty && _wifiIpAddress.isNotEmpty;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
   bool get hasRelayTarget =>
       _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
@@ -185,6 +250,39 @@ class DeskCompanionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateCompanionVisualModel(String value) async {
+    _companionVisualModel = companionVisualModelFromCommand(value).command;
+    await _persistRelayPreferences();
+    notifyListeners();
+  }
+
+  Future<void> updateStudioPreviewSettings({
+    String? visualModel,
+    String? scene,
+    int? stickFigureScale,
+    int? stickFigureSpacing,
+    int? stickFigureEnergy,
+  }) async {
+    if (visualModel != null) {
+      _companionVisualModel = companionVisualModelFromCommand(visualModel).command;
+    }
+    if (scene != null) {
+      _companionScene = companionSceneFromCommand(scene).command;
+    }
+    if (stickFigureScale != null) {
+      _stickFigureScale = stickFigureScale;
+    }
+    if (stickFigureSpacing != null) {
+      _stickFigureSpacing = stickFigureSpacing;
+    }
+    if (stickFigureEnergy != null) {
+      _stickFigureEnergy = stickFigureEnergy;
+    }
+
+    await _persistRelayPreferences();
+    notifyListeners();
+  }
+
   Future<void> _loadRelayPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     _relayBaseUrl = _sanitizeRelayBaseUrl(
@@ -197,6 +295,12 @@ class DeskCompanionController extends ChangeNotifier {
       (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
     _activePetMode =
       (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
+    _companionVisualModel = companionVisualModelFromCommand(
+      prefs.getString(_visualModelKey),
+    ).command;
+    _companionScene = companionSceneFromCommand(
+      prefs.getString(_sceneKey),
+    ).command;
     _companionHair = (prefs.getString(_hairKey) ?? _companionHair).trim();
     _companionEars = (prefs.getString(_earsKey) ?? _companionEars).trim();
     _companionMustache =
@@ -210,18 +314,35 @@ class DeskCompanionController extends ChangeNotifier {
     _companionHairSize = prefs.getInt(_hairSizeKey) ?? _companionHairSize;
     _companionMustacheSize =
         prefs.getInt(_mustacheSizeKey) ?? _companionMustacheSize;
+    _companionHairWidth = prefs.getInt(_hairWidthKey) ?? _companionHairWidth;
+    _companionHairHeight = prefs.getInt(_hairHeightKey) ?? _companionHairHeight;
+    _companionHairThickness =
+      prefs.getInt(_hairThicknessKey) ?? _companionHairThickness;
+    _companionHairOffsetX =
+      prefs.getInt(_hairOffsetXKey) ?? _companionHairOffsetX;
+    _companionHairOffsetY =
+      prefs.getInt(_hairOffsetYKey) ?? _companionHairOffsetY;
+    _companionEyeOffsetY =
+      prefs.getInt(_eyeOffsetYKey) ?? _companionEyeOffsetY;
+    _companionMouthOffsetY =
+      prefs.getInt(_mouthOffsetYKey) ?? _companionMouthOffsetY;
+    _companionMustacheWidth =
+      prefs.getInt(_mustacheWidthKey) ?? _companionMustacheWidth;
+    _companionMustacheHeight =
+      prefs.getInt(_mustacheHeightKey) ?? _companionMustacheHeight;
+    _companionMustacheThickness =
+      prefs.getInt(_mustacheThicknessKey) ?? _companionMustacheThickness;
+    _companionMustacheOffsetX =
+      prefs.getInt(_mustacheOffsetXKey) ?? _companionMustacheOffsetX;
+    _companionMustacheOffsetY =
+      prefs.getInt(_mustacheOffsetYKey) ?? _companionMustacheOffsetY;
+    _stickFigureScale = prefs.getInt(_stickFigureScaleKey) ?? _stickFigureScale;
+    _stickFigureSpacing = prefs.getInt(_stickFigureSpacingKey) ?? _stickFigureSpacing;
+    _stickFigureEnergy = prefs.getInt(_stickFigureEnergyKey) ?? _stickFigureEnergy;
     _bondLevel = prefs.getInt(_bondLevelKey) ?? _bondLevel;
     _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
     _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
-    final savedNetworks = prefs.getStringList(_wifiNetworksKey);
-    if (savedNetworks != null && savedNetworks.isNotEmpty) {
-      _availableWifiNetworks = savedNetworks;
-    }
-
-    if (_connectedSsid.isNotEmpty &&
-        !_availableWifiNetworks.contains(_connectedSsid)) {
-      _availableWifiNetworks = [_connectedSsid, ..._availableWifiNetworks];
-    }
+    _availableWifiNetworks = const [];
 
     notifyListeners();
 
@@ -248,6 +369,8 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_modeKey, _mode);
     await prefs.setString(_petPersonalityKey, _petPersonality);
     await prefs.setString(_activePetModeKey, _activePetMode);
+    await prefs.setString(_visualModelKey, _companionVisualModel);
+    await prefs.setString(_sceneKey, _companionScene);
     await prefs.setString(_hairKey, _companionHair);
     await prefs.setString(_earsKey, _companionEars);
     await prefs.setString(_mustacheKey, _companionMustache);
@@ -256,12 +379,25 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_piercingKey, _companionPiercing);
     await prefs.setInt(_hairSizeKey, _companionHairSize);
     await prefs.setInt(_mustacheSizeKey, _companionMustacheSize);
+    await prefs.setInt(_hairWidthKey, _companionHairWidth);
+    await prefs.setInt(_hairHeightKey, _companionHairHeight);
+    await prefs.setInt(_hairThicknessKey, _companionHairThickness);
+    await prefs.setInt(_hairOffsetXKey, _companionHairOffsetX);
+    await prefs.setInt(_hairOffsetYKey, _companionHairOffsetY);
+    await prefs.setInt(_eyeOffsetYKey, _companionEyeOffsetY);
+    await prefs.setInt(_mouthOffsetYKey, _companionMouthOffsetY);
+    await prefs.setInt(_mustacheWidthKey, _companionMustacheWidth);
+    await prefs.setInt(_mustacheHeightKey, _companionMustacheHeight);
+    await prefs.setInt(_mustacheThicknessKey, _companionMustacheThickness);
+    await prefs.setInt(_mustacheOffsetXKey, _companionMustacheOffsetX);
+    await prefs.setInt(_mustacheOffsetYKey, _companionMustacheOffsetY);
+    await prefs.setInt(_stickFigureScaleKey, _stickFigureScale);
+    await prefs.setInt(_stickFigureSpacingKey, _stickFigureSpacing);
+    await prefs.setInt(_stickFigureEnergyKey, _stickFigureEnergy);
     await prefs.setInt(_bondLevelKey, _bondLevel);
     await prefs.setInt(_energyLevelKey, _energyLevel);
     await prefs.setInt(_boredomLevelKey, _boredomLevel);
-    if (_availableWifiNetworks.isNotEmpty) {
-      await prefs.setStringList(_wifiNetworksKey, _availableWifiNetworks);
-    }
+    await prefs.remove(_wifiNetworksKey);
   }
 
   Future<void> scanAndConnect() async {
@@ -278,14 +414,14 @@ class DeskCompanionController extends ChangeNotifier {
       return;
     }
 
-    _setBleState(CompanionBleState.scanning, 'Scanning for Desk Companion S3...');
+    _setBleState(CompanionBleState.scanning, 'Scanning for Desk Companion devices...');
 
     await FlutterBluePlus.stopScan();
     await _scanSub?.cancel();
     _scanSub = FlutterBluePlus.onScanResults.listen((results) {
       for (final result in results) {
-        final nameMatches = result.device.platformName == targetName ||
-            result.advertisementData.advName == targetName;
+        final nameMatches = _matchesTargetName(result.device.platformName) ||
+            _matchesTargetName(result.advertisementData.advName);
         final serviceMatches = result.advertisementData.serviceUuids.any(
           (uuid) => uuid.str.toLowerCase() == serviceUuid,
         );
@@ -297,10 +433,7 @@ class DeskCompanionController extends ChangeNotifier {
       }
     });
 
-    await FlutterBluePlus.startScan(
-      withServices: [Guid(serviceUuid)],
-      timeout: const Duration(seconds: 10),
-    );
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
     if (_bleState == CompanionBleState.scanning) {
       _setBleState(
@@ -308,6 +441,18 @@ class DeskCompanionController extends ChangeNotifier {
         'Desk Companion not found over BLE.',
       );
     }
+  }
+
+  bool _matchesTargetName(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) {
+      return false;
+    }
+
+    return normalized.startsWith(targetName.toLowerCase()) ||
+        targetNames.any(
+      (candidate) => candidate.toLowerCase() == normalized,
+    );
   }
 
   Future<void> _connect(BluetoothDevice device) async {
@@ -390,20 +535,30 @@ class DeskCompanionController extends ChangeNotifier {
   }) async {
     await _runBusy(() async {
       _requireBleProvisioning();
+      _connectedSsid = ssid.trim();
+      _wifiIpAddress = '';
+      _wifiConnectPending = true;
+      _wifiScanPending = false;
+      notifyListeners();
       await _sendBleCommand({
         'type': 'connect_wifi',
         'ssid': ssid,
         'password': password,
       });
-      _setStatus('Sent Wi-Fi credentials over BLE.');
+      _setStatus('Sent Wi-Fi credentials over BLE. Waiting for the device to join...');
     });
   }
 
   Future<void> scanWifiNetworks() async {
     await _runBusy(() async {
       _requireBleProvisioning();
+      _wifiScanPending = true;
+      _wifiConnectPending = false;
+      _availableWifiNetworks = const [];
+      notifyListeners();
+      unawaited(_persistRelayPreferences());
       await _sendBleCommand({'type': 'scan_wifi'});
-      _setStatus('Requested Wi-Fi scan over BLE.');
+      _setStatus('Scanning for Wi-Fi networks over BLE...');
     });
   }
 
@@ -412,8 +567,11 @@ class DeskCompanionController extends ChangeNotifier {
       _requireBleProvisioning();
       await _sendBleCommand({'type': 'forget_wifi'});
       _connectedSsid = '';
+      _wifiIpAddress = '';
       _availableWifiNetworks = const [];
-      unawaited(_persistRelayPreferences());
+      _wifiScanPending = false;
+      _wifiConnectPending = false;
+      await _persistRelayPreferences();
       _setStatus('Wi-Fi credentials cleared on device.');
     });
   }
@@ -579,6 +737,18 @@ class DeskCompanionController extends ChangeNotifier {
     required String piercing,
     required int hairSize,
     required int mustacheSize,
+    required int hairWidth,
+    required int hairHeight,
+    required int hairThickness,
+    required int hairOffsetX,
+    required int hairOffsetY,
+    required int eyeOffsetY,
+    required int mouthOffsetY,
+    required int mustacheWidth,
+    required int mustacheHeight,
+    required int mustacheThickness,
+    required int mustacheOffsetX,
+    required int mustacheOffsetY,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -592,6 +762,18 @@ class DeskCompanionController extends ChangeNotifier {
           'piercing': piercing,
           'hairSize': hairSize,
           'mustacheSize': mustacheSize,
+          'hairWidth': hairWidth,
+          'hairHeight': hairHeight,
+          'hairThickness': hairThickness,
+          'hairOffsetX': hairOffsetX,
+          'hairOffsetY': hairOffsetY,
+          'eyeOffsetY': eyeOffsetY,
+          'mouthOffsetY': mouthOffsetY,
+          'mustacheWidth': mustacheWidth,
+          'mustacheHeight': mustacheHeight,
+          'mustacheThickness': mustacheThickness,
+          'mustacheOffsetX': mustacheOffsetX,
+          'mustacheOffsetY': mustacheOffsetY,
         },
         mode: _mode,
         bleLabel: 'Companion style sent over BLE.',
@@ -605,6 +787,18 @@ class DeskCompanionController extends ChangeNotifier {
       _companionPiercing = piercing.trim();
       _companionHairSize = hairSize;
       _companionMustacheSize = mustacheSize;
+      _companionHairWidth = hairWidth;
+      _companionHairHeight = hairHeight;
+      _companionHairThickness = hairThickness;
+      _companionHairOffsetX = hairOffsetX;
+      _companionHairOffsetY = hairOffsetY;
+      _companionEyeOffsetY = eyeOffsetY;
+      _companionMouthOffsetY = mouthOffsetY;
+      _companionMustacheWidth = mustacheWidth;
+      _companionMustacheHeight = mustacheHeight;
+      _companionMustacheThickness = mustacheThickness;
+      _companionMustacheOffsetX = mustacheOffsetX;
+      _companionMustacheOffsetY = mustacheOffsetY;
       await _persistRelayPreferences();
       notifyListeners();
     });
@@ -700,7 +894,7 @@ class DeskCompanionController extends ChangeNotifier {
 
     await _sendBleCommand({'type': 'begin_image', 'total': bitmap.length});
 
-    const chunkSize = 180;
+    final chunkSize = Platform.isAndroid ? 244 : 180;
     for (var offset = 0; offset < bitmap.length; offset += chunkSize) {
       final end = (offset + chunkSize < bitmap.length)
           ? offset + chunkSize
@@ -823,11 +1017,14 @@ class DeskCompanionController extends ChangeNotifier {
 
   void _applyStatusMap(Map<String, dynamic> payload) {
     _mode = (payload['mode'] as String? ?? _mode).trim();
-    _connectedSsid = (payload['ssid'] as String? ?? _connectedSsid).trim();
+    _connectedSsid = (payload['ssid'] as String? ?? '').trim();
+    _wifiIpAddress = (payload['ip'] as String? ?? '').trim();
     final status = (payload['status'] as String? ?? '').trim();
     if (status.isNotEmpty) {
       _statusMessage = status;
     }
+
+    _updateWifiActivity(status);
 
     final incomingRelayUrl = _sanitizeRelayBaseUrl(
       payload['relayUrl'] as String? ?? '',
@@ -892,6 +1089,72 @@ class DeskCompanionController extends ChangeNotifier {
       _companionMustacheSize = incomingMustacheSize;
     }
 
+    final incomingHairWidth = (payload['hairWidth'] as num?)?.toInt();
+    if (incomingHairWidth != null) {
+      _companionHairWidth = incomingHairWidth;
+    }
+
+    final incomingHairHeight = (payload['hairHeight'] as num?)?.toInt();
+    if (incomingHairHeight != null) {
+      _companionHairHeight = incomingHairHeight;
+    }
+
+    final incomingHairThickness =
+        (payload['hairThickness'] as num?)?.toInt();
+    if (incomingHairThickness != null) {
+      _companionHairThickness = incomingHairThickness;
+    }
+
+    final incomingHairOffsetX = (payload['hairOffsetX'] as num?)?.toInt();
+    if (incomingHairOffsetX != null) {
+      _companionHairOffsetX = incomingHairOffsetX;
+    }
+
+    final incomingHairOffsetY = (payload['hairOffsetY'] as num?)?.toInt();
+    if (incomingHairOffsetY != null) {
+      _companionHairOffsetY = incomingHairOffsetY;
+    }
+
+    final incomingEyeOffsetY = (payload['eyeOffsetY'] as num?)?.toInt();
+    if (incomingEyeOffsetY != null) {
+      _companionEyeOffsetY = incomingEyeOffsetY;
+    }
+
+    final incomingMouthOffsetY = (payload['mouthOffsetY'] as num?)?.toInt();
+    if (incomingMouthOffsetY != null) {
+      _companionMouthOffsetY = incomingMouthOffsetY;
+    }
+
+    final incomingMustacheWidth =
+        (payload['mustacheWidth'] as num?)?.toInt();
+    if (incomingMustacheWidth != null) {
+      _companionMustacheWidth = incomingMustacheWidth;
+    }
+
+    final incomingMustacheHeight =
+        (payload['mustacheHeight'] as num?)?.toInt();
+    if (incomingMustacheHeight != null) {
+      _companionMustacheHeight = incomingMustacheHeight;
+    }
+
+    final incomingMustacheThickness =
+        (payload['mustacheThickness'] as num?)?.toInt();
+    if (incomingMustacheThickness != null) {
+      _companionMustacheThickness = incomingMustacheThickness;
+    }
+
+    final incomingMustacheOffsetX =
+        (payload['mustacheOffsetX'] as num?)?.toInt();
+    if (incomingMustacheOffsetX != null) {
+      _companionMustacheOffsetX = incomingMustacheOffsetX;
+    }
+
+    final incomingMustacheOffsetY =
+        (payload['mustacheOffsetY'] as num?)?.toInt();
+    if (incomingMustacheOffsetY != null) {
+      _companionMustacheOffsetY = incomingMustacheOffsetY;
+    }
+
     final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();
     if (incomingBondLevel != null) {
       _bondLevel = incomingBondLevel;
@@ -915,18 +1178,45 @@ class DeskCompanionController extends ChangeNotifier {
           .where((value) => value.isNotEmpty)
           .toSet()
           .toList(growable: false);
-      if (incoming.isNotEmpty) {
-        _availableWifiNetworks = incoming;
-      }
-    }
-
-    if (_connectedSsid.isNotEmpty &&
-        !_availableWifiNetworks.contains(_connectedSsid)) {
-      _availableWifiNetworks = [_connectedSsid, ..._availableWifiNetworks];
+      _availableWifiNetworks = incoming;
+      _wifiScanPending = false;
     }
 
     unawaited(_persistRelayPreferences());
     notifyListeners();
+  }
+
+  void _updateWifiActivity(String status) {
+    final normalized = status.toLowerCase();
+
+    if (normalized.contains('scan queued') ||
+        normalized.contains('scanning wi-fi')) {
+      _wifiScanPending = true;
+      _wifiConnectPending = false;
+    }
+
+    if (normalized.contains('wi-fi list updated') ||
+        normalized.contains('no wi-fi found')) {
+      _wifiScanPending = false;
+    }
+
+    if (normalized.contains('wi-fi queued') ||
+        normalized.contains('starting wi-fi') ||
+        normalized.contains('joining wi-fi')) {
+      _wifiConnectPending = true;
+      _wifiScanPending = false;
+    }
+
+    if (normalized.contains('wi-fi connected') || wifiConnected) {
+      _wifiConnectPending = false;
+      _wifiScanPending = false;
+    }
+
+    if (normalized.contains('wi-fi failed') ||
+        normalized.contains('wi-fi forgotten')) {
+      _wifiConnectPending = false;
+      _wifiScanPending = false;
+    }
   }
 
   Future<void> _sendBleCommand(Map<String, dynamic> body) async {

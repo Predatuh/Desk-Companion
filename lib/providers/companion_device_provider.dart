@@ -15,7 +15,11 @@ class CompanionDeviceProvider extends ChangeNotifier {
   static const String commandUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002';
   static const String statusUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003';
   static const String imageUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004';
-  static const String targetName = 'Desk Companion S3';
+  static const String targetName = 'Desk Companion';
+  static const List<String> targetNames = [
+    'Desk Companion S3',
+    'Desk Companion Mini',
+  ];
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   CompanionBleState get bleState => _bleState;
@@ -83,14 +87,14 @@ class CompanionDeviceProvider extends ChangeNotifier {
       return;
     }
 
-    _setBleState(CompanionBleState.scanning, 'Scanning for Desk Companion S3...');
+    _setBleState(CompanionBleState.scanning, 'Scanning for Desk Companion devices...');
 
     await FlutterBluePlus.stopScan();
     await _scanSub?.cancel();
     _scanSub = FlutterBluePlus.onScanResults.listen((results) {
       for (final result in results) {
-        final nameMatches = result.device.platformName == targetName ||
-            result.advertisementData.advName == targetName;
+        final nameMatches = _matchesTargetName(result.device.platformName) ||
+            _matchesTargetName(result.advertisementData.advName);
         final serviceMatches = result.advertisementData.serviceUuids.any(
           (uuid) => uuid.str.toLowerCase() == serviceUuid,
         );
@@ -103,14 +107,23 @@ class CompanionDeviceProvider extends ChangeNotifier {
       }
     });
 
-    await FlutterBluePlus.startScan(
-      withServices: [Guid(serviceUuid)],
-      timeout: const Duration(seconds: 10),
-    );
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
     if (_bleState == CompanionBleState.scanning) {
       _setBleState(CompanionBleState.disconnected, 'Desk Companion not found over BLE.');
     }
+  }
+
+  bool _matchesTargetName(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) {
+      return false;
+    }
+
+    return normalized.startsWith(targetName.toLowerCase()) ||
+        targetNames.any(
+      (candidate) => candidate.toLowerCase() == normalized,
+    );
   }
 
   Future<void> _connect(BluetoothDevice device) async {

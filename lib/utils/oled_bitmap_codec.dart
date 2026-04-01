@@ -67,6 +67,53 @@ class OledBitmapCodec {
     );
   }
 
+  static CompanionImagePayload fromRgbaBytes({
+    required Uint8List rgbaBytes,
+    required int sourceWidth,
+    required int sourceHeight,
+    required String name,
+    int threshold = 148,
+    bool invert = false,
+  }) {
+    if (sourceWidth != width || sourceHeight != height) {
+      throw ArgumentError(
+        'RGBA source must be exactly ${width}x$height for OLED output.',
+      );
+    }
+
+    final bitmap = Uint8List(byteLength);
+    final preview = img.Image(width: width, height: height);
+
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        final pixelIndex = (y * sourceWidth + x) * 4;
+        final red = rgbaBytes[pixelIndex];
+        final green = rgbaBytes[pixelIndex + 1];
+        final blue = rgbaBytes[pixelIndex + 2];
+        final luminance = ((red * 299) + (green * 587) + (blue * 114)) ~/ 1000;
+
+        var on = luminance < threshold;
+        if (invert) {
+          on = !on;
+        }
+
+        final byteIndex = y * (width ~/ 8) + (x >> 3);
+        if (on) {
+          bitmap[byteIndex] |= 1 << (7 - (x & 7));
+          preview.setPixelRgb(x, y, 255, 255, 255);
+        } else {
+          preview.setPixelRgb(x, y, 0, 0, 0);
+        }
+      }
+    }
+
+    return CompanionImagePayload(
+      name: name,
+      bitmap: bitmap,
+      previewPng: Uint8List.fromList(img.encodePng(preview)),
+    );
+  }
+
   static img.Image _fitToCanvas(img.Image source) {
     final scale = _min(width / source.width, height / source.height);
     final resized = img.copyResize(

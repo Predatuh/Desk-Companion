@@ -4,12 +4,17 @@ import 'package:google_fonts/google_fonts.dart';
 class CompanionTheme {
   CompanionTheme._();
 
-  static const Color cream = Color(0xFFF7F0E8);
-  static const Color ink = Color(0xFF191514);
-  static const Color charcoal = Color(0xFF2B2321);
-  static const Color coral = Color(0xFFFF8E72);
-  static const Color brass = Color(0xFFE7B65A);
-  static const Color blush = Color(0xFFFFD9CF);
+  static const Color cream = Color(0xFFF4F4F2);
+  static const Color ink = Color(0xFF050505);
+  static const Color charcoal = Color(0xFF121212);
+  static const Color coral = Color(0xFF111111);
+  static const Color brass = Color(0xFF2D2D2D);
+  static const Color blush = Color(0xFFD1D1D1);
+  static const Color hotPink = Color(0xFFD94C7D);
+  static const Color panel = Color(0xFFFFFFFF);
+  static const Color surface = Color(0xFFF8F8F8);
+  static const Color surfaceRaised = Color(0xFFECECEC);
+  static const Color muted = Color(0xFF4C4C4C);
 
   static ThemeData get themeData {
     final base = ThemeData(useMaterial3: true);
@@ -20,47 +25,59 @@ class CompanionTheme {
         brightness: Brightness.light,
         primary: coral,
         secondary: brass,
-        surface: Colors.white,
+        surface: panel,
+        onSurface: charcoal,
+        onPrimary: Colors.white,
       ),
       textTheme: GoogleFonts.spaceGroteskTextTheme(base.textTheme).copyWith(
         headlineLarge: GoogleFonts.spaceGrotesk(
           fontSize: 34,
           fontWeight: FontWeight.w700,
-          color: ink,
+          color: charcoal,
         ),
         headlineMedium: GoogleFonts.spaceGrotesk(
           fontSize: 24,
           fontWeight: FontWeight.w700,
-          color: ink,
+          color: charcoal,
         ),
         titleMedium: GoogleFonts.spaceGrotesk(
           fontSize: 16,
           fontWeight: FontWeight.w600,
-          color: ink,
+          color: charcoal,
+        ),
+        titleSmall: GoogleFonts.spaceGrotesk(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: charcoal,
         ),
         bodyLarge: GoogleFonts.ibmPlexSans(
           fontSize: 16,
-          color: charcoal,
+          color: muted,
           height: 1.35,
         ),
         bodyMedium: GoogleFonts.ibmPlexSans(
           fontSize: 14,
-          color: charcoal,
+          color: muted,
+          height: 1.35,
+        ),
+        bodySmall: GoogleFonts.ibmPlexSans(
+          fontSize: 13,
+          color: muted,
           height: 1.35,
         ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: ink,
+        foregroundColor: charcoal,
         centerTitle: false,
         titleTextStyle: GoogleFonts.spaceGrotesk(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: ink,
+          color: charcoal,
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: panel,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -70,8 +87,8 @@ class CompanionTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFFFFBF8),
-        labelStyle: GoogleFonts.ibmPlexSans(color: charcoal),
+        fillColor: surface,
+        labelStyle: GoogleFonts.ibmPlexSans(color: muted),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: blush),
@@ -88,7 +105,7 @@ class CompanionTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: coral,
-          foregroundColor: ink,
+          foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -101,7 +118,7 @@ class CompanionTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: ink,
+          foregroundColor: charcoal,
           side: const BorderSide(color: blush),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -114,14 +131,24 @@ class CompanionTheme {
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: ink,
-        contentTextStyle: GoogleFonts.ibmPlexSans(color: cream),
+        backgroundColor: charcoal,
+        contentTextStyle: GoogleFonts.ibmPlexSans(color: Colors.white),
       ),
       sliderTheme: const SliderThemeData(
         activeTrackColor: coral,
         inactiveTrackColor: blush,
         thumbColor: charcoal,
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surface,
+        selectedColor: surfaceRaised,
+        secondarySelectedColor: surfaceRaised,
+        side: const BorderSide(color: blush),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        labelStyle: GoogleFonts.ibmPlexSans(color: charcoal),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+      dividerColor: blush,
     );
   }
 }
