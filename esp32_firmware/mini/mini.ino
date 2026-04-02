@@ -512,13 +512,13 @@ const char* modeName(DisplayMode mode) {
       return "idle";
   }
 }
-
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
   bool started = false;
 
   static bool secureInited = false;
   if (!secureInited) {
     relaySecureClient.setInsecure();
+    relaySecureClient.setHandshakeTimeout(15);
     secureInited = true;
   }
 
@@ -532,6 +532,24 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     finalUrl = "https://" + finalUrl.substring(7);
   }
 
+  Serial.printf("[HTTP] begin url=%s heap=%u\n", finalUrl.c_str(), ESP.getFreeHeap());
+
+  // Extract hostname for DNS test
+  if (finalUrl.startsWith("https://") || finalUrl.startsWith("http://")) {
+    int protoEnd = finalUrl.indexOf("://") + 3;
+    int pathStart = finalUrl.indexOf('/', protoEnd);
+    String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
+    IPAddress resolved;
+    if (WiFi.hostByName(host.c_str(), resolved)) {
+      Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
+    } else {
+      Serial.printf("[HTTP] DNS FAILED for %s\n", host.c_str());
+      statusText = String("DNS fail: ") + host;
+      publishStatus();
+      return false;
+    }
+  }
+
   if (finalUrl.startsWith("https://")) {
     started = client.begin(relaySecureClient, finalUrl);
   } else {
@@ -541,6 +559,8 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (started) {
     client.setReuse(false);
     client.setTimeout(timeoutMs);
+  } else {
+    Serial.println("[HTTP] client.begin() returned false");
   }
   return started;
 }
