@@ -835,7 +835,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         onChanged: controller.updateRelayBaseUrl,
                         decoration: const InputDecoration(
                           labelText: 'Relay base URL',
-                          hintText: 'https://relay.yourdomain.com',
+                          hintText: 'http://desk-companion-relay.fly.dev',
                         ),
                       ),
                       const SizedBox(height: 10),
