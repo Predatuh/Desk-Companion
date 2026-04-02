@@ -2063,11 +2063,8 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
-  WiFi.setAutoReconnect(false);
   WiFi.disconnect(true, false);
   delay(500);
-  WiFi.mode(WIFI_STA);
-  delay(200);
 
   storedWifiPass = password;
   preferences.begin("desk-cfg", false);
@@ -2081,6 +2078,8 @@ bool connectToWifi(const String& ssid, const String& password) {
   }
   preferences.end();
 
+  WiFi.mode(WIFI_STA);
+  delay(100);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   markWifiJoinStarted();
@@ -3125,8 +3124,6 @@ void loop() {
     statusText = "Starting Wi-Fi";
     publishStatus();
     Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
-    WiFi.disconnect(false, false);
-    delay(200);
     WiFi.mode(WIFI_STA);
     delay(100);
     WiFi.setAutoReconnect(true);
@@ -3165,8 +3162,6 @@ void loop() {
         millis() - lastWifiCheckMs >= 60000) {
       statusText = "Retrying Wi-Fi";
       publishStatus();
-      WiFi.disconnect(false, false);
-      delay(200);
       WiFi.mode(WIFI_STA);
       delay(100);
       WiFi.setAutoReconnect(true);
