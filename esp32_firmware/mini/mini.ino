@@ -551,10 +551,19 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     host = host.substring(0, colonPos);
   }
 
-  // DNS
+  // DNS (retry up to 3 times — ESP32 sometimes returns 0.0.0.0)
   IPAddress resolved;
-  if (!WiFi.hostByName(host.c_str(), resolved)) {
-    statusText = String("DNS fail: ") + host;
+  bool dnsOk = false;
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (WiFi.hostByName(host.c_str(), resolved) && resolved != IPAddress(0, 0, 0, 0)) {
+      dnsOk = true;
+      break;
+    }
+    Serial.printf("[HTTP] DNS attempt %d -> %s\n", attempt + 1, resolved.toString().c_str());
+    delay(500);
+  }
+  if (!dnsOk) {
+    statusText = String("DNS fail: ") + host + " -> " + resolved.toString();
     publishStatus();
     return false;
   }
