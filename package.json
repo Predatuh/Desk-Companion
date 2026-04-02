@@ -4,6 +4,11 @@
   "private": true,
   "description": "Relay server for Desk Companion ESP32 display.",
   "scripts": {
-    "start": "node relay_server/server.js"
+    "start": "node relay_server/server.js",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.80.0"
   }
 }
