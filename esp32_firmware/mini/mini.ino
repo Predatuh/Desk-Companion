@@ -519,6 +519,8 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (!secureInited) {
     relaySecureClient.setInsecure();
     relaySecureClient.setHandshakeTimeout(15);
+    relaySecureClient.setBufferSizes(4096, 4096);
+    relaySecureClient.setTimeout(15);
     secureInited = true;
   }
 
@@ -532,13 +534,22 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     finalUrl = "https://" + finalUrl.substring(7);
   }
 
-  Serial.printf("[HTTP] begin url=%s heap=%u\n", finalUrl.c_str(), ESP.getFreeHeap());
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  Serial.printf("[HTTP] begin url=%s heap=%u\n", finalUrl.c_str(), freeHeap);
 
-  // Extract hostname for DNS test
+  if (freeHeap < 40000) {
+    statusText = String("Low heap: ") + String(freeHeap);
+    publishStatus();
+    Serial.println("[HTTP] Heap too low for TLS, skipping");
+    return false;
+  }
+
+  // Extract hostname for DNS test and SNI
+  String host;
   if (finalUrl.startsWith("https://") || finalUrl.startsWith("http://")) {
     int protoEnd = finalUrl.indexOf("://") + 3;
     int pathStart = finalUrl.indexOf('/', protoEnd);
-    String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
+    host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
     IPAddress resolved;
     if (WiFi.hostByName(host.c_str(), resolved)) {
       Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
@@ -2760,7 +2771,7 @@ void pushRelayStatus() {
     publishStatus();
   } else {
     Serial.printf("[RELAY] Push error: %s\n", client.errorToString(code).c_str());
-    statusText = String("Relay err ") + client.errorToString(code);
+    statusText = String("Relay err ") + client.errorToString(code) + " h" + String(ESP.getFreeHeap());
     publishStatus();
     relaySecureClient.stop();
     relayHttpClient.stop();
