@@ -530,6 +530,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
 
   WiFiClient tcp;
   tcp.setTimeout(15);  // 15-second read timeout
+  tcp.setConnectionTimeout(10000);  // 10-second connect timeout (Fly.io cold start)
 
   unsigned long t0 = millis();
   if (!tcp.connect(RELAY_HTTP_HOST, RELAY_HTTP_PORT)) {
