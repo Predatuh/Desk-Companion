@@ -2478,11 +2478,34 @@ void handleCommandJson(const String& body) {
     return;
   }
 
-  if (type == "connect_wifi" ||
-      type == "scan_wifi" ||
-      type == "forget_wifi" ||
-      type == "set_relay") {
-    statusText = "Wi-Fi disabled";
+  if (type == "connect_wifi") {
+    pendingWifiSsid = extractJsonStringField(body, "ssid");
+    pendingWifiPass = extractJsonStringField(body, "password");
+    wifiConnectPending = true;
+    statusText = "Wi-Fi queued";
+    publishStatus();
+    return;
+  }
+
+  if (type == "scan_wifi") {
+    wifiScanPending = true;
+    statusText = "Scan queued";
+    publishStatus();
+    return;
+  }
+
+  if (type == "forget_wifi") {
+    WiFi.disconnect(true, true);
+    WiFi.setAutoReconnect(false);
+    currentSsid = "";
+    ipAddress = "";
+    wifiWasConnected = false;
+    availableWifiNetworkCount = 0;
+    preferences.begin("desk-cfg", false);
+    preferences.remove("ssid");
+    preferences.remove("pass");
+    preferences.end();
+    statusText = "Wi-Fi forgotten";
     publishStatus();
     return;
   }
@@ -2597,6 +2620,14 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "set_relay") {
+    saveRelaySettings(
+      extractJsonStringField(body, "relayUrl"),
+      extractJsonStringField(body, "deviceToken")
+    );
+    return;
+  }
+
   if (type == "set_flower") {
     setFlower(extractJsonStringField(body, "flower", "rose"));
     return;
@@ -2682,12 +2713,68 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
 };
 
 void pushRelayStatus() {
+  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    return;
+  }
+
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
+  HTTPClient client;
+  if (!beginHttpClient(client, url, 5000)) {
+    return;
+  }
+
+  client.addHeader("Content-Type", "application/json");
+  client.addHeader("Connection", "close");
+
+  const String body = buildStatusJson();
+  const int code = client.POST(body);
+  if (code > 0) {
+    client.getString();
+    lastRelaySuccessMs = millis();
+  } else {
+    relaySecureClient.stop();
+    relayHttpClient.stop();
+  }
+
+  client.end();
   relayStatusDirty = false;
   lastRelayStatusPushMs = millis();
 }
 
 void pollRelay() {
-  return;
+  if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    return;
+  }
+
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
+  if (millis() - lastRelayPollMs < pollInterval) {
+    return;
+  }
+
+  lastRelayPollMs = millis();
+
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  HTTPClient client;
+  if (!beginHttpClient(client, url, 5000)) {
+    return;
+  }
+
+  client.addHeader("Connection", "close");
+
+  const int code = client.GET();
+  if (code == 200) {
+    const String command = client.getString();
+    lastRelaySuccessMs = millis();
+    handleCommandJson(command);
+  } else if (code > 0) {
+    client.getString();
+    lastRelaySuccessMs = millis();
+  } else {
+    relaySecureClient.stop();
+    relayHttpClient.stop();
+  }
+
+  client.end();
 }
 
 void setupBle() {
@@ -2921,25 +3008,13 @@ void setup() {
   clearImageBuffer();
 
   tryStoredPrefs();
-  WiFi.disconnect(true, true);
-  WiFi.setAutoReconnect(false);
-  preferences.begin("desk-cfg", false);
-  preferences.remove("ssid");
-  preferences.remove("pass");
-  preferences.remove("relay_url");
-  preferences.remove("device_token");
-  preferences.end();
-  currentSsid = "";
-  storedWifiPass = "";
-  ipAddress = "";
-  relayUrl = "";
-  deviceToken = "";
-  wifiConnectPending = false;
-  wifiScanPending = false;
-  wifiWasConnected = false;
-  bootWifiRestorePending = false;
-  availableWifiNetworkCount = 0;
   setupBle();
+
+  if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
+    bootWifiRestorePending = true;
+    statusText = "Wi-Fi queued";
+    Serial.println("[BOOT] Deferring Wi-Fi reconnect until boot settles.");
+  }
 
   bootCompletedAtMs = millis();
   lastWifiCheckMs = millis();
@@ -2990,6 +3065,104 @@ void loop() {
   }
 
   updatePetBehavior();
+
+  if (bootWifiRestorePending &&
+      !currentSsid.isEmpty() &&
+      storedWifiPass.length() > 0 &&
+      !wifiJoinInProgress() &&
+      WiFi.status() != WL_CONNECTED &&
+      millis() - bootCompletedAtMs >= BOOT_WIFI_DELAY_MS) {
+    bootWifiRestorePending = false;
+    statusText = "Starting Wi-Fi";
+    publishStatus();
+    Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
+    WiFi.mode(WIFI_STA);
+    delay(100);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+    markWifiJoinStarted();
+    lastWifiCheckMs = millis();
+  }
+
+  const bool wifiNow = WiFi.status() == WL_CONNECTED;
+  if (wifiNow) {
+    ipAddress = WiFi.localIP().toString();
+    markWifiJoinFinished();
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
+      statusText = "Wi-Fi connected";
+      publishStatus();
+    }
+    lastWifiCheckMs = millis();
+  } else {
+    ipAddress = "";
+    if (wifiJoinActive && millis() - lastWifiBeginMs >= 30000) {
+      markWifiJoinFinished();
+      statusText = "Wi-Fi connect failed";
+      publishStatus();
+    }
+    if (wifiWasConnected) {
+      wifiWasConnected = false;
+      statusText = "Wi-Fi reconnecting";
+      lastWifiCheckMs = millis();
+      publishStatus();
+    }
+
+    if (!currentSsid.isEmpty() &&
+        storedWifiPass.length() > 0 &&
+        !wifiJoinInProgress() &&
+        millis() - lastWifiCheckMs >= 60000) {
+      statusText = "Retrying Wi-Fi";
+      publishStatus();
+      WiFi.mode(WIFI_STA);
+      delay(100);
+      WiFi.setAutoReconnect(true);
+      WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+      markWifiJoinStarted();
+      lastWifiCheckMs = millis();
+    }
+  }
+
+  if (wifiScanPending) {
+    wifiScanPending = false;
+    scanWifiNetworks();
+  }
+
+  if (wifiConnectPending) {
+    wifiConnectPending = false;
+    connectToWifi(pendingWifiSsid, pendingWifiPass);
+    pendingWifiSsid = "";
+    pendingWifiPass = "";
+  }
+
+  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
+    pushRelayStatus();
+  }
+
+  if (WiFi.status() == WL_CONNECTED &&
+      !relayUrl.isEmpty() &&
+      !deviceToken.isEmpty() &&
+      lastRelaySuccessMs > 0 &&
+      millis() - lastRelaySuccessMs >= 45000) {
+    relaySecureClient.stop();
+    relayHttpClient.stop();
+    relayStatusDirty = true;
+    if (millis() - lastRelaySuccessMs >= 90000 &&
+        !currentSsid.isEmpty() &&
+        storedWifiPass.length() > 0 &&
+        !wifiJoinInProgress()) {
+      statusText = "Relay stalled, reconnecting Wi-Fi";
+      publishStatus();
+      WiFi.disconnect(false, false);
+      delay(100);
+      WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
+      markWifiJoinStarted();
+      lastWifiCheckMs = millis();
+      lastRelaySuccessMs = millis();
+    }
+  }
+
+  pollRelay();
 
   handleButtons();
 

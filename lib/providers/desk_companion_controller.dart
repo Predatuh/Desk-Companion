@@ -68,7 +68,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _mode = 'idle';
   String _connectedSsid = '';
   String _deviceName = '';
-  String _relayBaseUrl = '';
+  String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
@@ -102,6 +102,7 @@ class DeskCompanionController extends ChangeNotifier {
   int _boredomLevel = 28;
   List<String> _availableWifiNetworks = const [];
   String _wifiIpAddress = '';
+  String? _lastRelayError;
   int _relayPendingCount = 0;
   DateTime? _relayLastCommandAt;
   DateTime? _relayLastSeenAt;
@@ -180,7 +181,7 @@ class DeskCompanionController extends ChangeNotifier {
   bool get isBleConnected => _bleState == CompanionBleState.connected;
   bool get hasRelayTarget =>
       _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
-  bool get canControlDevice => isBleConnected;
+  bool get canControlDevice => isBleConnected || _relayOnline;
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
@@ -284,9 +285,11 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> _loadRelayPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    _relayBaseUrl = '';
-    _deviceToken = '';
-    _connectedSsid = '';
+    _relayBaseUrl = _sanitizeRelayBaseUrl(
+      prefs.getString(_relayBaseUrlKey) ?? _relayBaseUrl,
+    );
+    _deviceToken = (prefs.getString(_deviceTokenKey) ?? '').trim();
+    _connectedSsid = (prefs.getString(_connectedSsidKey) ?? '').trim();
     _mode = (prefs.getString(_modeKey) ?? _mode).trim();
     _petPersonality =
       (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
@@ -340,29 +343,29 @@ class DeskCompanionController extends ChangeNotifier {
     _energyLevel = prefs.getInt(_energyLevelKey) ?? _energyLevel;
     _boredomLevel = prefs.getInt(_boredomLevelKey) ?? _boredomLevel;
     _availableWifiNetworks = const [];
-    _wifiIpAddress = '';
-    _wifiScanPending = false;
-    _wifiConnectPending = false;
-    _relayPendingCount = 0;
-    _relayLastCommandAt = null;
-    _relayLastSeenAt = null;
-    _relayLastStatusAt = null;
-    _relayOnline = false;
-    _relayStatusKnown = false;
-
-    await prefs.remove(_relayBaseUrlKey);
-    await prefs.remove(_deviceTokenKey);
-    await prefs.remove(_connectedSsidKey);
-    await prefs.remove(_wifiNetworksKey);
 
     notifyListeners();
+
+    if (hasRelayTarget) {
+      _relayStatusKnown = true;
+      _statusMessage = _connectedSsid.isNotEmpty
+          ? 'Last known Wi-Fi: $_connectedSsid'
+          : 'Checking relay status...';
+      notifyListeners();
+      _startRelayPollTimer();
+      try {
+        await refreshDeviceStatus();
+      } catch (_) {
+        // Keep the app usable if the initial relay check fails.
+      }
+    }
   }
 
   Future<void> _persistRelayPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_relayBaseUrlKey);
-    await prefs.remove(_deviceTokenKey);
-    await prefs.remove(_connectedSsidKey);
+    await prefs.setString(_relayBaseUrlKey, _relayBaseUrl);
+    await prefs.setString(_deviceTokenKey, _deviceToken);
+    await prefs.setString(_connectedSsidKey, _connectedSsid);
     await prefs.setString(_modeKey, _mode);
     await prefs.setString(_petPersonalityKey, _petPersonality);
     await prefs.setString(_activePetModeKey, _activePetMode);
@@ -599,6 +602,9 @@ class DeskCompanionController extends ChangeNotifier {
       if (isBleConnected) {
         await _sendBleCommand({'type': 'status'});
         return true;
+      }
+      if (hasRelayTarget) {
+        return _fetchRelayStatus();
       }
       return false;
     });
@@ -848,7 +854,18 @@ class DeskCompanionController extends ChangeNotifier {
       return;
     }
 
-    throw const HttpException('BLE is required. Connect over BLE first.');
+    if (hasRelayTarget) {
+      final sent = await _postRelay(payload);
+      if (sent) {
+        _mode = mode;
+        _scheduleRelayDeliveryCheck(relayLabel);
+        notifyListeners();
+        return;
+      }
+      throw HttpException(_lastRelayError ?? 'Relay send failed.');
+    }
+
+    throw const HttpException('Not connected. Pair over BLE or configure a relay.');
   }
 
   Future<void> _sendBitmap(
@@ -860,8 +877,19 @@ class DeskCompanionController extends ChangeNotifier {
         _imageCharacteristic != null &&
         _commandCharacteristic != null;
 
+    if (!canSendOverBle && allowRelay && hasRelayTarget) {
+      if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
+        _mode = 'image';
+        if (!silent) {
+          _scheduleRelayDeliveryCheck('Image queued through relay.');
+        }
+        return;
+      }
+      throw HttpException(_lastRelayError ?? 'Relay send failed.');
+    }
+
     if (!canSendOverBle) {
-      throw const HttpException('BLE is not connected.');
+      throw const HttpException('BLE is not connected and relay image send is unavailable.');
     }
 
     await _sendBleCommand({'type': 'begin_image', 'total': bitmap.length});
@@ -881,6 +909,35 @@ class DeskCompanionController extends ChangeNotifier {
     _mode = 'image';
     if (!silent) {
       _setStatus('Image sent over BLE.');
+    }
+  }
+
+  Future<bool> _postRelay(Map<String, dynamic> command) async {
+    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
+    final token = _deviceToken.trim();
+    _lastRelayError = null;
+    if (base.isEmpty || token.isEmpty) {
+      _lastRelayError = 'Relay URL or token is missing.';
+      return false;
+    }
+
+    final url = '$base/v1/device/${Uri.encodeComponent(token)}/command';
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({'command': command}),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+      _lastRelayError = 'Relay returned ${response.statusCode}.';
+      _setStatus(_lastRelayError!);
+      return false;
+    } catch (error) {
+      _lastRelayError = 'Relay error: $error';
+      _setStatus(_lastRelayError!);
+      return false;
     }
   }
 
@@ -1175,8 +1232,47 @@ class DeskCompanionController extends ChangeNotifier {
 
   void _requireBleProvisioning() {
     if (!isBleConnected) {
-      throw const HttpException('BLE is required.');
+      throw const HttpException('BLE is required for Wi-Fi and relay setup.');
     }
+  }
+
+  void _scheduleRelayDeliveryCheck(String successLabel) {
+    _setStatus('Sent via relay. Checking delivery...');
+    Future.delayed(const Duration(seconds: 6), () async {
+      if (isBleConnected || !hasRelayTarget) {
+        return;
+      }
+      try {
+        final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
+        final token = _deviceToken.trim();
+        final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          return;
+        }
+        final payload = jsonDecode(response.body);
+        if (payload is! Map<String, dynamic>) {
+          return;
+        }
+        final pending = (payload['pending'] as int?) ?? 0;
+        final lastPullAtValue = payload['lastPullAt'] as String?;
+        final lastPullAt = lastPullAtValue == null
+            ? null
+            : DateTime.tryParse(lastPullAtValue)?.toLocal();
+        final isActivelyPolling = lastPullAt != null &&
+            DateTime.now().difference(lastPullAt) <=
+                const Duration(seconds: 30);
+        if (pending == 0) {
+          _setStatus('Delivered. $successLabel');
+        } else if (!isActivelyPolling) {
+          _setStatus('Queued on relay. Device is not polling remotely.');
+        } else {
+          _setStatus('Queued on relay. Waiting for the next device poll.');
+        }
+      } catch (_) {
+        // Ignore follow-up failures; the last send status is good enough.
+      }
+    });
   }
 
   Future<void> disconnect() async {
@@ -1236,13 +1332,26 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   void _restartRelayPollingIfNeeded() {
+    if (hasRelayTarget) {
+      _startRelayPollTimer();
+    } else {
+      _relayPollTimer?.cancel();
+      _relayPendingCount = 0;
+      _relayLastCommandAt = null;
+      _relayStatusKnown = false;
+      _relayOnline = false;
+      _relayLastSeenAt = null;
+      _relayLastStatusAt = null;
+    }
+  }
+
+  void _startRelayPollTimer() {
     _relayPollTimer?.cancel();
-    _relayPendingCount = 0;
-    _relayLastCommandAt = null;
-    _relayStatusKnown = false;
-    _relayOnline = false;
-    _relayLastSeenAt = null;
-    _relayLastStatusAt = null;
+    _relayPollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!isBleConnected && hasRelayTarget && !_busy) {
+        unawaited(_fetchRelayStatus());
+      }
+    });
   }
 
   @override
