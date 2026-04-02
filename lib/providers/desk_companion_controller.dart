@@ -226,13 +226,6 @@ class DeskCompanionController extends ChangeNotifier {
       url = url.substring(0, url.length - 1);
     }
 
-    if (url.startsWith('http://') &&
-        !url.contains('localhost') &&
-        !url.contains('127.0.0.1') &&
-        !url.contains('192.168.')) {
-      url = 'https://${url.substring(7)}';
-    }
-
     return url;
   }
 
