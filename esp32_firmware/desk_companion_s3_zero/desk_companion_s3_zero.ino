@@ -509,12 +509,12 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-// TCP proxy endpoint (Railway TCP proxy — bypasses TLS entirely)
-static const char* RELAY_TCP_HOST = "tramway.proxy.rlwy.net";
-static const uint16_t RELAY_TCP_PORT = 22890;
+// Fly.io relay server — plain HTTP on port 80, no TLS needed
+static const char* RELAY_HTTP_HOST = "desk-companion-relay.fly.dev";
+static const uint16_t RELAY_HTTP_PORT = 80;
 
-// Plain-HTTP relay request via Railway TCP proxy.
-// No TLS — the TCP proxy forwards raw TCP to the Railway service.
+// Plain-HTTP relay request via Fly.io.
+// No TLS — Fly.io serves plain HTTP with force_https=false.
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
   // Parse URL to extract the original host (for Host header) and path
   String finalUrl = url;
@@ -522,18 +522,17 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
   int protoEnd = finalUrl.indexOf("://");
   String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
   int pathStart = hostAndPath.indexOf('/');
-  String origHost = (pathStart > 0) ? hostAndPath.substring(0, pathStart) : hostAndPath;
   String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
 
-  Serial.printf("[RELAY-HTTP] %s %s (proxy=%s:%u host=%s path=%s) heap=%u\n",
-    method, url.c_str(), RELAY_TCP_HOST, RELAY_TCP_PORT,
-    origHost.c_str(), path.c_str(), ESP.getFreeHeap());
+  Serial.printf("[RELAY-HTTP] %s %s (host=%s:%u path=%s) heap=%u\n",
+    method, url.c_str(), RELAY_HTTP_HOST, RELAY_HTTP_PORT,
+    path.c_str(), ESP.getFreeHeap());
 
   WiFiClient tcp;
   tcp.setTimeout(15);  // 15-second read timeout
 
   unsigned long t0 = millis();
-  if (!tcp.connect(RELAY_TCP_HOST, RELAY_TCP_PORT)) {
+  if (!tcp.connect(RELAY_HTTP_HOST, RELAY_HTTP_PORT)) {
     unsigned long elapsed = millis() - t0;
     Serial.printf("[RELAY-HTTP] TCP connect FAILED in %lums heap=%u\n",
       elapsed, ESP.getFreeHeap());
@@ -545,7 +544,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
 
   // Build raw HTTP request
   String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += "Host: " + origHost + "\r\n";
+  req += String("Host: ") + RELAY_HTTP_HOST + "\r\n";
   req += "Connection: close\r\n";
   if (body.length() > 0) {
     req += "Content-Type: application/json\r\n";
