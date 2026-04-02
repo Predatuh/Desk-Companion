@@ -544,8 +544,8 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     return -1;
   }
   sc->setInsecure();
-  sc->setHandshakeTimeout(30);
-  sc->setTimeout(15);
+  sc->setHandshakeTimeout(10);
+  sc->setTimeout(10);
 
   Serial.printf("[RELAY-HTTP] Connecting to %s:443 heap=%u maxBlk=%u\n",
     ip.toString().c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -3222,8 +3222,12 @@ void loop() {
         !wifiJoinInProgress()) {
       statusText = "Relay stalled, reconnecting Wi-Fi";
       publishStatus();
-      WiFi.disconnect(false, false);
+      WiFi.setAutoReconnect(false);
+      WiFi.disconnect(true, false);
+      delay(500);
+      WiFi.mode(WIFI_STA);
       delay(100);
+      WiFi.setAutoReconnect(true);
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
       markWifiJoinStarted();
       lastWifiCheckMs = millis();
