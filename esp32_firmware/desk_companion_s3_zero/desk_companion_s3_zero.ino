@@ -519,7 +519,6 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (!secureInited) {
     relaySecureClient.setInsecure();
     relaySecureClient.setHandshakeTimeout(15);
-    relaySecureClient.setBufferSizes(4096, 4096);
     relaySecureClient.setTimeout(15);
     secureInited = true;
   }
