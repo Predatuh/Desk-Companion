@@ -86,7 +86,6 @@ BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
 WiFiClient relayHttpClient;
-WiFiClientSecure relaySecureClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -512,16 +511,13 @@ const char* modeName(DisplayMode mode) {
       return "idle";
   }
 }
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
-  static bool secureInited = false;
-  if (!secureInited) {
-    relaySecureClient.setInsecure();
-    relaySecureClient.setHandshakeTimeout(30);
-    secureInited = true;
-  }
+// Persistent heap-allocated TLS client — freed and recreated each call
+// so mbedtls context is always fresh (avoids stale-state bugs).
+static WiFiClientSecure* relaySc = nullptr;
 
-  relaySecureClient.stop();
-  relayHttpClient.stop();
+bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
+  // Free previous TLS client
+  if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
 
   String finalUrl = url;
   if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
@@ -537,78 +533,21 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     return false;
   }
 
-  // Parse URL
   bool isHttps = finalUrl.startsWith("https://");
-  int protoEnd = finalUrl.indexOf("://") + 3;
-  int pathStart = finalUrl.indexOf('/', protoEnd);
-  String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
-  String path = (pathStart > 0) ? finalUrl.substring(pathStart) : "/";
-  uint16_t port = isHttps ? 443 : 80;
-
-  int colonPos = host.indexOf(':');
-  if (colonPos > 0) {
-    port = host.substring(colonPos + 1).toInt();
-    host = host.substring(0, colonPos);
-  }
-
-  // DNS (retry up to 3 times — ESP32 sometimes returns 0.0.0.0)
-  IPAddress resolved;
-  bool dnsOk = false;
-  for (int attempt = 0; attempt < 3; attempt++) {
-    if (WiFi.hostByName(host.c_str(), resolved) && resolved != IPAddress(0, 0, 0, 0)) {
-      dnsOk = true;
-      break;
-    }
-    Serial.printf("[HTTP] DNS attempt %d -> %s\n", attempt + 1, resolved.toString().c_str());
-    delay(500);
-  }
-  if (!dnsOk) {
-    statusText = String("DNS fail: ") + host + " -> " + resolved.toString();
-    publishStatus();
-    return false;
-  }
-  Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
 
   if (isHttps) {
-    // Step 1: Test plain TCP to port 443 to verify network reachability
-    WiFiClient tcpTest;
-    tcpTest.setTimeout(10000);
-    bool tcpOk = tcpTest.connect(resolved, port);
-    tcpTest.stop();
-    Serial.printf("[HTTP] Plain TCP to %s:%u = %s\n", resolved.toString().c_str(), port, tcpOk ? "OK" : "FAIL");
-    if (!tcpOk) {
-      statusText = String("TCP fail ") + resolved.toString() + ":" + String(port);
-      publishStatus();
-      return false;
-    }
-
-    // Step 2: TLS connect
-    Serial.printf("[HTTP] TLS connect to %s:%u ...\n", host.c_str(), port);
-    int connResult = relaySecureClient.connect(host.c_str(), port);
-    if (!connResult) {
-      int lastErr = relaySecureClient.lastError(nullptr, 0);
-      Serial.printf("[HTTP] TLS failed err=%d\n", lastErr);
-      // Fallback: try connect by IP
-      relaySecureClient.stop();
-      Serial.printf("[HTTP] TLS retry by IP %s ...\n", resolved.toString().c_str());
-      connResult = relaySecureClient.connect(resolved, port);
-      if (!connResult) {
-        lastErr = relaySecureClient.lastError(nullptr, 0);
-        Serial.printf("[HTTP] TLS by IP also failed err=%d\n", lastErr);
-        statusText = String("TLS fail e") + String(lastErr) + " h" + String(ESP.getFreeHeap());
-        publishStatus();
-        return false;
-      }
-    }
-    Serial.println("[HTTP] TLS connected!");
-    bool started = client.begin(relaySecureClient, host, port, path, true);
+    relaySc = new WiFiClientSecure();
+    relaySc->setInsecure();
+    relaySc->setHandshakeTimeout(30);
+    bool started = client.begin(*relaySc, finalUrl);
     if (started) {
       client.setReuse(false);
       client.setTimeout(timeoutMs);
     }
+    Serial.printf("[HTTP] begin(HTTPS)=%d\n", started);
     return started;
   } else {
-    bool started = client.begin(relayHttpClient, host, port, path);
+    bool started = client.begin(relayHttpClient, finalUrl);
     if (started) {
       client.setReuse(false);
       client.setTimeout(timeoutMs);
@@ -2812,8 +2751,7 @@ void pushRelayStatus() {
     Serial.printf("[RELAY] Push error: %s\n", client.errorToString(code).c_str());
     statusText = String("Relay err ") + client.errorToString(code) + " h" + String(ESP.getFreeHeap());
     publishStatus();
-    relaySecureClient.stop();
-    relayHttpClient.stop();
+    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
   }
 
   client.end();
@@ -2856,8 +2794,7 @@ void pollRelay() {
     Serial.printf("[RELAY] Poll error: %s\n", client.errorToString(code).c_str());
     statusText = String("Relay poll err ") + client.errorToString(code);
     publishStatus();
-    relaySecureClient.stop();
-    relayHttpClient.stop();
+    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
   }
 
   client.end();
@@ -3231,8 +3168,7 @@ void loop() {
       !deviceToken.isEmpty() &&
       lastRelaySuccessMs > 0 &&
       millis() - lastRelaySuccessMs >= 45000) {
-    relaySecureClient.stop();
-    relayHttpClient.stop();
+    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
     relayStatusDirty = true;
     if (millis() - lastRelaySuccessMs >= 90000 &&
         !currentSsid.isEmpty() &&
