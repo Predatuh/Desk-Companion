@@ -101,7 +101,7 @@ function parsePath(url) {
   return pathname.split('/').filter(Boolean);
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   try {
     const parts = parsePath(req.url || '/');
 
@@ -180,7 +180,9 @@ const server = http.createServer(async (req, res) => {
       message: error instanceof Error ? error.message : String(error),
     });
   }
-});
+}
+
+const server = http.createServer(handleRequest);
 
 loadDevices().finally(() => {
   server.listen(port, () => {
@@ -189,7 +191,7 @@ loadDevices().finally(() => {
 
   // Second HTTP server on port 3000 for Railway TCP proxy (ESP32 plain-TCP access)
   const tcpProxyPort = 3000;
-  const tcpServer = http.createServer(server.listeners('request')[0]);
+  const tcpServer = http.createServer(handleRequest);
   tcpServer.listen(tcpProxyPort, () => {
     console.log(`Desk Companion TCP proxy listener on ${tcpProxyPort}`);
   });
