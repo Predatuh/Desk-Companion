@@ -377,10 +377,6 @@ class DeskCompanionStudioScreen extends StatefulWidget {
 }
 
 class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
-  final _wifiSsidController = TextEditingController();
-  final _wifiPasswordController = TextEditingController();
-  final _relayBaseUrlController = TextEditingController();
-  final _deviceTokenController = TextEditingController();
   final _noteController = TextEditingController();
   final _bannerController = TextEditingController(text: 'miss you already <3');
   double _noteFontSize = 1;
@@ -483,10 +479,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   @override
   void dispose() {
-    _wifiSsidController.dispose();
-    _wifiPasswordController.dispose();
-    _relayBaseUrlController.dispose();
-    _deviceTokenController.dispose();
     _noteController.removeListener(_onNoteTextChanged);
     _noteController.dispose();
     _bannerController.dispose();
@@ -601,8 +593,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DeskCompanionController>();
-    _syncTextController(_relayBaseUrlController, controller.relayBaseUrl);
-    _syncTextController(_deviceTokenController, controller.deviceToken);
     final currentPersonality =
       _personalityFromCommand(controller.petPersonality) ??
         _selectedPersonality;
@@ -651,42 +641,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                 : 'BLE: disconnected',
                           ),
                           _ChipLabel(
-                            label: controller.connectedSsid.isEmpty
-                                ? 'Wi-Fi: not joined'
-                                : 'Wi-Fi: ${controller.connectedSsid}',
+                            label: controller.isBleConnected
+                                ? 'Transport: BLE ready'
+                                : 'Transport: BLE required',
                           ),
-                          _ChipLabel(label: _relayChipLabel(controller)),
+                          _ChipLabel(label: 'Mode: ${controller.mode}'),
                         ],
                       ),
-                      if (_relayStatusText(controller).isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          _relayStatusText(controller),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                      if (controller.hasRelayTarget) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Token: ${controller.deviceToken} | Pending: ${controller.relayPendingCount}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (controller.relayLastCommandAt != null)
-                          Text(
-                            'Last command queued: ${_relativeTimeLabel(controller.relayLastCommandAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (controller.relayLastSeenAt != null)
-                          Text(
-                            'Last command poll: ${_relativeTimeLabel(controller.relayLastSeenAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (controller.relayLastStatusAt != null)
-                          Text(
-                            'Last status post: ${_relativeTimeLabel(controller.relayLastStatusAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
                       const SizedBox(height: 14),
                       Row(
                         children: [
@@ -708,20 +669,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ? null
                                   : controller.isBleConnected
                                       ? () => controller.disconnect()
-                                      : controller.hasRelayTarget
-                                          ? () => _connectWifiDevice(controller)
-                                          : null,
+                                      : null,
                               icon: Icon(
                                 controller.isBleConnected
                                     ? Icons.link_off
-                                    : controller.isRemoteConnected
-                                        ? Icons.wifi_tethering
-                                        : Icons.wifi_find_outlined,
+                                    : Icons.refresh,
                               ),
                               label: Text(
                                 controller.isBleConnected
                                     ? 'Disconnect'
-                                    : 'Connect over Wi-Fi',
+                                    : 'Refresh status',
                               ),
                             ),
                           ),
@@ -732,147 +689,31 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
-                  title: 'Remote setup',
+                  title: 'Setup',
                   subtitle:
-                      'Provision Wi-Fi and relay settings over BLE once. After that, the device should stay on Wi-Fi and talk to the hosted relay on its own.',
+                      'Wi-Fi and relay provisioning are intentionally removed for now. This build only controls the desk companion over BLE.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Wi-Fi',
-                        style: Theme.of(context).textTheme.titleSmall,
+                        controller.isBleConnected
+                            ? 'BLE is the only active link in this reset build. You can still send notes, images, expressions, scenes, and behavior changes once the device is paired.'
+                            : 'Connect to the desk companion over BLE to use the app. Remote setup, Wi-Fi joins, and relay delivery are intentionally disabled until they are rebuilt cleanly.',
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      const SizedBox(height: 8),
-                      _buildWifiStatusPanel(context, controller),
-                      const SizedBox(height: 12),
-                      if (controller.availableWifiNetworks.isEmpty) ...[
-                        Text(
-                          'No scanned networks are loaded yet. Run a scan over BLE, or type the Wi-Fi name manually.',
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: CompanionTheme.surface,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: CompanionTheme.blush),
+                        ),
+                        child: Text(
+                          'Fresh reset: any old Wi-Fi or relay state is being ignored so the transport layer can be re-added later from a clean baseline.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (controller.availableWifiNetworks.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: controller.availableWifiNetworks
-                              .map(
-                                (ssid) => ChoiceChip(
-                                  label: Text(ssid),
-                                  selected: _wifiSsidController.text.trim() == ssid,
-                                  onSelected: (_) => setState(
-                                    () => _wifiSsidController.text = ssid,
-                                  ),
-                                ),
-                              )
-                              .toList(growable: false),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      TextField(
-                        controller: _wifiSsidController,
-                        decoration: const InputDecoration(
-                          labelText: 'Wi-Fi name',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _wifiPasswordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Wi-Fi password',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _scanWifiNetworks(controller),
-                              icon: const Icon(Icons.wifi_find_outlined),
-                              label: const Text('Scan Wi-Fi'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _sendWifi(controller),
-                              icon: const Icon(Icons.wifi),
-                              label: const Text('Send Wi-Fi'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: controller.busy || !controller.isBleConnected
-                              ? null
-                              : () => _forgetWifi(controller),
-                          icon: const Icon(Icons.wifi_off_outlined),
-                          label: const Text('Forget device Wi-Fi'),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Relay',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _relayBaseUrlController,
-                        onChanged: controller.updateRelayBaseUrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Relay base URL',
-                          hintText: 'https://relay.yourdomain.com',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _deviceTokenController,
-                        onChanged: controller.updateDeviceToken,
-                        decoration: const InputDecoration(
-                          labelText: 'Device token',
-                          hintText: 'desk-01',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.hasRelayTarget
-                                  ? null
-                                  : () => _connectWifiDevice(controller),
-                              icon: Icon(
-                                controller.isRemoteConnected
-                                    ? Icons.wifi_tethering
-                                    : Icons.wifi_find_outlined,
-                              ),
-                              label: Text(
-                                controller.isRemoteConnected
-                                    ? 'Connect to device'
-                                    : 'Connect to device',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _configureRelay(controller),
-                              icon: const Icon(Icons.cloud_done_outlined),
-                              label: const Text('Save relay to device'),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -1405,210 +1246,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             _drawBitmap,
           );
     });
-  }
-
-  Future<void> _scanWifiNetworks(DeskCompanionController controller) async {
-    await _perform(
-      controller.scanWifiNetworks,
-      success: 'Wi-Fi scan requested.',
-    );
-  }
-
-  Future<void> _sendWifi(DeskCompanionController controller) async {
-    final ssid = _wifiSsidController.text.trim();
-    if (ssid.isEmpty) {
-      _showMessage('Enter a Wi-Fi name first.');
-      return;
-    }
-
-    await _perform(
-      () => controller.sendWifiCredentials(
-        ssid: ssid,
-        password: _wifiPasswordController.text,
-      ),
-      success: 'Wi-Fi credentials sent.',
-    );
-  }
-
-  Future<void> _forgetWifi(DeskCompanionController controller) async {
-    await _perform(
-      controller.forgetWifi,
-      success: 'Device Wi-Fi forgotten.',
-    );
-  }
-
-  Widget _buildWifiStatusPanel(
-    BuildContext context,
-    DeskCompanionController controller,
-  ) {
-    final status = controller.statusMessage.trim();
-    final scanning = controller.wifiScanPending;
-    final joining = controller.wifiConnectPending;
-    final connected = controller.wifiConnected;
-    final failed = status.toLowerCase().contains('wi-fi failed');
-    final headline = connected
-        ? 'Connected to ${controller.connectedSsid}'
-        : scanning
-            ? 'Scanning for networks'
-            : joining
-                ? controller.connectedSsid.isEmpty
-                    ? 'Joining Wi-Fi'
-                    : 'Joining ${controller.connectedSsid}'
-                : controller.connectedSsid.isNotEmpty
-                    ? 'Saved Wi-Fi: ${controller.connectedSsid}'
-                    : 'Wi-Fi not configured';
-    final detail = connected && controller.wifiIpAddress.isNotEmpty
-        ? 'IP ${controller.wifiIpAddress}'
-        : status.isNotEmpty
-            ? status
-            : 'Connect over BLE to scan and join Wi-Fi.';
-    final scanComplete = controller.availableWifiNetworks.isNotEmpty || joining || connected;
-    final joinComplete = connected;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: CompanionTheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: failed ? CompanionTheme.hotPink : CompanionTheme.blush,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                connected
-                    ? Icons.wifi
-                    : scanning
-                        ? Icons.wifi_find_outlined
-                        : joining
-                            ? Icons.wifi_tethering
-                            : Icons.wifi_off_outlined,
-                color: CompanionTheme.ink,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(headline, style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 2),
-                    Text(detail, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (scanning || joining) ...[
-            const SizedBox(height: 10),
-            const LinearProgressIndicator(minHeight: 7),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildWifiStageBar(
-                  context,
-                  label: 'Scan',
-                  complete: scanComplete,
-                  active: scanning,
-                  failed: false,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildWifiStageBar(
-                  context,
-                  label: 'Join',
-                  complete: joinComplete,
-                  active: joining,
-                  failed: failed,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildWifiStageBar(
-                  context,
-                  label: 'Online',
-                  complete: connected,
-                  active: false,
-                  failed: false,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWifiStageBar(
-    BuildContext context, {
-    required String label,
-    required bool complete,
-    required bool active,
-    required bool failed,
-  }) {
-    final color = failed
-        ? CompanionTheme.hotPink
-        : complete || active
-            ? CompanionTheme.ink
-            : CompanionTheme.blush;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 8,
-          child: LinearProgressIndicator(
-            value: active ? null : complete ? 1 : 0,
-            backgroundColor: CompanionTheme.cream,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _configureRelay(DeskCompanionController controller) async {
-    final relayBase = _relayBaseUrlController.text.trim();
-    final token = _deviceTokenController.text.trim();
-    if (relayBase.isEmpty || token.isEmpty) {
-      _showMessage('Relay URL and device token are required.');
-      return;
-    }
-
-    await _perform(
-      () => controller.configureRelay(
-        relayUrl: relayBase,
-        token: token,
-      ),
-      success: 'Relay settings sent to the device.',
-    );
-  }
-
-  Future<void> _connectWifiDevice(DeskCompanionController controller) async {
-    try {
-      final ok = await controller.connectRemoteDevice();
-      if (!mounted) {
-        return;
-      }
-      _showMessage(
-        ok
-            ? 'Device connected over Wi-Fi. Remote sending is ready.'
-            : 'The device is not online through the relay right now.',
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage('$error');
-    }
   }
 
   Future<void> _openFullscreenDrawEditor() async {
@@ -2238,7 +1875,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ? 'Classic appearance sends as a native device command.'
                 : streamsLiveBleScene
                     ? 'The app is now streaming the full scene animation over BLE instead of flattening it to a still frame.'
-                    : 'App-first models can still be sent over Wi-Fi or relay, but only as a single snapshot because live scene streaming requires BLE.',
+                    : 'Connect over BLE to send this app-rendered scene. Live scene streaming also requires BLE.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -2949,70 +2586,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _syncTextController(TextEditingController controller, String value) {
-    if (controller.text == value) {
-      return;
-    }
-
-    controller.value = TextEditingValue(
-      text: value,
-      selection: TextSelection.collapsed(offset: value.length),
-    );
-  }
-
-  String _relayChipLabel(DeskCompanionController controller) {
-    if (!controller.hasRelayTarget) {
-      return 'Wi-Fi link: not configured';
-    }
-    if (!controller.relayStatusKnown) {
-      return 'Wi-Fi link: ready';
-    }
-    return controller.isRemoteConnected
-        ? 'Wi-Fi link: connected'
-        : 'Wi-Fi link: not connected';
-  }
-
-  String _relayStatusText(DeskCompanionController controller) {
-    if (!controller.hasRelayTarget) {
-      return '';
-    }
-    final lastSeenAt = controller.relayLastSeenAt;
-    if (lastSeenAt == null) {
-      final lastStatusAt = controller.relayLastStatusAt;
-      if (lastStatusAt != null) {
-        final age = DateTime.now().difference(lastStatusAt);
-        final ageLabel = age.inMinutes < 1
-            ? '${age.inSeconds}s ago'
-            : age.inHours < 1
-                ? '${age.inMinutes}m ago'
-                : '${age.inHours}h ago';
-        return 'Device posted status $ageLabel, but the relay command link is not active yet.';
-      }
-      return controller.isBleConnected
-          ? 'Remote delivery is configured. The device should stay linked through Wi-Fi and the relay after BLE setup.'
-          : 'Remote delivery is configured. Press Connect over Wi-Fi to confirm the device is online.';
-    }
-
-    final age = DateTime.now().difference(lastSeenAt);
-    final ageLabel = age.inMinutes < 1
-        ? '${age.inSeconds}s ago'
-        : age.inHours < 1
-            ? '${age.inMinutes}m ago'
-            : '${age.inHours}h ago';
-    return 'Last device check-in over Wi-Fi: $ageLabel';
-  }
-
-  String _relativeTimeLabel(DateTime value) {
-    final age = DateTime.now().difference(value);
-    if (age.inMinutes < 1) {
-      return '${age.inSeconds}s ago';
-    }
-    if (age.inHours < 1) {
-      return '${age.inMinutes}m ago';
-    }
-    return '${age.inHours}h ago';
   }
 
   DeskPersonality? _personalityFromCommand(String value) {
@@ -4031,7 +3604,7 @@ class _FullscreenAppearanceEditorState
           Text(
             _visualModel.isDeviceSupported
                 ? 'This model is ready to send directly to the desk companion.'
-                : 'This model is app-rendered. Over BLE it can stream live to the OLED, and over relay it falls back to a single snapshot.',
+                : 'This model is app-rendered. Over BLE it can stream live to the OLED or send as a single snapshot.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
