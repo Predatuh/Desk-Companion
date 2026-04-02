@@ -5,7 +5,6 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <HTTPClient.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -85,7 +84,6 @@ BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
-WiFiClient relayHttpClient;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -190,7 +188,7 @@ unsigned long btnNextDownMs = 0;
 unsigned long btnClearDownMs = 0;
 
 const char* modeName(DisplayMode mode);
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs = 3000);
+int relayRequest(const char* method, const String& url, const String& body, String& response);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
@@ -515,8 +513,9 @@ const char* modeName(DisplayMode mode) {
 // so mbedtls context is always fresh (avoids stale-state bugs).
 static WiFiClientSecure* relaySc = nullptr;
 
-bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
-  // Free previous TLS client
+// Low-level relay HTTP using manual TLS + raw HTTP/1.1.
+// Avoids HTTPClient entirely — its connect() timeout is broken for TLS.
+int relayRequest(const char* method, const String& url, const String& body, String& response) {
   if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
 
   String finalUrl = url;
@@ -524,37 +523,105 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     finalUrl = "https://" + finalUrl.substring(7);
   }
 
-  const uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.printf("[HTTP] url=%s heap=%u\n", finalUrl.c_str(), freeHeap);
+  // Parse URL
+  int protoEnd = finalUrl.indexOf("://") + 3;
+  int pathStart = finalUrl.indexOf('/', protoEnd);
+  String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
+  String path = (pathStart > 0) ? finalUrl.substring(pathStart) : "/";
 
-  if (freeHeap < 40000) {
-    statusText = String("Low heap: ") + String(freeHeap);
-    publishStatus();
-    return false;
+  Serial.printf("[RELAY-HTTP] %s %s (host=%s path=%s) heap=%u\n",
+    method, finalUrl.c_str(), host.c_str(), path.c_str(), ESP.getFreeHeap());
+
+  relaySc = new WiFiClientSecure();
+  relaySc->setInsecure();
+  relaySc->setHandshakeTimeout(30);
+  relaySc->setTimeout(15);  // 15-second read timeout
+
+  unsigned long t0 = millis();
+  if (!relaySc->connect(host.c_str(), 443)) {
+    int err = relaySc->lastError(nullptr, 0);
+    unsigned long elapsed = millis() - t0;
+    Serial.printf("[RELAY-HTTP] TLS connect FAILED in %lums err=%d heap=%u\n",
+      elapsed, err, ESP.getFreeHeap());
+    String errMsg = String("TLS fail ") + String(elapsed) + "ms e" + String(err);
+    response = errMsg;
+    delete relaySc; relaySc = nullptr;
+    return -1;
+  }
+  unsigned long elapsed = millis() - t0;
+  Serial.printf("[RELAY-HTTP] TLS connected in %lums\n", elapsed);
+
+  // Build raw HTTP request
+  String req = String(method) + " " + path + " HTTP/1.1\r\n";
+  req += "Host: " + host + "\r\n";
+  req += "Connection: close\r\n";
+  if (body.length() > 0) {
+    req += "Content-Type: application/json\r\n";
+    req += "Content-Length: " + String(body.length()) + "\r\n";
+  }
+  req += "\r\n";
+  if (body.length() > 0) {
+    req += body;
   }
 
-  bool isHttps = finalUrl.startsWith("https://");
+  relaySc->print(req);
 
-  if (isHttps) {
-    relaySc = new WiFiClientSecure();
-    relaySc->setInsecure();
-    relaySc->setHandshakeTimeout(30);
-    bool started = client.begin(*relaySc, finalUrl);
-    if (started) {
-      client.setReuse(false);
-      client.setConnectTimeout(15000);
-      client.setTimeout(timeoutMs);
+  // Read response status line
+  unsigned long respStart = millis();
+  String statusLine = "";
+  while (millis() - respStart < 10000) {
+    if (relaySc->available()) {
+      statusLine = relaySc->readStringUntil('\n');
+      statusLine.trim();
+      break;
     }
-    Serial.printf("[HTTP] begin(HTTPS)=%d\n", started);
-    return started;
-  } else {
-    bool started = client.begin(relayHttpClient, finalUrl);
-    if (started) {
-      client.setReuse(false);
-      client.setTimeout(timeoutMs);
-    }
-    return started;
+    if (!relaySc->connected()) break;
+    delay(10);
   }
+
+  if (statusLine.length() == 0) {
+    Serial.println("[RELAY-HTTP] No response received");
+    response = "No response";
+    relaySc->stop(); delete relaySc; relaySc = nullptr;
+    return -2;
+  }
+
+  Serial.printf("[RELAY-HTTP] Status: %s\n", statusLine.c_str());
+
+  // Parse status code (e.g. "HTTP/1.1 200 OK")
+  int httpCode = 0;
+  int spaceIdx = statusLine.indexOf(' ');
+  if (spaceIdx > 0) {
+    httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
+  }
+
+  // Read headers (skip them, just consume)
+  while (millis() - respStart < 10000) {
+    if (relaySc->available()) {
+      String line = relaySc->readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break;  // end of headers
+    }
+    if (!relaySc->connected() && !relaySc->available()) break;
+    delay(1);
+  }
+
+  // Read body
+  response = "";
+  while (millis() - respStart < 10000) {
+    while (relaySc->available()) {
+      response += (char)relaySc->read();
+    }
+    if (!relaySc->connected() && !relaySc->available()) break;
+    delay(10);
+  }
+
+  Serial.printf("[RELAY-HTTP] Code=%d Body=%s\n", httpCode, response.c_str());
+
+  relaySc->stop();
+  delete relaySc;
+  relaySc = nullptr;
+  return httpCode;
 }
 
 void clearImageBuffer() {
@@ -2730,34 +2797,18 @@ void pushRelayStatus() {
   }
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
-  Serial.printf("[RELAY] Push to: %s  heap=%u\n", url.c_str(), ESP.getFreeHeap());
-  HTTPClient client;
-  if (!beginHttpClient(client, url, 8000)) {
-    Serial.println("[RELAY] beginHttpClient failed for push");
-    statusText = String("Relay begin fail h") + String(ESP.getFreeHeap());
-    publishStatus();
-    return;
-  }
-
-  client.addHeader("Content-Type", "application/json");
-  client.addHeader("Connection", "close");
-
   const String body = buildStatusJson();
-  const int code = client.POST(body);
-  Serial.printf("[RELAY] Push response: %d\n", code);
-  if (code > 0) {
-    client.getString();
+  String response;
+  const int code = relayRequest("POST", url, body, response);
+  if (code >= 200 && code < 300) {
     lastRelaySuccessMs = millis();
     statusText = "Relay push OK";
     publishStatus();
   } else {
-    Serial.printf("[RELAY] Push error: %s\n", client.errorToString(code).c_str());
-    statusText = String("Relay err ") + client.errorToString(code) + " h" + String(ESP.getFreeHeap());
+    statusText = (code < 0) ? response : (String("Relay HTTP ") + String(code));
     publishStatus();
-    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
   }
 
-  client.end();
   relayStatusDirty = false;
   lastRelayStatusPushMs = millis();
 }
@@ -2775,32 +2826,17 @@ void pollRelay() {
   lastRelayPollMs = millis();
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
-  Serial.printf("[RELAY] Poll: %s  heap=%u\n", url.c_str(), ESP.getFreeHeap());
-  HTTPClient client;
-  if (!beginHttpClient(client, url, 8000)) {
-    Serial.println("[RELAY] beginHttpClient failed for poll");
-    return;
-  }
-
-  client.addHeader("Connection", "close");
-
-  const int code = client.GET();
-  Serial.printf("[RELAY] Poll response: %d\n", code);
+  String response;
+  const int code = relayRequest("GET", url, "", response);
   if (code == 200) {
-    const String command = client.getString();
     lastRelaySuccessMs = millis();
-    handleCommandJson(command);
+    handleCommandJson(response);
   } else if (code > 0) {
-    client.getString();
     lastRelaySuccessMs = millis();
   } else {
-    Serial.printf("[RELAY] Poll error: %s\n", client.errorToString(code).c_str());
-    statusText = String("Relay poll err ") + client.errorToString(code);
+    statusText = (code < 0) ? response : (String("Relay poll ") + String(code));
     publishStatus();
-    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
   }
-
-  client.end();
 }
 
 void setupBle() {
