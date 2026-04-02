@@ -2463,6 +2463,8 @@ void tryStoredPrefs() {
     statusText = petAmbientStatus();
   }
   preferences.end();
+  Serial.printf("[BOOT] Loaded relay url='%s' token='%s' ssid='%s'\n",
+                relayUrl.c_str(), deviceToken.c_str(), currentSsid.c_str());
 }
 
 void handleCommandJson(const String& body) {
@@ -2709,12 +2711,19 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
 
 void pushRelayStatus() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
+    Serial.printf("[RELAY] Push skipped: wifi=%d url=%s tok=%s\n",
+                  WiFi.status(), relayUrl.isEmpty() ? "empty" : "ok",
+                  deviceToken.isEmpty() ? "empty" : "ok");
     return;
   }
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
+  Serial.printf("[RELAY] Push to: %s  heap=%u\n", url.c_str(), ESP.getFreeHeap());
   HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
+  if (!beginHttpClient(client, url, 8000)) {
+    Serial.println("[RELAY] beginHttpClient failed for push");
+    statusText = "Relay push: begin failed";
+    publishStatus();
     return;
   }
 
@@ -2723,10 +2732,16 @@ void pushRelayStatus() {
 
   const String body = buildStatusJson();
   const int code = client.POST(body);
+  Serial.printf("[RELAY] Push response: %d\n", code);
   if (code > 0) {
     client.getString();
     lastRelaySuccessMs = millis();
+    statusText = "Relay push OK";
+    publishStatus();
   } else {
+    Serial.printf("[RELAY] Push error: %s\n", client.errorToString(code).c_str());
+    statusText = String("Relay err ") + client.errorToString(code);
+    publishStatus();
     relaySecureClient.stop();
     relayHttpClient.stop();
   }
@@ -2749,14 +2764,19 @@ void pollRelay() {
   lastRelayPollMs = millis();
 
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  Serial.printf("[RELAY] Poll: %s  heap=%u\n", url.c_str(), ESP.getFreeHeap());
   HTTPClient client;
-  if (!beginHttpClient(client, url, 5000)) {
+  if (!beginHttpClient(client, url, 8000)) {
+    Serial.println("[RELAY] beginHttpClient failed for poll");
+    statusText = "Relay poll: begin failed";
+    publishStatus();
     return;
   }
 
   client.addHeader("Connection", "close");
 
   const int code = client.GET();
+  Serial.printf("[RELAY] Poll response: %d\n", code);
   if (code == 200) {
     const String command = client.getString();
     lastRelaySuccessMs = millis();
@@ -2765,6 +2785,9 @@ void pollRelay() {
     client.getString();
     lastRelaySuccessMs = millis();
   } else {
+    Serial.printf("[RELAY] Poll error: %s\n", client.errorToString(code).c_str());
+    statusText = String("Relay poll err ") + client.errorToString(code);
+    publishStatus();
     relaySecureClient.stop();
     relayHttpClient.stop();
   }
