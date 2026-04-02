@@ -1768,16 +1768,16 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
 
 // ZZZ floating up
 void drawZzz(int x, int y, int phase) {
-  int p = phase % 32;
+  int p = phase % 64;
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  int drift = p / 2;
-  if (p >= 4)  { display.setCursor(x,      y + 12 - drift);     display.print('z'); }
-  if (p >= 12) { display.setCursor(x + 7,  y + 6 - drift / 2);  display.print('z'); }
-  if (p >= 20) { display.setCursor(x + 14, y - drift / 3);       display.print('Z'); }
+  int drift = p / 4;
+  if (p >= 8)  { display.setCursor(x,      y + 12 - drift);     display.print('z'); }
+  if (p >= 24) { display.setCursor(x + 7,  y + 6 - drift / 2);  display.print('z'); }
+  if (p >= 40) { display.setCursor(x + 14, y - drift / 3);       display.print('Z'); }
 }
 
-// ─── The main 32-phase expression renderer ───
+// ─── The main 64-phase expression renderer ───
 
 void renderExpressionFrame() {
   if (!displayAvailable) {
@@ -1795,8 +1795,8 @@ void renderExpressionFrame() {
   const int EH = 22;
   const int ER = 7;
 
-  const int ph = expressionPhase % 32;
-  const float t = (float)ph / 31.0f;
+  const int ph = expressionPhase % 64;
+  const float t = (float)ph / 63.0f;
 
   if (currentExpression == "heart") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
@@ -2242,7 +2242,7 @@ void scanWifiNetworks() {
 // Draw a rose: layered petal circles spiraling from center
 // cx,cy = center; scale = 1 for full-screen (28px outer radius), smaller for accents
 void drawFlowerRose(int cx, int cy, int scale, int phase) {
-  float spiralT = (float)phase / 31.f;
+  float spiralT = (float)phase / 63.f;
   float spiralOff = spiralT * 0.4f; // gentle rotation
   int outerR   = 8  * scale / 8;
   int outerDist = 16 * scale / 8;
@@ -2276,7 +2276,7 @@ void drawFlowerRose(int cx, int cy, int scale, int phase) {
 
 // Draw a sunflower: long petals + seed-spiral center
 void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
-  float t = (float)phase / 31.f;
+  float t = (float)phase / 63.f;
   int petalLen = 18 * scale / 8;
   int petalW   = 4  * scale / 8;
   int centerR  = 12 * scale / 8;
@@ -2316,7 +2316,7 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
 
 // Draw a king protea: bold spiky bracts around dense center
 void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
-  float t = (float)phase / 31.f;
+  float t = (float)phase / 63.f;
   float growT = t < 0.1f ? t * 10.f : 1.0f; // bracts extend in first phase
   int bractLen = (int)(20 * scale / 8 * growT);
   int bractW   = 3  * scale / 8;
@@ -3101,18 +3101,18 @@ void loop() {
 
   if (currentMode == MODE_EXPRESSION) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 50) {
+    if (now - lastExpressionTickMs >= 30) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 32;
+      expressionPhase = (expressionPhase + 1) % 64;
       renderExpressionFrame();
     }
   }
 
   if (currentMode == MODE_FLOWER) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 60) {
+    if (now - lastExpressionTickMs >= 35) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 32;
+      expressionPhase = (expressionPhase + 1) % 64;
       renderFlowerFrame();
     }
   }

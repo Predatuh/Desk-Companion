@@ -68,7 +68,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _mode = 'idle';
   String _connectedSsid = '';
   String _deviceName = '';
-  String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
+  String _relayBaseUrl = 'http://desk-companion-relay.fly.dev';
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
