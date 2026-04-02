@@ -537,7 +537,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     return false;
   }
 
-  // Parse URL into host, port, path
+  // Parse URL
   bool isHttps = finalUrl.startsWith("https://");
   int protoEnd = finalUrl.indexOf("://") + 3;
   int pathStart = finalUrl.indexOf('/', protoEnd);
@@ -551,7 +551,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     host = host.substring(0, colonPos);
   }
 
-  // DNS resolve
+  // DNS
   IPAddress resolved;
   if (!WiFi.hostByName(host.c_str(), resolved)) {
     statusText = String("DNS fail: ") + host;
@@ -561,20 +561,37 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
 
   if (isHttps) {
-    // Try raw TLS connect first to get a real error
-    Serial.printf("[HTTP] TLS connect to %s:%u ...\n", host.c_str(), port);
-    int connResult = relaySecureClient.connect(host.c_str(), port);
-    if (!connResult) {
-      // Try with IP directly
-      Serial.printf("[HTTP] TLS by name failed (%d), trying IP %s\n", connResult, resolved.toString().c_str());
-      int lastErr = relaySecureClient.lastError(nullptr, 0);
-      Serial.printf("[HTTP] lastError=%d\n", lastErr);
-      statusText = String("TLS fail e") + String(lastErr) + " h" + String(ESP.getFreeHeap());
+    // Step 1: Test plain TCP to port 443 to verify network reachability
+    WiFiClient tcpTest;
+    tcpTest.setTimeout(10);
+    bool tcpOk = tcpTest.connect(resolved, port);
+    tcpTest.stop();
+    Serial.printf("[HTTP] Plain TCP to %s:%u = %s\n", resolved.toString().c_str(), port, tcpOk ? "OK" : "FAIL");
+    if (!tcpOk) {
+      statusText = String("TCP fail ") + resolved.toString() + ":" + String(port);
       publishStatus();
       return false;
     }
+
+    // Step 2: TLS connect
+    Serial.printf("[HTTP] TLS connect to %s:%u ...\n", host.c_str(), port);
+    int connResult = relaySecureClient.connect(host.c_str(), port);
+    if (!connResult) {
+      int lastErr = relaySecureClient.lastError(nullptr, 0);
+      Serial.printf("[HTTP] TLS failed err=%d\n", lastErr);
+      // Fallback: try connect by IP
+      relaySecureClient.stop();
+      Serial.printf("[HTTP] TLS retry by IP %s ...\n", resolved.toString().c_str());
+      connResult = relaySecureClient.connect(resolved, port);
+      if (!connResult) {
+        lastErr = relaySecureClient.lastError(nullptr, 0);
+        Serial.printf("[HTTP] TLS by IP also failed err=%d\n", lastErr);
+        statusText = String("TLS fail e") + String(lastErr) + " h" + String(ESP.getFreeHeap());
+        publishStatus();
+        return false;
+      }
+    }
     Serial.println("[HTTP] TLS connected!");
-    // TLS is up — pass the connected client to HTTPClient
     bool started = client.begin(relaySecureClient, host, port, path, true);
     if (started) {
       client.setReuse(false);
