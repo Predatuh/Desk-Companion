@@ -2768,8 +2768,6 @@ void pushRelayStatus() {
   HTTPClient client;
   if (!beginHttpClient(client, url, 8000)) {
     Serial.println("[RELAY] beginHttpClient failed for push");
-    statusText = "Relay push: begin failed";
-    publishStatus();
     return;
   }
 
@@ -2814,8 +2812,6 @@ void pollRelay() {
   HTTPClient client;
   if (!beginHttpClient(client, url, 8000)) {
     Serial.println("[RELAY] beginHttpClient failed for poll");
-    statusText = "Relay poll: begin failed";
-    publishStatus();
     return;
   }
 
