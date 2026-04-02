@@ -3124,6 +3124,8 @@ void loop() {
     statusText = "Starting Wi-Fi";
     publishStatus();
     Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
+    WiFi.disconnect(false, false);
+    delay(200);
     WiFi.mode(WIFI_STA);
     delay(100);
     WiFi.setAutoReconnect(true);
@@ -3162,6 +3164,8 @@ void loop() {
         millis() - lastWifiCheckMs >= 60000) {
       statusText = "Retrying Wi-Fi";
       publishStatus();
+      WiFi.disconnect(false, false);
+      delay(200);
       WiFi.mode(WIFI_STA);
       delay(100);
       WiFi.setAutoReconnect(true);
