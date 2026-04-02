@@ -516,8 +516,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   static bool secureInited = false;
   if (!secureInited) {
     relaySecureClient.setInsecure();
-    relaySecureClient.setHandshakeTimeout(15);
-    relaySecureClient.setTimeout(15);
+    relaySecureClient.setHandshakeTimeout(30);
     secureInited = true;
   }
 
@@ -530,7 +529,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   }
 
   const uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.printf("[HTTP] begin url=%s heap=%u\n", finalUrl.c_str(), freeHeap);
+  Serial.printf("[HTTP] url=%s heap=%u\n", finalUrl.c_str(), freeHeap);
 
   if (freeHeap < 40000) {
     statusText = String("Low heap: ") + String(freeHeap);
@@ -546,37 +545,50 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   String path = (pathStart > 0) ? finalUrl.substring(pathStart) : "/";
   uint16_t port = isHttps ? 443 : 80;
 
-  // Check for explicit port in host
   int colonPos = host.indexOf(':');
   if (colonPos > 0) {
     port = host.substring(colonPos + 1).toInt();
     host = host.substring(0, colonPos);
   }
 
-  // DNS test
+  // DNS resolve
   IPAddress resolved;
   if (!WiFi.hostByName(host.c_str(), resolved)) {
-    Serial.printf("[HTTP] DNS FAILED for %s\n", host.c_str());
     statusText = String("DNS fail: ") + host;
     publishStatus();
     return false;
   }
-  Serial.printf("[HTTP] DNS %s -> %s port=%u\n", host.c_str(), resolved.toString().c_str(), port);
+  Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
 
-  bool started;
   if (isHttps) {
-    started = client.begin(relaySecureClient, host, port, path, true);
+    // Try raw TLS connect first to get a real error
+    Serial.printf("[HTTP] TLS connect to %s:%u ...\n", host.c_str(), port);
+    int connResult = relaySecureClient.connect(host.c_str(), port);
+    if (!connResult) {
+      // Try with IP directly
+      Serial.printf("[HTTP] TLS by name failed (%d), trying IP %s\n", connResult, resolved.toString().c_str());
+      int lastErr = relaySecureClient.lastError(nullptr, 0);
+      Serial.printf("[HTTP] lastError=%d\n", lastErr);
+      statusText = String("TLS fail e") + String(lastErr) + " h" + String(ESP.getFreeHeap());
+      publishStatus();
+      return false;
+    }
+    Serial.println("[HTTP] TLS connected!");
+    // TLS is up — pass the connected client to HTTPClient
+    bool started = client.begin(relaySecureClient, host, port, path, true);
+    if (started) {
+      client.setReuse(false);
+      client.setTimeout(timeoutMs);
+    }
+    return started;
   } else {
-    started = client.begin(relayHttpClient, host, port, path);
+    bool started = client.begin(relayHttpClient, host, port, path);
+    if (started) {
+      client.setReuse(false);
+      client.setTimeout(timeoutMs);
+    }
+    return started;
   }
-
-  if (started) {
-    client.setReuse(false);
-    client.setTimeout(timeoutMs);
-  } else {
-    Serial.println("[HTTP] client.begin() returned false");
-  }
-  return started;
 }
 
 void clearImageBuffer() {
