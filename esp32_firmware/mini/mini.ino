@@ -196,6 +196,7 @@ void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
 void publishStatus();
 void publishStatusWithNetworks();
+String buildSlimStatusJson();
 void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
 void renderBannerFrame();
 void renderExpressionFrame();
@@ -454,6 +455,21 @@ String buildBleStatusJson() {
   json += "\"mustacheThickness\":" + String(companionMustacheThickness) + ",";
   json += "\"mustacheOffsetX\":" + String(companionMustacheOffsetX) + ",";
   json += "\"mustacheOffsetY\":" + String(companionMustacheOffsetY) + ",";
+  json += "\"bondLevel\":" + String(bondLevel) + ",";
+  json += "\"energyLevel\":" + String(energyLevel) + ",";
+  json += "\"boredomLevel\":" + String(boredomLevel);
+  json += "}";
+  return json;
+}
+
+String buildSlimStatusJson() {
+  String json = "{";
+  json += "\"mode\":\"" + jsonEscape(modeName(currentMode)) + "\",";
+  json += "\"status\":\"" + jsonEscape(statusText) + "\",";
+  json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
+  json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
+  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
+  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -1073,10 +1089,12 @@ bool decodeBase64IntoImage(const String& input) {
 }
 
 void publishStatus() {
-  const String payload = buildBleStatusJson();
   if (statusCharacteristic != nullptr) {
-    statusCharacteristic->setValue(payload.c_str());
+    const String slim = buildSlimStatusJson();
+    statusCharacteristic->setValue(slim.c_str());
     statusCharacteristic->notify();
+    const String full = buildBleStatusJson();
+    statusCharacteristic->setValue(full.c_str());
   }
   relayStatusDirty = true;
 }
@@ -2018,6 +2036,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   WiFi.disconnect(true, false);
   delay(500);
 
+  storedWifiPass = password;
   preferences.begin("desk-cfg", false);
   preferences.putString("ssid", ssid);
   preferences.putString("pass", password);
