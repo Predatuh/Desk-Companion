@@ -386,7 +386,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _noteFontSize = 1;
   int _noteBorderStyle = 0;
   final List<String> _noteIcons = [];
-  String? _noteFlowerAccent;  // flower accent for note decoration
+  String? _noteFlowerAccent;
+  bool _obscurePassword = true;
 
   DeskFlower _selectedFlower = DeskFlower.rose;
 
@@ -779,9 +780,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: _wifiPasswordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
                           labelText: 'Wi-Fi password',
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),

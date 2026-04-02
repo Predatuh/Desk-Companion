@@ -2063,8 +2063,11 @@ void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken
 }
 
 bool connectToWifi(const String& ssid, const String& password) {
+  WiFi.setAutoReconnect(false);
   WiFi.disconnect(true, false);
   delay(500);
+  WiFi.mode(WIFI_STA);
+  delay(200);
 
   storedWifiPass = password;
   preferences.begin("desk-cfg", false);
@@ -2078,8 +2081,6 @@ bool connectToWifi(const String& ssid, const String& password) {
   }
   preferences.end();
 
-  WiFi.mode(WIFI_STA);
-  delay(100);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   markWifiJoinStarted();

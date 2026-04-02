@@ -23,6 +23,7 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
 
   CompanionImagePayload? _selectedImage;
   bool _preferHttp = true;
+  bool _obscurePassword = true;
   bool _invertImage = false;
   double _bannerSpeed = 35;
 
@@ -168,8 +169,14 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _wifiPasswordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(labelText: 'Wi-Fi password'),
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Wi-Fi password',
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
