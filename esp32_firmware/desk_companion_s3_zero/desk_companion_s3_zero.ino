@@ -7,7 +7,7 @@
 #include <BLEUtils.h>
 #include <Preferences.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -509,51 +509,43 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-// Persistent heap-allocated TLS client — freed and recreated each call
-// so mbedtls context is always fresh (avoids stale-state bugs).
-static WiFiClientSecure* relaySc = nullptr;
+// TCP proxy endpoint (Railway TCP proxy — bypasses TLS entirely)
+static const char* RELAY_TCP_HOST = "tramway.proxy.rlwy.net";
+static const uint16_t RELAY_TCP_PORT = 22890;
 
-// Low-level relay HTTP using manual TLS + raw HTTP/1.1.
-// Avoids HTTPClient entirely — its connect() timeout is broken for TLS.
+// Plain-HTTP relay request via Railway TCP proxy.
+// No TLS — the TCP proxy forwards raw TCP to the Railway service.
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
-  if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
-
+  // Parse URL to extract the original host (for Host header) and path
   String finalUrl = url;
-  if (finalUrl.startsWith("http://") && finalUrl.indexOf(".railway.app") != -1) {
-    finalUrl = "https://" + finalUrl.substring(7);
-  }
+  // Strip protocol prefix
+  int protoEnd = finalUrl.indexOf("://");
+  String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
+  int pathStart = hostAndPath.indexOf('/');
+  String origHost = (pathStart > 0) ? hostAndPath.substring(0, pathStart) : hostAndPath;
+  String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
 
-  // Parse URL
-  int protoEnd = finalUrl.indexOf("://") + 3;
-  int pathStart = finalUrl.indexOf('/', protoEnd);
-  String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
-  String path = (pathStart > 0) ? finalUrl.substring(pathStart) : "/";
+  Serial.printf("[RELAY-HTTP] %s %s (proxy=%s:%u host=%s path=%s) heap=%u\n",
+    method, url.c_str(), RELAY_TCP_HOST, RELAY_TCP_PORT,
+    origHost.c_str(), path.c_str(), ESP.getFreeHeap());
 
-  Serial.printf("[RELAY-HTTP] %s %s (host=%s path=%s) heap=%u\n",
-    method, finalUrl.c_str(), host.c_str(), path.c_str(), ESP.getFreeHeap());
-
-  relaySc = new WiFiClientSecure();
-  relaySc->setInsecure();
-  relaySc->setHandshakeTimeout(30);
-  relaySc->setTimeout(15);  // 15-second read timeout
+  WiFiClient tcp;
+  tcp.setTimeout(15);  // 15-second read timeout
 
   unsigned long t0 = millis();
-  if (!relaySc->connect(host.c_str(), 443)) {
-    int err = relaySc->lastError(nullptr, 0);
+  if (!tcp.connect(RELAY_TCP_HOST, RELAY_TCP_PORT)) {
     unsigned long elapsed = millis() - t0;
-    Serial.printf("[RELAY-HTTP] TLS connect FAILED in %lums err=%d heap=%u\n",
-      elapsed, err, ESP.getFreeHeap());
-    String errMsg = String("TLS fail ") + String(elapsed) + "ms e" + String(err);
-    response = errMsg;
-    delete relaySc; relaySc = nullptr;
+    Serial.printf("[RELAY-HTTP] TCP connect FAILED in %lums heap=%u\n",
+      elapsed, ESP.getFreeHeap());
+    response = String("TCP fail ") + String(elapsed) + "ms";
     return -1;
   }
   unsigned long elapsed = millis() - t0;
-  Serial.printf("[RELAY-HTTP] TLS connected in %lums\n", elapsed);
+  Serial.printf("[RELAY-HTTP] TCP connected in %lums\n", elapsed);
 
   // Build raw HTTP request
   String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += "Host: " + host + "\r\n";
+  req += "Host: " + origHost + "\r\n";
   req += "Connection: close\r\n";
   if (body.length() > 0) {
     req += "Content-Type: application/json\r\n";
@@ -564,25 +556,25 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     req += body;
   }
 
-  relaySc->print(req);
+  tcp.print(req);
 
   // Read response status line
   unsigned long respStart = millis();
   String statusLine = "";
   while (millis() - respStart < 10000) {
-    if (relaySc->available()) {
-      statusLine = relaySc->readStringUntil('\n');
+    if (tcp.available()) {
+      statusLine = tcp.readStringUntil('\n');
       statusLine.trim();
       break;
     }
-    if (!relaySc->connected()) break;
+    if (!tcp.connected()) break;
     delay(10);
   }
 
   if (statusLine.length() == 0) {
     Serial.println("[RELAY-HTTP] No response received");
     response = "No response";
-    relaySc->stop(); delete relaySc; relaySc = nullptr;
+    tcp.stop();
     return -2;
   }
 
@@ -597,30 +589,28 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
 
   // Read headers (skip them, just consume)
   while (millis() - respStart < 10000) {
-    if (relaySc->available()) {
-      String line = relaySc->readStringUntil('\n');
+    if (tcp.available()) {
+      String line = tcp.readStringUntil('\n');
       line.trim();
       if (line.length() == 0) break;  // end of headers
     }
-    if (!relaySc->connected() && !relaySc->available()) break;
+    if (!tcp.connected() && !tcp.available()) break;
     delay(1);
   }
 
   // Read body
   response = "";
   while (millis() - respStart < 10000) {
-    while (relaySc->available()) {
-      response += (char)relaySc->read();
+    while (tcp.available()) {
+      response += (char)tcp.read();
     }
-    if (!relaySc->connected() && !relaySc->available()) break;
+    if (!tcp.connected() && !tcp.available()) break;
     delay(10);
   }
 
   Serial.printf("[RELAY-HTTP] Code=%d Body=%s\n", httpCode, response.c_str());
 
-  relaySc->stop();
-  delete relaySc;
-  relaySc = nullptr;
+  tcp.stop();
   return httpCode;
 }
 
