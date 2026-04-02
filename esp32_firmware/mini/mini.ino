@@ -572,7 +572,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (isHttps) {
     // Step 1: Test plain TCP to port 443 to verify network reachability
     WiFiClient tcpTest;
-    tcpTest.setTimeout(10);
+    tcpTest.setTimeout(10000);
     bool tcpOk = tcpTest.connect(resolved, port);
     tcpTest.stop();
     Serial.printf("[HTTP] Plain TCP to %s:%u = %s\n", resolved.toString().c_str(), port, tcpOk ? "OK" : "FAIL");
