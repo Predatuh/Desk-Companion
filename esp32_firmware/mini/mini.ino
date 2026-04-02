@@ -513,8 +513,6 @@ const char* modeName(DisplayMode mode) {
   }
 }
 bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) {
-  bool started = false;
-
   static bool secureInited = false;
   if (!secureInited) {
     relaySecureClient.setInsecure();
@@ -523,8 +521,6 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     secureInited = true;
   }
 
-  // Always start a fresh outbound connection. Reused keep-alive sockets have
-  // proven unreliable for long-lived relay polling on the ESP32.
   relaySecureClient.stop();
   relayHttpClient.stop();
 
@@ -539,31 +535,39 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
   if (freeHeap < 40000) {
     statusText = String("Low heap: ") + String(freeHeap);
     publishStatus();
-    Serial.println("[HTTP] Heap too low for TLS, skipping");
     return false;
   }
 
-  // Extract hostname for DNS test and SNI
-  String host;
-  if (finalUrl.startsWith("https://") || finalUrl.startsWith("http://")) {
-    int protoEnd = finalUrl.indexOf("://") + 3;
-    int pathStart = finalUrl.indexOf('/', protoEnd);
-    host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
-    IPAddress resolved;
-    if (WiFi.hostByName(host.c_str(), resolved)) {
-      Serial.printf("[HTTP] DNS %s -> %s\n", host.c_str(), resolved.toString().c_str());
-    } else {
-      Serial.printf("[HTTP] DNS FAILED for %s\n", host.c_str());
-      statusText = String("DNS fail: ") + host;
-      publishStatus();
-      return false;
-    }
+  // Parse URL into host, port, path
+  bool isHttps = finalUrl.startsWith("https://");
+  int protoEnd = finalUrl.indexOf("://") + 3;
+  int pathStart = finalUrl.indexOf('/', protoEnd);
+  String host = (pathStart > 0) ? finalUrl.substring(protoEnd, pathStart) : finalUrl.substring(protoEnd);
+  String path = (pathStart > 0) ? finalUrl.substring(pathStart) : "/";
+  uint16_t port = isHttps ? 443 : 80;
+
+  // Check for explicit port in host
+  int colonPos = host.indexOf(':');
+  if (colonPos > 0) {
+    port = host.substring(colonPos + 1).toInt();
+    host = host.substring(0, colonPos);
   }
 
-  if (finalUrl.startsWith("https://")) {
-    started = client.begin(relaySecureClient, finalUrl);
+  // DNS test
+  IPAddress resolved;
+  if (!WiFi.hostByName(host.c_str(), resolved)) {
+    Serial.printf("[HTTP] DNS FAILED for %s\n", host.c_str());
+    statusText = String("DNS fail: ") + host;
+    publishStatus();
+    return false;
+  }
+  Serial.printf("[HTTP] DNS %s -> %s port=%u\n", host.c_str(), resolved.toString().c_str(), port);
+
+  bool started;
+  if (isHttps) {
+    started = client.begin(relaySecureClient, host, port, path, true);
   } else {
-    started = client.begin(relayHttpClient, finalUrl);
+    started = client.begin(relayHttpClient, host, port, path);
   }
 
   if (started) {
