@@ -3200,7 +3200,6 @@ void loop() {
       !deviceToken.isEmpty() &&
       lastRelaySuccessMs > 0 &&
       millis() - lastRelaySuccessMs >= 45000) {
-    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
     relayStatusDirty = true;
     if (millis() - lastRelaySuccessMs >= 90000 &&
         !currentSsid.isEmpty() &&
