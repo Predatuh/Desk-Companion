@@ -188,11 +188,4 @@ loadDevices().finally(() => {
   server.listen(port, () => {
     console.log(`Desk Companion relay listening on ${port}`);
   });
-
-  // Second HTTP server on port 3000 for Railway TCP proxy (ESP32 plain-TCP access)
-  const tcpProxyPort = 3000;
-  const tcpServer = http.createServer(handleRequest);
-  tcpServer.listen(tcpProxyPort, () => {
-    console.log(`Desk Companion TCP proxy listener on ${tcpProxyPort}`);
-  });
 });
