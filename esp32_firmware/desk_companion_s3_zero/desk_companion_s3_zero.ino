@@ -7,7 +7,7 @@
 #include <BLEUtils.h>
 #include <Preferences.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <Wire.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -509,63 +509,43 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-// Cloudflare Worker proxy endpoint — ESP32 connects here via HTTPS,
-// Worker forwards to Railway.
-static const char* CF_PROXY_HOST = "deskcompanionproxy.tannerbass00.workers.dev";
+// TCP proxy endpoint (Railway TCP proxy — bypasses TLS entirely)
+static const char* RELAY_TCP_HOST = "tramway.proxy.rlwy.net";
+static const uint16_t RELAY_TCP_PORT = 22890;
 
-// HTTPS relay request via raw WiFiClientSecure to Cloudflare Worker.
+// Plain-HTTP relay request via Railway TCP proxy.
+// No TLS — the TCP proxy forwards raw TCP to the Railway service.
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
-  // Parse URL to extract path (we rewrite the host to CF proxy)
+  // Parse URL to extract the original host (for Host header) and path
   String finalUrl = url;
+  // Strip protocol prefix
   int protoEnd = finalUrl.indexOf("://");
   String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
   int pathStart = hostAndPath.indexOf('/');
+  String origHost = (pathStart > 0) ? hostAndPath.substring(0, pathStart) : hostAndPath;
   String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
 
-  Serial.printf("[RELAY-HTTP] %s path=%s heap=%u maxBlk=%u\n",
-    method, path.c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  Serial.printf("[RELAY-HTTP] %s %s (proxy=%s:%u host=%s path=%s) heap=%u\n",
+    method, url.c_str(), RELAY_TCP_HOST, RELAY_TCP_PORT,
+    origHost.c_str(), path.c_str(), ESP.getFreeHeap());
 
-  // Resolve DNS separately so we can see timing
-  IPAddress ip;
-  unsigned long dnsStart = millis();
-  int dnsOk = WiFi.hostByName(CF_PROXY_HOST, ip);
-  unsigned long dnsElapsed = millis() - dnsStart;
-  Serial.printf("[RELAY-HTTP] DNS -> %s (%lums ok=%d)\n",
-    ip.toString().c_str(), dnsElapsed, dnsOk);
-  if (!dnsOk) {
-    response = String("DNS fail ") + String(dnsElapsed) + "ms";
-    return -1;
-  }
-
-  WiFiClientSecure *sc = new WiFiClientSecure();
-  if (!sc) {
-    Serial.println("[RELAY-HTTP] OOM allocating WiFiClientSecure");
-    response = "OOM";
-    return -1;
-  }
-  sc->setInsecure();
-  sc->setHandshakeTimeout(10);
-  sc->setTimeout(10);
-
-  Serial.printf("[RELAY-HTTP] Connecting to %s:443 heap=%u maxBlk=%u\n",
-    ip.toString().c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  WiFiClient tcp;
+  tcp.setTimeout(15);  // 15-second read timeout
 
   unsigned long t0 = millis();
-  if (!sc->connect(ip, 443)) {
-    int err = sc->lastError(nullptr, 0);
+  if (!tcp.connect(RELAY_TCP_HOST, RELAY_TCP_PORT)) {
     unsigned long elapsed = millis() - t0;
-    Serial.printf("[RELAY-HTTP] TLS FAILED %lums err=%d heap=%u maxBlk=%u\n",
-      elapsed, err, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-    response = String("TLS fail ") + String(elapsed) + "ms e" + String(err);
-    delete sc;
+    Serial.printf("[RELAY-HTTP] TCP connect FAILED in %lums heap=%u\n",
+      elapsed, ESP.getFreeHeap());
+    response = String("TCP fail ") + String(elapsed) + "ms";
     return -1;
   }
   unsigned long elapsed = millis() - t0;
-  Serial.printf("[RELAY-HTTP] TLS OK %lums heap=%u\n", elapsed, ESP.getFreeHeap());
+  Serial.printf("[RELAY-HTTP] TCP connected in %lums\n", elapsed);
 
-  // Build HTTP request
+  // Build raw HTTP request
   String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += String("Host: ") + CF_PROXY_HOST + "\r\n";
+  req += "Host: " + origHost + "\r\n";
   req += "Connection: close\r\n";
   if (body.length() > 0) {
     req += "Content-Type: application/json\r\n";
@@ -576,60 +556,61 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     req += body;
   }
 
-  sc->print(req);
+  tcp.print(req);
 
   // Read response status line
   unsigned long respStart = millis();
   String statusLine = "";
   while (millis() - respStart < 10000) {
-    if (sc->available()) {
-      statusLine = sc->readStringUntil('\n');
+    if (tcp.available()) {
+      statusLine = tcp.readStringUntil('\n');
       statusLine.trim();
       break;
     }
-    if (!sc->connected()) break;
+    if (!tcp.connected()) break;
     delay(10);
   }
 
   if (statusLine.length() == 0) {
-    Serial.println("[RELAY-HTTP] No response");
+    Serial.println("[RELAY-HTTP] No response received");
     response = "No response";
-    sc->stop(); delete sc;
+    tcp.stop();
     return -2;
   }
 
-  // Parse status code
+  Serial.printf("[RELAY-HTTP] Status: %s\n", statusLine.c_str());
+
+  // Parse status code (e.g. "HTTP/1.1 200 OK")
   int httpCode = 0;
   int spaceIdx = statusLine.indexOf(' ');
   if (spaceIdx > 0) {
     httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
   }
 
-  // Skip headers
+  // Read headers (skip them, just consume)
   while (millis() - respStart < 10000) {
-    if (sc->available()) {
-      String line = sc->readStringUntil('\n');
+    if (tcp.available()) {
+      String line = tcp.readStringUntil('\n');
       line.trim();
-      if (line.length() == 0) break;
+      if (line.length() == 0) break;  // end of headers
     }
-    if (!sc->connected() && !sc->available()) break;
+    if (!tcp.connected() && !tcp.available()) break;
     delay(1);
   }
 
   // Read body
   response = "";
   while (millis() - respStart < 10000) {
-    while (sc->available()) {
-      response += (char)sc->read();
+    while (tcp.available()) {
+      response += (char)tcp.read();
     }
-    if (!sc->connected() && !sc->available()) break;
+    if (!tcp.connected() && !tcp.available()) break;
     delay(10);
   }
 
   Serial.printf("[RELAY-HTTP] Code=%d Body=%s\n", httpCode, response.c_str());
 
-  sc->stop();
-  delete sc;
+  tcp.stop();
   return httpCode;
 }
 
@@ -3215,6 +3196,7 @@ void loop() {
       !deviceToken.isEmpty() &&
       lastRelaySuccessMs > 0 &&
       millis() - lastRelaySuccessMs >= 45000) {
+    if (relaySc) { relaySc->stop(); delete relaySc; relaySc = nullptr; }
     relayStatusDirty = true;
     if (millis() - lastRelaySuccessMs >= 90000 &&
         !currentSsid.isEmpty() &&
@@ -3222,12 +3204,8 @@ void loop() {
         !wifiJoinInProgress()) {
       statusText = "Relay stalled, reconnecting Wi-Fi";
       publishStatus();
-      WiFi.setAutoReconnect(false);
-      WiFi.disconnect(true, false);
-      delay(500);
-      WiFi.mode(WIFI_STA);
+      WiFi.disconnect(false, false);
       delay(100);
-      WiFi.setAutoReconnect(true);
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
       markWifiJoinStarted();
       lastWifiCheckMs = millis();
