@@ -542,6 +542,7 @@ bool beginHttpClient(HTTPClient& client, const String& url, uint16_t timeoutMs) 
     bool started = client.begin(*relaySc, finalUrl);
     if (started) {
       client.setReuse(false);
+      client.setConnectTimeout(15000);
       client.setTimeout(timeoutMs);
     }
     Serial.printf("[HTTP] begin(HTTPS)=%d\n", started);
@@ -2733,6 +2734,8 @@ void pushRelayStatus() {
   HTTPClient client;
   if (!beginHttpClient(client, url, 8000)) {
     Serial.println("[RELAY] beginHttpClient failed for push");
+    statusText = String("Relay begin fail h") + String(ESP.getFreeHeap());
+    publishStatus();
     return;
   }
 
