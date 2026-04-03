@@ -7,7 +7,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <Wire.h>
-#include "FT6336U.h"
+#include <Adafruit_FT6206.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 #include <BLEDevice.h>
@@ -80,7 +80,7 @@ static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
 Adafruit_ST7789* pTft = nullptr;
-FT6336U* pTouch = nullptr;
+Adafruit_FT6206* pTouch = nullptr;
 Preferences preferences;
 bool displayAvailable = false;
 
@@ -2518,32 +2518,37 @@ void setupDisplay() {
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");
 
-  // Initialize FT6336U capacitive touch via I2C
-  Serial.println("[TFT] Creating FT6336U touch object...");
-  pTouch = new FT6336U(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT);
-  Serial.println("[TFT] Calling touch begin...");
-  pTouch->begin();
-  Serial.print("[TFT] FT6336U Firmware Version: ");
-  Serial.println(pTouch->read_firmware_id());
-  Serial.println("[TFT] Touch ready.");
+  // Initialize FT6336U capacitive touch via I2C (Adafruit_FT6206 is wire-compatible)
+  Serial.println("[TFT] Starting I2C for touch (SDA=" + String(TOUCH_SDA) + " SCL=" + String(TOUCH_SCL) + ")...");
+  Wire.begin(TOUCH_SDA, TOUCH_SCL);
+  Serial.println("[TFT] Creating Adafruit_FT6206 touch object...");
+  pTouch = new Adafruit_FT6206();
+  if (!pTouch->begin(40, &Wire)) {
+    Serial.println("[TFT] WARNING: FT6336U not found! Touch disabled.");
+    delete pTouch;
+    pTouch = nullptr;
+  } else {
+    Serial.println("[TFT] Touch ready.");
+  }
 
-  Serial.printf("[TFT] ST7789 240x320 + FT6336U initialized. Free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[TFT] ST7789 240x320 + FT6206 initialized. Free heap: %u\n", ESP.getFreeHeap());
 }
 
 // ─── Touch handling (FT6336U capacitive, replaces physical buttons) ───
 
 void handleTouch() {
   if (pTouch == nullptr) return;
-  FT6336U_TouchPointType tp = pTouch->scan();
-  bool isTouched = (tp.touch_count > 0);
+  uint8_t touchCount = pTouch->touched();
+  bool isTouched = (touchCount > 0);
   unsigned long now = millis();
 
   if (isTouched && !touchActive) {
     // Touch start
     touchActive = true;
     touchStartMs = now;
-    touchStartX = tp.tp[0].x;
-    touchStartY = tp.tp[0].y;
+    TS_Point p = pTouch->getPoint();
+    touchStartX = p.x;
+    touchStartY = p.y;
   }
 
   if (!isTouched && touchActive) {
