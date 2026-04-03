@@ -2542,9 +2542,13 @@ void setupDisplay() {
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
 
-  // Create ST7789 display on hardware SPI with explicit pins
-  Serial.println("[TFT] Creating ST7789 display object...");
-  pTft = new Adafruit_ST7789(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCK, TFT_RST);
+  // Start hardware SPI with the board's wired TFT pins before creating display
+  Serial.printf("[TFT] SPI.begin(SCK=%d MISO=%d MOSI=%d CS=%d)\n", TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
+  SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
+
+  // Use 3-pin hardware SPI constructor (CS, DC, RST) — SPI bus already configured above
+  Serial.println("[TFT] Creating ST7789 display object (hardware SPI)...");
+  pTft = new Adafruit_ST7789(&SPI, TFT_CS, TFT_DC, TFT_RST);
   Serial.println("[TFT] Calling tft.init(240, 320)...");
   tft.init(240, 320);
   Serial.println("[TFT] tft.init() done.");
