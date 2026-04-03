@@ -7,7 +7,6 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <Wire.h>
-#include <Adafruit_FT6206.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 #include <BLEDevice.h>
@@ -80,9 +79,45 @@ static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
 Adafruit_ST7789* pTft = nullptr;
-Adafruit_FT6206* pTouch = nullptr;
 Preferences preferences;
 bool displayAvailable = false;
+bool touchAvailable = false;
+
+// ─── Inline FT6336U I2C touch driver (no external library needed) ───
+#define FT6336U_ADDR 0x38
+struct TouchPoint { uint16_t x; uint16_t y; };
+
+bool ft6336u_init() {
+  Wire.beginTransmission(FT6336U_ADDR);
+  return (Wire.endTransmission() == 0);
+}
+
+uint8_t ft6336u_read_reg(uint8_t reg) {
+  Wire.beginTransmission(FT6336U_ADDR);
+  Wire.write(reg);
+  Wire.endTransmission(false);
+  Wire.requestFrom((uint8_t)FT6336U_ADDR, (uint8_t)1);
+  return Wire.available() ? Wire.read() : 0;
+}
+
+uint8_t ft6336u_touched() {
+  return ft6336u_read_reg(0x02) & 0x0F;  // TD_STATUS register, lower nibble = touch count
+}
+
+TouchPoint ft6336u_getPoint() {
+  TouchPoint pt;
+  Wire.beginTransmission(FT6336U_ADDR);
+  Wire.write(0x03);  // start of first touch data
+  Wire.endTransmission(false);
+  Wire.requestFrom((uint8_t)FT6336U_ADDR, (uint8_t)4);
+  uint8_t xH = Wire.read();
+  uint8_t xL = Wire.read();
+  uint8_t yH = Wire.read();
+  uint8_t yL = Wire.read();
+  pt.x = ((xH & 0x0F) << 8) | xL;
+  pt.y = ((yH & 0x0F) << 8) | yL;
+  return pt;
+}
 
 // Convenience reference for display (set once in setupDisplay)
 #define tft (*pTft)
@@ -2518,27 +2553,24 @@ void setupDisplay() {
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");
 
-  // Initialize FT6336U capacitive touch via I2C (Adafruit_FT6206 is wire-compatible)
-  Serial.println("[TFT] Starting I2C for touch (SDA=" + String(TOUCH_SDA) + " SCL=" + String(TOUCH_SCL) + ")...");
+  // Initialize FT6336U capacitive touch via I2C (bare register access, no library)
+  Serial.printf("[TFT] Starting I2C for touch (SDA=%d SCL=%d)...\n", TOUCH_SDA, TOUCH_SCL);
   Wire.begin(TOUCH_SDA, TOUCH_SCL);
-  Serial.println("[TFT] Creating Adafruit_FT6206 touch object...");
-  pTouch = new Adafruit_FT6206();
-  if (!pTouch->begin(40, &Wire)) {
-    Serial.println("[TFT] WARNING: FT6336U not found! Touch disabled.");
-    delete pTouch;
-    pTouch = nullptr;
+  if (ft6336u_init()) {
+    touchAvailable = true;
+    Serial.println("[TFT] FT6336U found at 0x38. Touch ready.");
   } else {
-    Serial.println("[TFT] Touch ready.");
+    Serial.println("[TFT] WARNING: FT6336U not found at 0x38! Touch disabled.");
   }
 
-  Serial.printf("[TFT] ST7789 240x320 + FT6206 initialized. Free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[TFT] ST7789 240x320 initialized. Free heap: %u\n", ESP.getFreeHeap());
 }
 
 // ─── Touch handling (FT6336U capacitive, replaces physical buttons) ───
 
 void handleTouch() {
-  if (pTouch == nullptr) return;
-  uint8_t touchCount = pTouch->touched();
+  if (!touchAvailable) return;
+  uint8_t touchCount = ft6336u_touched();
   bool isTouched = (touchCount > 0);
   unsigned long now = millis();
 
@@ -2546,7 +2578,7 @@ void handleTouch() {
     // Touch start
     touchActive = true;
     touchStartMs = now;
-    TS_Point p = pTouch->getPoint();
+    TouchPoint p = ft6336u_getPoint();
     touchStartX = p.x;
     touchStartY = p.y;
   }
