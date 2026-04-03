@@ -1,11 +1,13 @@
-// ─── Desk Companion TFT 2.8" (ILI9341 240×320) ───
-// Adapted from mini.ino for the ILI9341 240×320 IPS TFT with XPT2046 touch.
+// ─── Desk Companion TFT 2.8" (ST7789 240×320, Freenove FNK0104) ───
+// Adapted from mini.ino for the ST7789 240×320 IPS TFT with FT6336U capacitive touch.
+// Target board: Freenove ESP32-S3 Display (FNK0104) — all-in-one CYD.
 // All logic (BLE, Wi-Fi, relay, pet, commands) is identical to the Mini OLED.
 // Display calls adapted: SPI TFT, colors, scaled coordinates.
 
 #include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
-#include <XPT2046_Touchscreen.h>
+#include <Adafruit_ST7789.h>
+#include <Wire.h>
+#include "FT6336U.h"
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 #include <BLEDevice.h>
@@ -20,46 +22,28 @@
 #include <mbedtls/base64.h>
 #include <string>
 
-// ─── TFT pin configuration (adjust for your wiring) ───
-#ifndef TFT_CS
-#define TFT_CS   15
-#endif
+// ─── TFT SPI pin configuration (Freenove FNK0104 Touch variant) ───
+#define TFT_CS    10
+#define TFT_DC    46
+#define TFT_MOSI  11
+#define TFT_SCK   12
+#define TFT_MISO  13
+#define TFT_BL    45   // backlight, active HIGH
+#define TFT_RST   -1   // no dedicated reset
 
-#ifndef TFT_DC
-#define TFT_DC   2
-#endif
-
-#ifndef TFT_RST
-#define TFT_RST  4
-#endif
-
-#ifndef TFT_MOSI
-#define TFT_MOSI 23
-#endif
-
-#ifndef TFT_CLK
-#define TFT_CLK  18
-#endif
-
-#ifndef TFT_MISO
-#define TFT_MISO 19
-#endif
-
-#ifndef TOUCH_CS
-#define TOUCH_CS 21
-#endif
-
-#ifndef TOUCH_IRQ
-#define TOUCH_IRQ 36
-#endif
+// ─── FT6336U capacitive touch I2C pins ───
+#define TOUCH_SDA  16
+#define TOUCH_SCL  15
+#define TOUCH_RST  18
+#define TOUCH_INT  17
 
 #define SCREEN_WIDTH  240
 #define SCREEN_HEIGHT 320
 
 // Color palette
-#define COL_BG      ILI9341_BLACK
-#define COL_FG      ILI9341_WHITE
-#define COL_ACCENT  ILI9341_CYAN
+#define COL_BG      ST77XX_BLACK
+#define COL_FG      ST77XX_WHITE
+#define COL_ACCENT  ST77XX_CYAN
 
 #ifndef BTN_NEXT_PIN
 #define BTN_NEXT_PIN -1  // touch replaces physical buttons
@@ -95,14 +79,13 @@ static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
 static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
-Adafruit_ILI9341* pTft = nullptr;
-XPT2046_Touchscreen* pTouch = nullptr;
+Adafruit_ST7789* pTft = nullptr;
+FT6336U* pTouch = nullptr;
 Preferences preferences;
 bool displayAvailable = false;
 
-// Convenience references (set once in setupDisplay)
+// Convenience reference for display (set once in setupDisplay)
 #define tft (*pTft)
-#define touch (*pTouch)
 
 BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
@@ -1796,7 +1779,7 @@ void renderIdle() {
   tft.setCursor(10, STATUS_BAR_Y);
   tft.print(statusText.substring(0, 19));
   if (WiFi.status() == WL_CONNECTED) {
-    tft.setTextColor(ILI9341_GREEN);
+    tft.setTextColor(ST77XX_GREEN);
     tft.setCursor(10, STATUS_BAR_Y + 20);
     tft.print(ipAddress);
   }
@@ -2516,45 +2499,51 @@ void setupBle() {
   BLEDevice::startAdvertising();
 }
 
-// ─── Display setup (TFT via SPI) ───
+// ─── Display setup (ST7789 via SPI + FT6336U cap touch via I2C) ───
 
 void setupDisplay() {
-  Serial.println("[TFT] Creating display object...");
-  pTft = new Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
-  Serial.println("[TFT] Calling tft.begin()...");
-  tft.begin();
-  Serial.println("[TFT] tft.begin() done.");
+  // Enable backlight
+  Serial.println("[TFT] Enabling backlight...");
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
+
+  // Create ST7789 display on hardware SPI with explicit pins
+  Serial.println("[TFT] Creating ST7789 display object...");
+  pTft = new Adafruit_ST7789(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCK, TFT_RST);
+  Serial.println("[TFT] Calling tft.init(240, 320)...");
+  tft.init(240, 320);
+  Serial.println("[TFT] tft.init() done.");
   tft.setRotation(0);  // portrait 240×320
   tft.fillScreen(COL_BG);
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");
 
-  if (TOUCH_CS >= 0) {
-    Serial.println("[TFT] Creating touch object...");
-    pTouch = new XPT2046_Touchscreen(TOUCH_CS, TOUCH_IRQ);
-    Serial.println("[TFT] Calling touch.begin()...");
-    touch.begin();
-    touch.setRotation(0);
-    Serial.println("[TFT] Touch ready.");
-  }
+  // Initialize FT6336U capacitive touch via I2C
+  Serial.println("[TFT] Creating FT6336U touch object...");
+  pTouch = new FT6336U(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT);
+  Serial.println("[TFT] Calling touch begin...");
+  pTouch->begin();
+  Serial.print("[TFT] FT6336U Firmware Version: ");
+  Serial.println(pTouch->read_firmware_id());
+  Serial.println("[TFT] Touch ready.");
 
-  Serial.printf("[TFT] ILI9341 240x320 initialized. Free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[TFT] ST7789 240x320 + FT6336U initialized. Free heap: %u\n", ESP.getFreeHeap());
 }
 
-// ─── Touch handling (replaces physical buttons) ───
+// ─── Touch handling (FT6336U capacitive, replaces physical buttons) ───
 
 void handleTouch() {
-  if (TOUCH_CS < 0 || pTouch == nullptr) return;
-  bool isTouched = touch.touched();
+  if (pTouch == nullptr) return;
+  FT6336U_TouchPointType tp = pTouch->scan();
+  bool isTouched = (tp.touch_count > 0);
   unsigned long now = millis();
 
   if (isTouched && !touchActive) {
     // Touch start
     touchActive = true;
     touchStartMs = now;
-    TS_Point p = touch.getPoint();
-    touchStartX = p.x;
-    touchStartY = p.y;
+    touchStartX = tp.tp[0].x;
+    touchStartY = tp.tp[0].y;
   }
 
   if (!isTouched && touchActive) {
