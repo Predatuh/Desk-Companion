@@ -95,10 +95,14 @@ static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
 static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
-Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
-XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
+Adafruit_ILI9341* pTft = nullptr;
+XPT2046_Touchscreen* pTouch = nullptr;
 Preferences preferences;
 bool displayAvailable = false;
+
+// Convenience references (set once in setupDisplay)
+#define tft (*pTft)
+#define touch (*pTouch)
 
 BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
@@ -2515,7 +2519,9 @@ void setupBle() {
 // ─── Display setup (TFT via SPI) ───
 
 void setupDisplay() {
-  Serial.println("[TFT] Starting display init...");
+  Serial.println("[TFT] Creating display object...");
+  pTft = new Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+  Serial.println("[TFT] Calling tft.begin()...");
   tft.begin();
   Serial.println("[TFT] tft.begin() done.");
   tft.setRotation(0);  // portrait 240×320
@@ -2524,7 +2530,9 @@ void setupDisplay() {
   Serial.println("[TFT] Screen cleared.");
 
   if (TOUCH_CS >= 0) {
-    Serial.println("[TFT] Starting touch init...");
+    Serial.println("[TFT] Creating touch object...");
+    pTouch = new XPT2046_Touchscreen(TOUCH_CS, TOUCH_IRQ);
+    Serial.println("[TFT] Calling touch.begin()...");
     touch.begin();
     touch.setRotation(0);
     Serial.println("[TFT] Touch ready.");
@@ -2536,7 +2544,7 @@ void setupDisplay() {
 // ─── Touch handling (replaces physical buttons) ───
 
 void handleTouch() {
-  if (TOUCH_CS < 0) return;
+  if (TOUCH_CS < 0 || pTouch == nullptr) return;
   bool isTouched = touch.touched();
   unsigned long now = millis();
 
