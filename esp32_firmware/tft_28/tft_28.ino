@@ -36,8 +36,8 @@
 #define TOUCH_RST  18
 #define TOUCH_INT  17
 
-#define SCREEN_WIDTH  240
-#define SCREEN_HEIGHT 320
+#define SCREEN_WIDTH  320
+#define SCREEN_HEIGHT 240
 
 // Color palette
 #define COL_BG      ST77XX_BLACK
@@ -2545,14 +2545,16 @@ void setupDisplay() {
   // Start hardware SPI with the board's wired TFT pins before creating display
   Serial.printf("[TFT] SPI.begin(SCK=%d MISO=%d MOSI=%d CS=%d)\n", TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
   SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
+  SPI.setFrequency(40000000);  // 40 MHz — safe for ST7789V
 
   // Use 3-pin hardware SPI constructor (CS, DC, RST) — SPI bus already configured above
   Serial.println("[TFT] Creating ST7789 display object (hardware SPI)...");
   pTft = new Adafruit_ST7789(&SPI, TFT_CS, TFT_DC, TFT_RST);
   Serial.println("[TFT] Calling tft.init(240, 320)...");
   tft.init(240, 320);
+  tft.setSPISpeed(40000000);  // lock in 40 MHz after init
   Serial.println("[TFT] tft.init() done.");
-  tft.setRotation(0);  // portrait 240×320
+  tft.setRotation(3);  // landscape 320×240, correct orientation for FNK0104
   tft.fillScreen(COL_BG);
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");
