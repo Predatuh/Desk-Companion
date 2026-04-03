@@ -2515,23 +2515,28 @@ void setupBle() {
 // ─── Display setup (TFT via SPI) ───
 
 void setupDisplay() {
-  SPI.begin(TFT_CLK, TFT_MISO, TFT_MOSI, TFT_CS);
+  Serial.println("[TFT] Starting display init...");
   tft.begin();
+  Serial.println("[TFT] tft.begin() done.");
   tft.setRotation(0);  // portrait 240×320
   tft.fillScreen(COL_BG);
   displayAvailable = true;
+  Serial.println("[TFT] Screen cleared.");
 
   if (TOUCH_CS >= 0) {
+    Serial.println("[TFT] Starting touch init...");
     touch.begin();
     touch.setRotation(0);
+    Serial.println("[TFT] Touch ready.");
   }
 
-  Serial.println("[TFT] ILI9341 240x320 initialized.");
+  Serial.printf("[TFT] ILI9341 240x320 initialized. Free heap: %u\n", ESP.getFreeHeap());
 }
 
 // ─── Touch handling (replaces physical buttons) ───
 
 void handleTouch() {
+  if (TOUCH_CS < 0) return;
   bool isTouched = touch.touched();
   unsigned long now = millis();
 
@@ -2586,17 +2591,23 @@ void handleTouch() {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(2000);  // extra time to open serial monitor
   Serial.println("\n=== Desk Companion TFT 2.8\" boot ===");
   Serial.printf("[BOOT] Reset reason: %d\n", static_cast<int>(esp_reset_reason()));
+  Serial.printf("[BOOT] Free heap: %u  PSRAM: %u\n", ESP.getFreeHeap(), ESP.getFreePsram());
 
   WiFi.persistent(false);
 
+  Serial.println("[BOOT] setupDisplay...");
   setupDisplay();
+  Serial.println("[BOOT] clearImageBuffer...");
   clearImageBuffer();
 
+  Serial.println("[BOOT] tryStoredPrefs...");
   tryStoredPrefs();
+  Serial.println("[BOOT] setupBle...");
   setupBle();
+  Serial.println("[BOOT] BLE ready.");
 
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
     bootWifiRestorePending = true;
