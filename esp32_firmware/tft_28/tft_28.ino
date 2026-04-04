@@ -150,6 +150,7 @@ enum DisplayMode {
   MODE_STARFIELD,
   MODE_COUNTDOWN,
   MODE_WEATHER,
+  MODE_SLEEP,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -250,9 +251,12 @@ unsigned long lastWeatherFetchMs = 0;
 unsigned long lastTapReleaseMs = 0;
 // Daily greetings (Phase 9)
 int  lastGreetingDay   = -1;
-int  lastEveningDay    = -1;
+int   lastEveningDay    = -1;
 unsigned long lastTimeCheckMs       = 0;
 unsigned long lastIdleInteractionMs = 0;
+// Emoji note reaction state
+String lastNoteEmoji = "";
+unsigned long emojiReactionEndsMs = 0;
 
 // Particle system
 struct Ptcl { int16_t x, y; int8_t vx, vy; uint8_t life; uint16_t color; };
@@ -362,6 +366,10 @@ void fetchWeather();
 void drawWeatherBadge(int x, int y);
 void renderWeatherFrame();
 void checkTimeGreetings();
+void renderSleepFrame();
+void setSleepMode();
+void drawStatusBar();
+void detectEmojiReaction(const String& text);
 
 // ─── BLE value helpers ───
 
@@ -641,6 +649,8 @@ const char* modeName(DisplayMode mode) {
       return "countdown";
     case MODE_WEATHER:
       return "weather";
+    case MODE_SLEEP:
+      return "sleep";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1934,15 +1944,7 @@ void renderIdle() {
 
   // Status bar at bottom of screen (size-1 font fits within the 18px gap)
   tft.fillRect(0, SCREEN_HEIGHT - 18, SCREEN_WIDTH, 18, COL_BG);
-  tft.setTextSize(1);
-  tft.setTextColor(COL_ACCENT);
-  tft.setCursor(4, STATUS_BAR_Y);
-  tft.print(statusText.substring(0, 30));
-  if (WiFi.status() == WL_CONNECTED) {
-    tft.setTextColor(ST77XX_GREEN);
-    tft.setCursor(SCREEN_WIDTH / 2, STATUS_BAR_Y);
-    tft.print(ipAddress);
-  }
+  drawStatusBar();
 }
 
 void renderCurrentMode() {
@@ -1987,6 +1989,9 @@ void renderCurrentMode() {
       break;
     case MODE_WEATHER:
       renderWeatherFrame();
+      break;
+    case MODE_SLEEP:
+      renderSleepFrame();
       break;
     case MODE_IDLE:
     default:
@@ -2410,6 +2415,32 @@ void fetchWeather() {
 
 // ─── Daily greetings + spontaneous reactions ───
 
+void drawStatusBar() {
+  if (!displayAvailable) return;
+  bool wifiOk  = (WiFi.status() == WL_CONNECTED);
+  bool relayOk = (lastRelaySuccessMs > 0 && millis() - lastRelaySuccessMs < 120000UL);
+  tft.setTextSize(1);
+  // Status text in accent / orange depending on relay health
+  uint16_t stColor = (wifiOk && relayOk) ? COL_ACCENT :
+                     wifiOk              ? COL_GOLD   :
+                                           COL_ROSE;
+  tft.setTextColor(stColor);
+  tft.setCursor(4, STATUS_BAR_Y);
+  tft.print(statusText.substring(0, 21));
+  // WiFi dot
+  tft.fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 3,
+                 wifiOk ? ST77XX_GREEN : COL_ROSE);
+  // Relay dot
+  tft.fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 3,
+                 relayOk ? ST77XX_GREEN : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
+  // IP (if connected)
+  if (wifiOk) {
+    tft.setTextColor(ST77XX_GREEN);
+    tft.setCursor(SCREEN_WIDTH / 2, STATUS_BAR_Y);
+    tft.print(ipAddress.substring(0, 15));
+  }
+}
+
 void checkTimeGreetings() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (millis() - lastTimeCheckMs < 60000UL) return;
@@ -2431,7 +2462,7 @@ void checkTimeGreetings() {
   if (hour >= 21 && lastEveningDay != yday) {
     if (currentMode == MODE_IDLE && !transientActive) {
       lastEveningDay = yday;
-      startTransientExpression("sleepy", 4500, "Good night!");
+      setSleepMode();
     }
   }
   // Miss you: idle >25 min with no interaction
@@ -2441,6 +2472,81 @@ void checkTimeGreetings() {
     lastIdleInteractionMs = millis();
     startTransientExpression("sad", 2200, "Miss you!");
   }
+}
+
+// ─── Emoji-reactive note messages (Phase 10) ───
+
+void detectEmojiReaction(const String& text) {
+  // Scan the note text for known emoji-like tokens and react
+  struct { const char* token; const char* expr; unsigned long ms; } rules[] = {
+    { "<3",  "love",     3000 },
+    { ":)",  "happy",    2200 },
+    { ":D",  "laugh",    2200 },
+    { ":(",  "sad",      2200 },
+    { ":*",  "kiss",     2200 },
+    { ";)",  "wink",     2200 },
+    { ":o",  "surprised",2200 },
+    { ":O",  "surprised",2200 },
+    { "xD",  "laugh",    2200 },
+    { "<*>", "star_eyes",2500 },
+    { "zzz", "sleepy",   3000 },
+    { "ZZZ", "sleepy",   3000 },
+    { "!",   "excited",  1800 },
+  };
+  for (size_t i = 0; i < sizeof(rules)/sizeof(rules[0]); i++) {
+    if (text.indexOf(rules[i].token) >= 0) {
+      lastNoteEmoji = rules[i].expr;
+      emojiReactionEndsMs = millis() + rules[i].ms;
+      startTransientExpression(rules[i].expr, rules[i].ms, "Reacting!");
+      return;
+    }
+  }
+}
+
+// ─── Sleep / goodnight ambient scene (Phase 11) ───
+
+void renderSleepFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  const float t = (float)(expressionPhase % 64) / 63.f;
+  // Gentle pulsing moon
+  const int MCX = 125, MCY = 90;
+  float pulse = 0.8f + sinf(t * 3.14159f * 2.f) * 0.2f;
+  int mr = (int)(32.f * pulse);
+  tft.fillCircle(MCX, MCY, mr, COL_GOLD);
+  tft.fillCircle(MCX + mr / 3, MCY - mr / 4, mr - 4, COL_BG);  // crescent shadow
+  // Stars
+  static const uint16_t STAR_X[] = { 18, 52, 230, 290, 16, 270, 195, 60 };
+  static const uint8_t  STAR_Y[] = { 14, 36,  18,  42, 62,  72,  50, 72 };
+  for (int i = 0; i < 8; i++) {
+    float phase = t * 3.14159f * 2.f + i * 0.78f;
+    uint16_t c = (sinf(phase) > 0.f) ? COL_GOLD : COL_FG;
+    tft.fillCircle(STAR_X[i], STAR_Y[i], 2, c);
+  }
+  // Zzz floating up
+  int zDrift = (int)(t * 40.f);
+  tft.setTextSize(2);
+  tft.setTextColor(COL_LAVENDER);
+  tft.setCursor(190, 120 - zDrift);
+  tft.print("z");
+  tft.setTextSize(3);
+  tft.setCursor(208, 95 - zDrift);
+  tft.print("Z");
+  // Calm message
+  tft.setTextSize(1);
+  tft.setTextColor(COL_FG);
+  tft.setCursor((SCREEN_WIDTH - 10*6) / 2, 162);
+  tft.print("Sweet dreams");
+  drawStatusBar();
+}
+
+void setSleepMode() {
+  currentMode     = MODE_SLEEP;
+  expressionPhase = 0;
+  lastExpressionTickMs = 0;
+  statusText = "Good night";
+  renderCurrentMode();
+  publishStatus();
 }
 
 // ─── Flower drawing helpers (scaled 2×) ───
@@ -2818,6 +2924,11 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "goodnight") {
+    setSleepMode();
+    return;
+  }
+
   if (type == "set_flower") {
     setFlower(extractJsonStringField(body, "flower", "rose"));
     return;
@@ -2910,7 +3021,9 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
+  // Emoji-reactive: also scan new note text for emoji tokens
   startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
+  detectEmojiReaction(boundedText);
 }
 
 void setBanner(const String& text, int speed) {
@@ -3392,6 +3505,16 @@ void loop() {
     if (now - lastParticleTickMs >= 500) {
       lastParticleTickMs = now;
       renderCountdownFrame();
+    }
+  }
+
+  // Sleep mode tick (same 35ms as flower)
+  if (currentMode == MODE_SLEEP) {
+    const unsigned long now = millis();
+    if (now - lastExpressionTickMs >= 35) {
+      lastExpressionTickMs = now;
+      expressionPhase = (expressionPhase + 1) % 64;
+      renderSleepFrame();
     }
   }
 
