@@ -20,6 +20,7 @@
 #include <ctype.h>
 #include <mbedtls/base64.h>
 #include <string>
+#include <time.h>
 
 // ─── TFT SPI pin configuration (Freenove FNK0104 Touch variant) ───
 #define TFT_CS    10
@@ -143,6 +144,11 @@ enum DisplayMode {
   MODE_EXPRESSION,
   MODE_FLOWER,
   MODE_SCENE,
+  MODE_FIREWORKS,
+  MODE_HEART_RAIN,
+  MODE_SNOWFALL,
+  MODE_STARFIELD,
+  MODE_COUNTDOWN,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -233,6 +239,18 @@ unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
 
+// Particle system
+struct Ptcl { int16_t x, y; int8_t vx, vy; uint8_t life; uint16_t color; };
+Ptcl gPtcl[48];
+uint8_t  gPtclCount        = 0;
+unsigned long lastParticleTickMs = 0;
+// Countdown
+long     countdownSeconds  = 0;
+unsigned long countdownStartMs  = 0;
+bool     countdownExpired  = false;
+// NTP
+int      ntpUtcOffsetSeconds = 0;
+
 // Note queue
 String noteQueue[NOTE_QUEUE_MAX];
 int noteFontSizeQueue[NOTE_QUEUE_MAX] = {0};
@@ -312,6 +330,18 @@ void handleTouch();
 void drawStickFigure(int cx, int cy, int sc, float armLA, float armRA, float legLA, float legRA, uint16_t color);
 void renderSceneFrame();
 void setScene(const String& name);
+void initFireworks();
+void initHeartRain();
+void initSnowfall();
+void initStarfield();
+void renderFireworksFrame();
+void renderHeartRainFrame();
+void renderSnowfallFrame();
+void renderStarfieldFrame();
+void setParticleMode(const String& name);
+void renderCountdownFrame();
+void setCountdown(long seconds);
+void syncNtp();
 
 // ─── BLE value helpers ───
 
@@ -565,6 +595,16 @@ const char* modeName(DisplayMode mode) {
       return "flower";
     case MODE_SCENE:
       return "scene";
+    case MODE_FIREWORKS:
+      return "fireworks";
+    case MODE_HEART_RAIN:
+      return "heart_rain";
+    case MODE_SNOWFALL:
+      return "snowfall";
+    case MODE_STARFIELD:
+      return "starfield";
+    case MODE_COUNTDOWN:
+      return "countdown";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1790,6 +1830,23 @@ void renderIdle() {
   if (!displayAvailable) return;
   // Clear content area, leave bottom 18px for status bar
   tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  // NTP clock above face box (y=0..39)
+  {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100) {
+      char tBuf[8], dBuf[14];
+      strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
+      strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
+      tft.setTextSize(2);
+      tft.setTextColor(COL_ACCENT);
+      tft.setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
+      tft.print(tBuf);
+      tft.setTextSize(1);
+      tft.setTextColor(COL_FG);
+      tft.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
+      tft.print(dBuf);
+    }
+  }
   tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 18, COL_FG);
 
   const int leftX = 70;
@@ -1874,6 +1931,21 @@ void renderCurrentMode() {
       break;
     case MODE_SCENE:
       renderSceneFrame();
+      break;
+    case MODE_FIREWORKS:
+      renderFireworksFrame();
+      break;
+    case MODE_HEART_RAIN:
+      renderHeartRainFrame();
+      break;
+    case MODE_SNOWFALL:
+      renderSnowfallFrame();
+      break;
+    case MODE_STARFIELD:
+      renderStarfieldFrame();
+      break;
+    case MODE_COUNTDOWN:
+      renderCountdownFrame();
       break;
     case MODE_IDLE:
     default:
@@ -1974,6 +2046,200 @@ void setScene(const String& name) {
   currentMode          = MODE_SCENE;
   expressionPhase      = 0;
   lastExpressionTickMs = 0;
+}
+
+// ─── Particle mode helpers ───
+
+static const uint16_t BURST_COLORS[] = {
+  COL_ROSE, COL_GOLD, COL_SKYBLUE, COL_MINT, COL_PINK, COL_LAVENDER, COL_PEACH, COL_ACCENT
+};
+
+void initFireworks() {
+  int cx = 40 + (int)random(241);
+  int cy = 20 + (int)random(181);
+  uint16_t col = BURST_COLORS[(uint8_t)random(8)];
+  gPtclCount = 16;
+  for (uint8_t i = 0; i < 16; i++) {
+    float a = i * 3.14159f * 2.f / 16.f;
+    int spd = 3 + (int)random(4);
+    gPtcl[i].x     = (int16_t)cx;
+    gPtcl[i].y     = (int16_t)cy;
+    gPtcl[i].vx    = (int8_t)((float)spd * cosf(a));
+    gPtcl[i].vy    = (int8_t)((float)spd * sinf(a));
+    gPtcl[i].life  = 30;
+    gPtcl[i].color = col;
+  }
+}
+
+void renderFireworksFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  bool anyAlive = false;
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    if (gPtcl[i].life == 0) continue;
+    anyAlive = true;
+    gPtcl[i].x   += gPtcl[i].vx;
+    gPtcl[i].y   += gPtcl[i].vy;
+    gPtcl[i].vy   = (int8_t)(gPtcl[i].vy + 1);  // gravity
+    gPtcl[i].life--;
+    int16_t nx = gPtcl[i].x, ny = gPtcl[i].y;
+    if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT - 18) {
+      int r = (gPtcl[i].life > 20) ? 3 : (gPtcl[i].life > 10) ? 2 : 1;
+      tft.fillCircle(nx, ny, r, gPtcl[i].color);
+    }
+  }
+  if (!anyAlive) initFireworks();
+}
+
+void initHeartRain() {
+  gPtclCount = 18;
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    gPtcl[i].x     = (int16_t)random(SCREEN_WIDTH);
+    gPtcl[i].y     = (int16_t)random(SCREEN_HEIGHT - 18);
+    gPtcl[i].vx    = 0;
+    gPtcl[i].vy    = (int8_t)(1 + random(3));
+    gPtcl[i].life  = (uint8_t)(1 + random(3));  // heart size
+    gPtcl[i].color = (i % 2 == 0) ? COL_ROSE : COL_PINK;
+  }
+}
+
+void renderHeartRainFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    gPtcl[i].y += gPtcl[i].vy;
+    if (gPtcl[i].y > SCREEN_HEIGHT - 18) {
+      gPtcl[i].y = -10;
+      gPtcl[i].x = (int16_t)random(SCREEN_WIDTH);
+    }
+    int16_t x = gPtcl[i].x, y = gPtcl[i].y;
+    int s = gPtcl[i].life;
+    uint16_t c = gPtcl[i].color;
+    tft.fillCircle(x - s, y - s / 2, s, c);
+    tft.fillCircle(x + s, y - s / 2, s, c);
+    tft.fillTriangle(x - s * 2, y - s / 2 + 1, x + s * 2, y - s / 2 + 1, x, y + s * 2, c);
+  }
+}
+
+void initSnowfall() {
+  gPtclCount = 28;
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    gPtcl[i].x     = (int16_t)random(SCREEN_WIDTH);
+    gPtcl[i].y     = (int16_t)random(SCREEN_HEIGHT - 18);
+    gPtcl[i].vx    = (int8_t)(random(3) - 1);
+    gPtcl[i].vy    = (int8_t)(1 + random(2));
+    gPtcl[i].life  = (uint8_t)(1 + random(3));  // snowflake radius
+    gPtcl[i].color = COL_FG;
+  }
+}
+
+void renderSnowfallFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    gPtcl[i].x += gPtcl[i].vx;
+    gPtcl[i].y += gPtcl[i].vy;
+    if (gPtcl[i].y >= SCREEN_HEIGHT - 18) { gPtcl[i].y = 0; gPtcl[i].x = (int16_t)random(SCREEN_WIDTH); }
+    if (gPtcl[i].x < 0)             gPtcl[i].x = SCREEN_WIDTH - 1;
+    if (gPtcl[i].x >= SCREEN_WIDTH) gPtcl[i].x = 0;
+    tft.fillCircle(gPtcl[i].x, gPtcl[i].y, gPtcl[i].life, gPtcl[i].color);
+  }
+}
+
+void initStarfield() {
+  gPtclCount = 36;
+  const int CX = SCREEN_WIDTH / 2, CY = (SCREEN_HEIGHT - 18) / 2;
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    gPtcl[i].x     = (int16_t)(CX + random(41) - 20);
+    gPtcl[i].y     = (int16_t)(CY + random(41) - 20);
+    gPtcl[i].vx    = 0;
+    gPtcl[i].vy    = 0;
+    gPtcl[i].life  = (uint8_t)(4 + random(60));  // Z depth: large=far, small=near
+    gPtcl[i].color = COL_FG;
+  }
+}
+
+void renderStarfieldFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  const int CX = SCREEN_WIDTH / 2, CY = (SCREEN_HEIGHT - 18) / 2;
+  for (uint8_t i = 0; i < gPtclCount; i++) {
+    float z = gPtcl[i].life / 64.f + 0.01f;
+    int sx = CX + (int)((gPtcl[i].x - CX) / z);
+    int sy = CY + (int)((gPtcl[i].y - CY) / z);
+    gPtcl[i].life--;
+    if (gPtcl[i].life == 0 || sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT - 18) {
+      gPtcl[i].x    = (int16_t)(CX + random(41) - 20);
+      gPtcl[i].y    = (int16_t)(CY + random(41) - 20);
+      gPtcl[i].life = (uint8_t)(50 + random(14));
+    } else {
+      int r = (gPtcl[i].life < 20) ? 2 : 1;
+      uint16_t c = (gPtcl[i].life < 20) ? COL_ACCENT : COL_FG;
+      tft.fillCircle(sx, sy, r, c);
+    }
+  }
+}
+
+void setParticleMode(const String& name) {
+  lastParticleTickMs = 0;
+  expressionPhase    = 0;
+  if      (name == "fireworks")  { currentMode = MODE_FIREWORKS;  initFireworks();  }
+  else if (name == "heart_rain") { currentMode = MODE_HEART_RAIN; initHeartRain(); }
+  else if (name == "snowfall")   { currentMode = MODE_SNOWFALL;   initSnowfall();  }
+  else                           { currentMode = MODE_STARFIELD;  initStarfield(); }
+}
+
+// ─── Countdown mode ───
+
+void renderCountdownFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  long elapsed   = (long)((millis() - countdownStartMs) / 1000UL);
+  long remaining = countdownSeconds - elapsed;
+  if (remaining < 0) remaining = 0;
+  long h = remaining / 3600;
+  long m = (remaining % 3600) / 60;
+  long s = remaining % 60;
+  char buf[12];
+  if (h > 0) snprintf(buf, sizeof(buf), "%02ld:%02ld:%02ld", h, m, s);
+  else       snprintf(buf, sizeof(buf), "%02ld:%02ld", m, s);
+  // Label
+  tft.setTextSize(1);
+  tft.setTextColor(COL_FG);
+  tft.setCursor((SCREEN_WIDTH - 9 * 6) / 2, 55);
+  tft.print("COUNTDOWN");
+  // Large digits
+  tft.setTextSize(4);
+  tft.setTextColor(COL_GOLD);
+  tft.setCursor((SCREEN_WIDTH - (int)strlen(buf) * 24) / 2, 75);
+  tft.print(buf);
+  // Progress bar
+  int barTotal = SCREEN_WIDTH - 40;
+  int safeSecs = (countdownSeconds > 0) ? (int)countdownSeconds : 1;
+  int barFill  = (int)((long)barTotal * remaining / safeSecs);
+  tft.fillRect(20, 148, barTotal, 8, COL_BG);
+  tft.fillRect(20, 148, barFill,  8, COL_ACCENT);
+  tft.drawRect(20, 148, barTotal, 8, COL_FG);
+  // At zero: trigger fireworks celebration
+  if (remaining == 0 && !countdownExpired) {
+    countdownExpired = true;
+    setParticleMode("fireworks");
+    startTransientExpression("love", 4000, "Time's up!");
+  }
+}
+
+void setCountdown(long seconds) {
+  countdownSeconds   = seconds;
+  countdownStartMs   = millis();
+  countdownExpired   = false;
+  currentMode        = MODE_COUNTDOWN;
+  lastParticleTickMs = 0;
+}
+
+// ─── NTP clock ───
+
+void syncNtp() {
+  configTime(ntpUtcOffsetSeconds, 0, "pool.ntp.org", "time.google.com");
 }
 
 // ─── Flower drawing helpers (scaled 2×) ───
@@ -2314,6 +2580,22 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_scene") {
     setScene(extractJsonStringField(body, "scene", "wave"));
+    return;
+  }
+
+  if (type == "set_particle") {
+    setParticleMode(extractJsonStringField(body, "particle", "fireworks"));
+    return;
+  }
+
+  if (type == "set_countdown") {
+    setCountdown((long)extractJsonIntField(body, "seconds", 60));
+    return;
+  }
+
+  if (type == "set_timezone") {
+    ntpUtcOffsetSeconds = extractJsonIntField(body, "offsetSeconds", 0);
+    if (WiFi.status() == WL_CONNECTED) syncNtp();
     return;
   }
 
@@ -2844,6 +3126,23 @@ void loop() {
     }
   }
 
+  if (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
+      currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD) {
+    const unsigned long now = millis();
+    if (now - lastParticleTickMs >= 30) {
+      lastParticleTickMs = now;
+      renderCurrentMode();
+    }
+  }
+
+  if (currentMode == MODE_COUNTDOWN) {
+    const unsigned long now = millis();
+    if (now - lastParticleTickMs >= 500) {
+      lastParticleTickMs = now;
+      renderCountdownFrame();
+    }
+  }
+
   updatePetBehavior();
 
   if (bootWifiRestorePending &&
@@ -2871,6 +3170,7 @@ void loop() {
     if (!wifiWasConnected) {
       wifiWasConnected = true;
       statusText = "Wi-Fi connected";
+      syncNtp();
       publishStatus();
     }
     lastWifiCheckMs = millis();
