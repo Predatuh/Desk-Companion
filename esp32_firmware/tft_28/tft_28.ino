@@ -149,6 +149,7 @@ enum DisplayMode {
   MODE_SNOWFALL,
   MODE_STARFIELD,
   MODE_COUNTDOWN,
+  MODE_WEATHER,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -238,6 +239,20 @@ bool touchActive = false;
 unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
+
+// Weather
+float weatherLat = 0.f;
+float weatherLon = 0.f;
+int   weatherCode       = -1;   // WMO code; -1 = no data
+int   weatherTempTenths = 0;    // temp_2m * 10, e.g. 215 = 21.5 C
+unsigned long lastWeatherFetchMs = 0;
+// Touch double-tap
+unsigned long lastTapReleaseMs = 0;
+// Daily greetings (Phase 9)
+int  lastGreetingDay   = -1;
+int  lastEveningDay    = -1;
+unsigned long lastTimeCheckMs       = 0;
+unsigned long lastIdleInteractionMs = 0;
 
 // Particle system
 struct Ptcl { int16_t x, y; int8_t vx, vy; uint8_t life; uint16_t color; };
@@ -342,6 +357,11 @@ void setParticleMode(const String& name);
 void renderCountdownFrame();
 void setCountdown(long seconds);
 void syncNtp();
+float extractJsonFloatField(const String& body, const char* key, float fallback = 0.f);
+void fetchWeather();
+void drawWeatherBadge(int x, int y);
+void renderWeatherFrame();
+void checkTimeGreetings();
 
 // ─── BLE value helpers ───
 
@@ -472,6 +492,20 @@ int extractJsonIntField(const String& body, const char* key, int fallback = 0) {
   }
 
   return foundDigit ? static_cast<int>(value * sign) : fallback;
+}
+
+float extractJsonFloatField(const String& body, const char* key, float fallback) {
+  int cursor = findJsonValueStart(body, key);
+  if (cursor < 0 || cursor >= (int)body.length()) return fallback;
+  int start = cursor;
+  if (body[cursor] == '-') cursor++;
+  bool hasDigit = false;
+  while (cursor < (int)body.length() &&
+         (isdigit((unsigned char)body[cursor]) || body[cursor] == '.')) {
+    hasDigit = true;
+    cursor++;
+  }
+  return hasDigit ? body.substring(start, cursor).toFloat() : fallback;
 }
 
 // ─── Status JSON builders ───
@@ -605,6 +639,8 @@ const char* modeName(DisplayMode mode) {
       return "starfield";
     case MODE_COUNTDOWN:
       return "countdown";
+    case MODE_WEATHER:
+      return "weather";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1847,6 +1883,8 @@ void renderIdle() {
       tft.print(dBuf);
     }
   }
+  // Weather badge top-right (above face box)
+  drawWeatherBadge(296, 15);
   tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 18, COL_FG);
 
   const int leftX = 70;
@@ -1946,6 +1984,9 @@ void renderCurrentMode() {
       break;
     case MODE_COUNTDOWN:
       renderCountdownFrame();
+      break;
+    case MODE_WEATHER:
+      renderWeatherFrame();
       break;
     case MODE_IDLE:
     default:
@@ -2242,6 +2283,166 @@ void syncNtp() {
   configTime(ntpUtcOffsetSeconds, 0, "pool.ntp.org", "time.google.com");
 }
 
+// ─── Weather widget (OpenMeteo) ───
+
+static int weatherCodeCategory(int code) {
+  if (code == 0)  return 0; // clear sky
+  if (code <= 3)  return 1; // partly / overcast
+  if (code <= 48) return 1; // fog  → show as cloud
+  if (code <= 67) return 2; // drizzle / rain
+  if (code <= 77) return 3; // snow
+  if (code <= 82) return 2; // rain showers
+  if (code <= 86) return 3; // snow showers
+  return 4;                 // thunderstorm
+}
+
+static const uint16_t WEATHER_COL[] = { COL_GOLD, COL_FG, COL_SKYBLUE, COL_FG, COL_LAVENDER };
+
+void drawWeatherIcon(int cx, int cy, int r, int cat) {
+  if (cat == 0) {  // Sun
+    tft.fillCircle(cx, cy, r, COL_GOLD);
+    for (int i = 0; i < 8; i++) {
+      float a = i * 3.14159f / 4.f;
+      tft.drawLine(cx + (int)((r+2)*cosf(a)), cy + (int)((r+2)*sinf(a)),
+                   cx + (int)((r+r/2)*cosf(a)), cy + (int)((r+r/2)*sinf(a)), COL_GOLD);
+    }
+  } else if (cat == 1) {  // Cloud
+    tft.fillCircle(cx - r/3, cy, r*2/3, COL_FG);
+    tft.fillCircle(cx + r/3, cy, r*2/3, COL_FG);
+    tft.fillCircle(cx, cy - r/3, r/2, COL_FG);
+    tft.fillRect(cx - r*2/3, cy, r*4/3, r/2+1, COL_FG);
+  } else if (cat == 2) {  // Rain
+    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_SKYBLUE);
+    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_SKYBLUE);
+    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_SKYBLUE);
+    for (int d = 0; d < 3; d++)
+      tft.drawLine(cx - r/3 + d*r/3, cy + r/4, cx - r/3 + d*r/3 - 2, cy + r, COL_SKYBLUE);
+  } else if (cat == 3) {  // Snow
+    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_FG);
+    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_FG);
+    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_FG);
+    for (int d = 0; d < 3; d++)
+      tft.fillCircle(cx - r/3 + d*r/3, cy + r/2, 2, COL_FG);
+  } else {  // Storm
+    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_LAVENDER);
+    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_LAVENDER);
+    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_LAVENDER);
+    tft.fillTriangle(cx, cy + r/4, cx - r/4, cy + 3*r/4, cx + r/8, cy + r/2, COL_GOLD);
+    tft.fillTriangle(cx + r/8, cy + r/2, cx - r/8, cy + 3*r/4, cx + r/4, cy + 3*r/4, COL_GOLD);
+  }
+}
+
+void drawWeatherBadge(int x, int y) {
+  if (weatherCode < 0) return;
+  drawWeatherIcon(x, y, 8, weatherCodeCategory(weatherCode));
+}
+
+void renderWeatherFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  if (weatherCode < 0) {
+    tft.setTextSize(2);
+    tft.setTextColor(COL_FG);
+    tft.setCursor(40, 95);
+    tft.print("No weather data");
+    tft.setTextSize(1);
+    tft.setTextColor(COL_ACCENT);
+    tft.setCursor(55, 122);
+    tft.print("Send set_location first");
+    return;
+  }
+  int cat = weatherCodeCategory(weatherCode);
+  drawWeatherIcon(SCREEN_WIDTH / 2, 68, 28, cat);
+  char tempBuf[12];
+  int tWhole = weatherTempTenths / 10;
+  int tFrac  = abs(weatherTempTenths) % 10;
+  snprintf(tempBuf, sizeof(tempBuf), "%d.%d C", tWhole, tFrac);
+  tft.setTextSize(3);
+  tft.setTextColor(WEATHER_COL[cat]);
+  tft.setCursor((SCREEN_WIDTH - (int)strlen(tempBuf) * 18) / 2, 115);
+  tft.print(tempBuf);
+  const char* labels[] = { "Clear", "Cloudy", "Rain", "Snow", "Storm" };
+  tft.setTextSize(2);
+  tft.setTextColor(COL_FG);
+  tft.setCursor((SCREEN_WIDTH - (int)strlen(labels[cat]) * 12) / 2, 158);
+  tft.print(labels[cat]);
+}
+
+void fetchWeather() {
+  if (weatherLat == 0.f && weatherLon == 0.f) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClient wcl;
+  if (!wcl.connect("api.open-meteo.com", 80)) return;
+  String path = "/v1/forecast?latitude=";
+  path += String(weatherLat, 4);
+  path += "&longitude=";
+  path += String(weatherLon, 4);
+  path += "&current=temperature_2m,weathercode";
+  wcl.print(String("GET ") + path + " HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n");
+  unsigned long t0 = millis();
+  bool inBody = false;
+  char hdr[4] = {0,0,0,0};
+  String body;
+  body.reserve(400);
+  while (millis() - t0 < 8000) {
+    while (wcl.available()) {
+      char c = wcl.read();
+      if (!inBody) {
+        hdr[0]=hdr[1]; hdr[1]=hdr[2]; hdr[2]=hdr[3]; hdr[3]=c;
+        if (hdr[0]=='\r' && hdr[1]=='\n' && hdr[2]=='\r' && hdr[3]=='\n') inBody = true;
+      } else if (body.length() < 480) {
+        body += c;
+      }
+    }
+    if (!wcl.connected() && !wcl.available()) break;
+    delay(5);
+  }
+  wcl.stop();
+  if (body.length() > 10) {
+    float tempF = extractJsonFloatField(body, "temperature_2m", -999.f);
+    if (tempF > -998.f) {
+      weatherTempTenths = (int)(tempF * 10.f + (tempF >= 0.f ? 0.5f : -0.5f));
+      weatherCode = extractJsonIntField(body, "weathercode", -1);
+    }
+  }
+  lastWeatherFetchMs = millis();
+}
+
+// ─── Daily greetings + spontaneous reactions ───
+
+void checkTimeGreetings() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (millis() - lastTimeCheckMs < 60000UL) return;
+  lastTimeCheckMs = millis();
+  struct tm ti;
+  if (!getLocalTime(&ti, 10)) return;
+  const int hour = ti.tm_hour, yday = ti.tm_yday;
+  // Morning greeting (6–9 am)
+  if (hour >= 6 && hour < 10 && lastGreetingDay != yday) {
+    if (currentMode == MODE_IDLE && !transientActive) {
+      lastGreetingDay = yday;
+      bondLevel    = clampLevel(bondLevel + 5);
+      boredomLevel = clampLevel(boredomLevel - 10);
+      persistPetState();
+      startTransientExpression("love", 4500, "Good morning!");
+    }
+  }
+  // Evening goodnight (21–23)
+  if (hour >= 21 && lastEveningDay != yday) {
+    if (currentMode == MODE_IDLE && !transientActive) {
+      lastEveningDay = yday;
+      startTransientExpression("sleepy", 4500, "Good night!");
+    }
+  }
+  // Miss you: idle >25 min with no interaction
+  if (currentMode == MODE_IDLE && !transientActive &&
+      lastIdleInteractionMs > 0 &&
+      millis() - lastIdleInteractionMs > 25UL * 60UL * 1000UL) {
+    lastIdleInteractionMs = millis();
+    startTransientExpression("sad", 2200, "Miss you!");
+  }
+}
+
 // ─── Flower drawing helpers (scaled 2×) ───
 
 void drawFlowerRose(int cx, int cy, int scale, int phase) {
@@ -2477,6 +2678,7 @@ void handleCommandJson(const String& body) {
     publishStatus();
     return;
   }
+  lastIdleInteractionMs = millis(); // track last command for spontaneous greetings
 
   if (type == "connect_wifi") {
     pendingWifiSsid = extractJsonStringField(body, "ssid");
@@ -2596,6 +2798,23 @@ void handleCommandJson(const String& body) {
   if (type == "set_timezone") {
     ntpUtcOffsetSeconds = extractJsonIntField(body, "offsetSeconds", 0);
     if (WiFi.status() == WL_CONNECTED) syncNtp();
+    return;
+  }
+
+  if (type == "set_location") {
+    weatherLat = extractJsonFloatField(body, "lat", weatherLat);
+    weatherLon = extractJsonFloatField(body, "lon", weatherLon);
+    lastWeatherFetchMs = 0;  // force immediate refetch
+    if (WiFi.status() == WL_CONNECTED) fetchWeather();
+    statusText = "Location saved";
+    publishStatus();
+    return;
+  }
+
+  if (type == "show_weather") {
+    currentMode = MODE_WEATHER;
+    renderCurrentMode();
+    publishStatus();
     return;
   }
 
@@ -2995,48 +3214,81 @@ void handleTouch() {
   unsigned long now = millis();
 
   if (isTouched && !touchActive) {
-    // Touch start
-    touchActive = true;
+    touchActive  = true;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
-    touchStartX = p.x;
-    touchStartY = p.y;
+    touchStartX  = p.x;
+    touchStartY  = p.y;
   }
 
   if (!isTouched && touchActive) {
-    // Touch released
     touchActive = false;
     unsigned long holdDuration = now - touchStartMs;
+    lastIdleInteractionMs = now;
 
     if (holdDuration >= BTN_HOLD_MS) {
-      // Long press → clear display
-      noteQueueCount = 0;
-      noteQueueIndex = 0;
-      currentMode = MODE_IDLE;
-      currentNote = "";
+      // ─ Long press: clear display
+      noteQueueCount = 0; noteQueueIndex = 0;
+      currentMode = MODE_IDLE; currentNote = "";
       preferences.begin("desk-cfg", false);
       preferences.remove("note_text");
       preferences.end();
       setIdleStatus("Ready");
-      renderCurrentMode();
-      publishStatus();
-      energyLevel = clampLevel(energyLevel + 4);
-      boredomLevel = clampLevel(boredomLevel + 6);
+      renderCurrentMode(); publishStatus();
+      energyLevel   = clampLevel(energyLevel + 4);
+      boredomLevel  = clampLevel(boredomLevel + 6);
       persistPetState();
       startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
-    } else if (holdDuration < 2000 && noteQueueCount > 1) {
-      // Short tap → next note
-      noteQueueIndex = (noteQueueIndex + 1) % noteQueueCount;
-      currentNote = noteQueue[noteQueueIndex];
-      currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
-      currentMode = MODE_NOTE;
-      statusText = "Showing note";
-      renderCurrentMode();
-      publishStatus();
-      bondLevel = clampLevel(bondLevel + 2);
-      boredomLevel = clampLevel(boredomLevel - 4);
+
+    } else if (holdDuration >= 500) {
+      // ─ Medium hold: comfort reaction
+      bondLevel    = clampLevel(bondLevel + 3);
+      boredomLevel = clampLevel(boredomLevel - 8);
       persistPetState();
-      startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
+      startTransientExpression(pickReactionExpression("comfort"), 2000, "Thanks for staying");
+
+    } else {
+      // ─ Short tap
+      if (currentMode == MODE_NOTE && noteQueueCount > 1) {
+        // Cycle notes
+        noteQueueIndex      = (noteQueueIndex + 1) % noteQueueCount;
+        currentNote         = noteQueue[noteQueueIndex];
+        currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
+        currentMode         = MODE_NOTE;
+        statusText          = "Showing note";
+        renderCurrentMode(); publishStatus();
+        bondLevel    = clampLevel(bondLevel + 2);
+        boredomLevel = clampLevel(boredomLevel - 4);
+        persistPetState();
+        startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
+
+      } else if (currentMode != MODE_IDLE && currentMode != MODE_NOTE) {
+        // Tap on non-idle screen: dismiss
+        setIdleStatus("Ready");
+
+      } else {
+        // Tap in idle/note: double-tap = cheer, single tap = pet
+        if (now - lastTapReleaseMs < 400UL && lastTapReleaseMs > 0) {
+          // Double tap
+          lastTapReleaseMs = 0;
+          bondLevel    = clampLevel(bondLevel + 6);
+          boredomLevel = clampLevel(boredomLevel - 12);
+          persistPetState();
+          startTransientExpression(pickReactionExpression("cheer"), 2200, "Yay!");
+        } else {
+          // Single tap: sparkle at touch point + pet
+          lastTapReleaseMs = now;
+          if (displayAvailable) {
+            tft.fillCircle(touchStartX, touchStartY, 7, COL_GOLD);
+            tft.fillCircle(touchStartX, touchStartY, 3, COL_BG);
+          }
+          delay(100);
+          bondLevel    = clampLevel(bondLevel + 2);
+          boredomLevel = clampLevel(boredomLevel - 5);
+          persistPetState();
+          startTransientExpression(pickReactionExpression("pet"), 1800, "That's nice");
+        }
+      }
     }
   }
 }
@@ -3142,6 +3394,15 @@ void loop() {
       renderCountdownFrame();
     }
   }
+
+  // Weather auto-fetch every 10 min when WiFi+location set
+  if (WiFi.status() == WL_CONNECTED &&
+      (weatherLat != 0.f || weatherLon != 0.f) &&
+      (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= 600000UL)) {
+    fetchWeather();
+  }
+
+  checkTimeGreetings();
 
   updatePetBehavior();
 
