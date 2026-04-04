@@ -770,6 +770,28 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendColors({
+    required int eyeColor,
+    required int faceColor,
+    required int accentColor,
+    required int bodyColor,
+  }) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {
+          'type': 'set_colors',
+          'eyeColor': eyeColor,
+          'faceColor': faceColor,
+          'accentColor': accentColor,
+          'bodyColor': bodyColor,
+        },
+        mode: _mode,
+        bleLabel: 'Colors sent over BLE.',
+        relayLabel: 'Colors queued through relay.',
+      );
+    });
+  }
+
   Future<void> setPetPersonality(String personality) async {
     await _runBusy(() async {
       await _sendCommand(

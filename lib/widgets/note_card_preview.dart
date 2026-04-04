@@ -21,8 +21,8 @@ class NoteCardPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 128,
-      height: 64,
+      width: 320,
+      height: 240,
       child: CustomPaint(
         painter: _NoteCardPainter(
           text: text.trim().isEmpty ? 'Your note here' : text.trim(),
@@ -51,7 +51,7 @@ class _NoteCardPainter extends CustomPainter {
   final List<String> icons;
   final String? flowerAccent;
 
-  static const Size _canvasSize = Size(128, 64);
+  static const Size _canvasSize = Size(320, 240);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -77,12 +77,12 @@ class _NoteCardPainter extends CustomPainter {
     _drawBorder(canvas, border);
     final safeFontSize = fontSize.clamp(1, 4);
     final hasIcons = icons.isNotEmpty;
-    final topPad = hasIcons ? 14 : 4;
-    final horizontalPadding = border > 0 ? 8 : 4;
-    final availableHeight = 64 - topPad - 4;
+    final topPad = hasIcons ? 52 : 15;
+    final horizontalPadding = border > 0 ? 20 : 10;
+    final availableHeight = 240 - topPad - 15;
     final lineHeight = (8 * safeFontSize) + 2;
     final maxLines = availableHeight ~/ lineHeight;
-    final maxChars = (128 - (horizontalPadding * 2)) ~/ (6 * safeFontSize);
+    final maxChars = (320 - (horizontalPadding * 2)) ~/ (6 * safeFontSize);
     final wrappedLines = _wrapLines(text, maxChars, maxLines);
     final totalHeight = wrappedLines.length * lineHeight;
     var cursorY = topPad + ((availableHeight - totalHeight) ~/ 2);
@@ -91,12 +91,12 @@ class _NoteCardPainter extends CustomPainter {
     }
 
     if (hasIcons) {
-      _drawNoteIcons(canvas, icons.take(7).toList(growable: false), 7);
+      _drawNoteIcons(canvas, icons.take(7).toList(growable: false), 26);
     }
 
     for (final line in wrappedLines) {
       final width = _lineVisualWidth(line, safeFontSize);
-      final startX = (128 - width) ~/ 2;
+      final startX = (320 - width) ~/ 2;
       _drawLineWithSymbols(canvas, line, startX.toDouble(), cursorY.toDouble(), safeFontSize);
       cursorY += lineHeight;
     }
@@ -108,19 +108,19 @@ class _NoteCardPainter extends CustomPainter {
       ..color = Colors.white
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(const Offset(42, 2), const Offset(42, 61), divider);
+    canvas.drawLine(const Offset(105, 8), const Offset(105, 229), divider);
 
     const safeFontSize = 1;
-    const textLeft = 46;
-    const textAreaWidth = 128 - textLeft - 4;
+    const textLeft = 115;
+    const textAreaWidth = 320 - textLeft - 10;
     const lineHeight = (8 * safeFontSize) + 2;
-    const maxLines = (64 - 8) ~/ lineHeight;
+    const maxLines = (240 - 30) ~/ lineHeight;
     const maxChars = textAreaWidth ~/ (6 * safeFontSize);
     final wrappedLines = _wrapLines(text, maxChars, maxLines);
     final totalHeight = wrappedLines.length * lineHeight;
-    var startY = 4 + ((64 - 8 - totalHeight) ~/ 2);
-    if (startY < 4) {
-      startY = 4;
+    var startY = 15 + ((240 - 30 - totalHeight) ~/ 2);
+    if (startY < 15) {
+      startY = 15;
     }
 
     for (var index = 0; index < wrappedLines.length; index++) {
@@ -263,36 +263,36 @@ class _NoteCardPainter extends CustomPainter {
       case 1:
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            const Rect.fromLTWH(1, 1, 126, 62),
-            const Radius.circular(8),
+            const Rect.fromLTWH(3, 4, 314, 232),
+            const Radius.circular(20),
           ),
           stroke,
         );
         break;
       case 2:
-        for (double x = 6; x < 122; x += 7) {
-          canvas.drawLine(Offset(x, 3), Offset(x + 3, 3), stroke);
-          canvas.drawLine(Offset(x, 60), Offset(x + 3, 60), stroke);
+        for (double x = 15; x < 305; x += 17) {
+          canvas.drawLine(Offset(x, 11), Offset(x + 7, 11), stroke);
+          canvas.drawLine(Offset(x, 225), Offset(x + 7, 225), stroke);
         }
-        for (double y = 6; y < 58; y += 7) {
-          canvas.drawLine(Offset(3, y), Offset(3, y + 3), stroke);
-          canvas.drawLine(Offset(124, y), Offset(124, y + 3), stroke);
+        for (double y = 22; y < 218; y += 17) {
+          canvas.drawLine(Offset(8, y), Offset(8, y + 7), stroke);
+          canvas.drawLine(Offset(310, y), Offset(310, y + 7), stroke);
         }
         break;
       case 3:
-        _drawIconHeart(canvas, const Offset(9, 9), 3);
-        _drawIconHeart(canvas, const Offset(119, 9), 3);
-        _drawIconHeart(canvas, const Offset(9, 55), 3);
-        _drawIconHeart(canvas, const Offset(119, 55), 3);
+        _drawIconHeart(canvas, const Offset(22, 34), 3);
+        _drawIconHeart(canvas, const Offset(298, 34), 3);
+        _drawIconHeart(canvas, const Offset(22, 206), 3);
+        _drawIconHeart(canvas, const Offset(298, 206), 3);
         break;
       case 4:
-        for (double x = 5; x < 128; x += 6) {
-          canvas.drawCircle(Offset(x, 3), 1, fill);
-          canvas.drawCircle(Offset(x, 60), 1, fill);
+        for (double x = 12; x < 320; x += 15) {
+          canvas.drawCircle(Offset(x, 11), 1, fill);
+          canvas.drawCircle(Offset(x, 225), 1, fill);
         }
-        for (double y = 9; y < 58; y += 6) {
-          canvas.drawCircle(Offset(3, y), 1, fill);
-          canvas.drawCircle(Offset(124, y), 1, fill);
+        for (double y = 34; y < 218; y += 15) {
+          canvas.drawCircle(Offset(8, y), 1, fill);
+          canvas.drawCircle(Offset(310, y), 1, fill);
         }
         break;
     }
@@ -303,10 +303,10 @@ class _NoteCardPainter extends CustomPainter {
       return;
     }
     final drawCount = math.min(iconNames.length, 7);
-    final totalWidth = drawCount * 14;
-    final startX = ((128 - totalWidth) / 2) + 7;
+    final totalWidth = drawCount * 35;
+    final startX = ((320 - totalWidth) / 2) + 17;
     for (var index = 0; index < drawCount; index++) {
-      final center = Offset(startX + (index * 14), y);
+      final center = Offset(startX + (index * 35), y);
       switch (iconNames[index]) {
         case 'heart':
           _drawIconHeart(canvas, center, 3);
@@ -325,11 +325,11 @@ class _NoteCardPainter extends CustomPainter {
   void _drawFlowerAccent(Canvas canvas, String accent) {
     switch (accent) {
       case 'sunflower':
-        _drawSunflower(canvas, const Offset(20, 30), 4);
+        _drawSunflower(canvas, const Offset(50, 112), 4);
       case 'king_protea':
-        _drawKingProtea(canvas, const Offset(20, 30), 4);
+        _drawKingProtea(canvas, const Offset(50, 112), 4);
       default:
-        _drawRose(canvas, const Offset(20, 30), 4);
+        _drawRose(canvas, const Offset(50, 112), 4);
     }
   }
 
@@ -341,7 +341,7 @@ class _NoteCardPainter extends CustomPainter {
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 58), stroke);
+    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 218), stroke);
     for (var layer = 0; layer < 4; layer++) {
       final radius = (2 + layer) * scale;
       canvas.drawCircle(Offset(center.dx, center.dy - (layer * scale)), radius, stroke);
@@ -371,7 +371,7 @@ class _NoteCardPainter extends CustomPainter {
       );
     }
     canvas.drawCircle(center, 4 * scale, fill);
-    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 58), stroke);
+    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 218), stroke);
   }
 
   void _drawKingProtea(Canvas canvas, Offset center, double scale) {
@@ -396,7 +396,7 @@ class _NoteCardPainter extends CustomPainter {
     }
     canvas.drawOval(Rect.fromCenter(center: center, width: 10 * scale, height: 8 * scale), stroke);
     canvas.drawCircle(center, 2 * scale, fill);
-    canvas.drawLine(Offset(center.dx, center.dy + 7 * scale), Offset(center.dx, 58), stroke);
+    canvas.drawLine(Offset(center.dx, center.dy + 7 * scale), Offset(center.dx, 218), stroke);
   }
 
   void _drawIconHeart(Canvas canvas, Offset center, double size) {

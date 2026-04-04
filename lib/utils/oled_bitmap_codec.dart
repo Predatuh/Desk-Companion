@@ -7,8 +7,8 @@ import '../models/companion_image_payload.dart';
 class OledBitmapCodec {
   OledBitmapCodec._();
 
-  static const int width = 128;
-  static const int height = 64;
+  static const int width = 320;
+  static const int height = 240;
   static const int byteLength = width * height ~/ 8;
 
   static CompanionImagePayload encodeImage({
@@ -57,7 +57,7 @@ class OledBitmapCodec {
     String name = 'oled_bitmap',
   }) {
     if (bitmap.length != byteLength) {
-      throw ArgumentError('Bitmap must be exactly 1024 bytes for 128x64 OLED output.');
+      throw ArgumentError('Bitmap must be exactly $byteLength bytes for ${width}x$height TFT output.');
     }
 
     return CompanionImagePayload(
@@ -77,7 +77,7 @@ class OledBitmapCodec {
   }) {
     if (sourceWidth != width || sourceHeight != height) {
       throw ArgumentError(
-        'RGBA source must be exactly ${width}x$height for OLED output.',
+        'RGBA source must be exactly ${width}x$height for TFT output.',
       );
     }
 

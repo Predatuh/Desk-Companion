@@ -29,8 +29,8 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
 
   Offset _toGridPoint(Offset localPosition, Size size) {
     return Offset(
-      ((localPosition.dx / size.width) * 128).floor().clamp(0, 127).toDouble(),
-      ((localPosition.dy / size.height) * 64).floor().clamp(0, 63).toDouble(),
+      ((localPosition.dx / size.width) * 320).floor().clamp(0, 319).toDouble(),
+      ((localPosition.dy / size.height) * 240).floor().clamp(0, 239).toDouble(),
     );
   }
 
@@ -88,7 +88,7 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
-      aspectRatio: 2,
+      aspectRatio: 320 / 240,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -173,13 +173,13 @@ class _OledDrawingPadPainter extends CustomPainter {
       background,
     );
 
-    final pixelWidth = size.width / 128;
-    final pixelHeight = size.height / 64;
+    final pixelWidth = size.width / 320;
+    final pixelHeight = size.height / 240;
     final pixelPaint = Paint()..color = Colors.white;
 
-    for (var y = 0; y < 64; y++) {
-      for (var x = 0; x < 128; x++) {
-        final byteIndex = y * 16 + (x >> 3);
+    for (var y = 0; y < 240; y++) {
+      for (var x = 0; x < 320; x++) {
+        final byteIndex = y * 40 + (x >> 3);
         final bitMask = 1 << (7 - (x & 7));
         if ((bitmap[byteIndex] & bitMask) == 0) {
           continue;
@@ -201,11 +201,11 @@ class _OledDrawingPadPainter extends CustomPainter {
       final gridPaint = Paint()
         ..color = Colors.white.withValues(alpha: 0.08)
         ..strokeWidth = 1;
-      for (var x = 0; x <= 128; x += 8) {
+      for (var x = 0; x <= 320; x += 16) {
         final dx = x * pixelWidth;
         canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), gridPaint);
       }
-      for (var y = 0; y <= 64; y += 8) {
+      for (var y = 0; y <= 240; y += 16) {
         final dy = y * pixelHeight;
         canvas.drawLine(Offset(0, dy), Offset(size.width, dy), gridPaint);
       }

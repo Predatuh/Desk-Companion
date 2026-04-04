@@ -409,6 +409,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   int _countdownMinutes = 5;
   double _timezoneOffsetHours = 0;
   int _displayRotation = 1;
+  Color _eyeColor = Colors.white;
+  Color _faceColor = Colors.white;
+  Color _accentColor = const Color(0xFF00BFFF);
+  Color _bodyColor = const Color(0xFFFF69B4);
   final _weatherLatController = TextEditingController();
   final _weatherLonController = TextEditingController();
 
@@ -968,6 +972,60 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
+                  title: 'Colors',
+                  subtitle:
+                      'Customise eye, face, accent and body colors on the display.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ColorRow(
+                        label: 'Eyes',
+                        color: _eyeColor,
+                        onChanged: (c) => setState(() => _eyeColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Face / outline',
+                        color: _faceColor,
+                        onChanged: (c) => setState(() => _faceColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Accent',
+                        color: _accentColor,
+                        onChanged: (c) => setState(() => _accentColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Body',
+                        color: _bodyColor,
+                        onChanged: (c) => setState(() => _bodyColor = c),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller.sendColors(
+                                      eyeColor: _colorToRgb565(_eyeColor),
+                                      faceColor: _colorToRgb565(_faceColor),
+                                      accentColor: _colorToRgb565(_accentColor),
+                                      bodyColor: _colorToRgb565(_bodyColor),
+                                    ),
+                                    success: 'Colors applied!',
+                                  ),
+                          icon: const Icon(Icons.palette_outlined),
+                          label: const Text('Apply colors'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
                   title: 'Timezone',
                   subtitle:
                       'UTC offset for the on-screen clock. Requires Wi-Fi to be connected.',
@@ -1308,7 +1366,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 _SectionCard(
                   title: 'Image',
                   subtitle:
-                      'Any image is resized to 128×64 and converted to a 1-bit OLED bitmap.',
+                      'Any image is resized to 320×240 and converted to a 1-bit bitmap.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -3250,6 +3308,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  static int _colorToRgb565(Color c) {
+    final r = (c.red * 31 / 255).round();
+    final g = (c.green * 63 / 255).round();
+    final b = (c.blue * 31 / 255).round();
+    return (r << 11) | (g << 5) | b;
+  }
+
   Future<void> _perform(Future<void> Function() action,
       {required String success}) async {
     try {
@@ -3426,6 +3491,68 @@ class _StatusDot extends StatelessWidget {
           shape: BoxShape.circle,
         ),
       ),
+    );
+  }
+}
+
+class _ColorRow extends StatelessWidget {
+  const _ColorRow({
+    required this.label,
+    required this.color,
+    required this.onChanged,
+  });
+
+  final String label;
+  final Color color;
+  final ValueChanged<Color> onChanged;
+
+  static const _presets = <Color>[
+    Colors.white,
+    Color(0xFF00BFFF),
+    Color(0xFFFF69B4),
+    Color(0xFF00FF7F),
+    Color(0xFFFFD700),
+    Color(0xFFFF4500),
+    Color(0xFF8A2BE2),
+    Color(0xFFFF0000),
+    Color(0xFF00FFFF),
+    Color(0xFFFF1493),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _presets.map((preset) {
+              final selected = preset.value == color.value;
+              return GestureDetector(
+                onTap: () => onChanged(preset),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: preset,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected ? Colors.white : Colors.white24,
+                      width: selected ? 2.5 : 1,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 }
