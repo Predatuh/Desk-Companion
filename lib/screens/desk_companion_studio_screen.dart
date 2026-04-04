@@ -308,34 +308,6 @@ extension DeskPiercingStyleExt on DeskPiercingStyle {
       };
 }
 
-enum DeskCareAction { pet, cheer, comfort, dance, surprise }
-
-extension DeskCareActionExt on DeskCareAction {
-  String get label => switch (this) {
-        DeskCareAction.pet => 'Pet',
-        DeskCareAction.cheer => 'Cheer up',
-        DeskCareAction.comfort => 'Comfort',
-        DeskCareAction.dance => 'Dance',
-        DeskCareAction.surprise => 'Surprise me',
-      };
-
-  String get command => switch (this) {
-        DeskCareAction.pet => 'pet',
-        DeskCareAction.cheer => 'cheer',
-        DeskCareAction.comfort => 'comfort',
-        DeskCareAction.dance => 'dance',
-        DeskCareAction.surprise => 'surprise',
-      };
-
-  String get description => switch (this) {
-        DeskCareAction.pet => 'Simulates a head pat or affectionate touch response.',
-        DeskCareAction.cheer => 'Gives it a happy little boost when it feels flat.',
-        DeskCareAction.comfort => 'Settles it down like a reassuring companion moment.',
-        DeskCareAction.dance => 'Triggers a high-energy party reaction.',
-        DeskCareAction.surprise => 'Lets the companion choose a playful reaction on its own.',
-      };
-}
-
 enum _StudioWorkspace { studio, send, setup }
 
 extension _StudioWorkspaceExt on _StudioWorkspace {
@@ -405,7 +377,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   CompanionScene _selectedScene = CompanionScene.none;
   DeskPersonality _selectedPersonality = DeskPersonality.curious;
   DeskPetMode _selectedPetMode = DeskPetMode.hangout;
-  DeskCareAction _selectedCareAction = DeskCareAction.pet;
   CompanionVisualModel _selectedVisualModel = CompanionVisualModel.classic;
   DeskHairStyle _selectedHairStyle = DeskHairStyle.none;
   DeskEarsStyle _selectedEarsStyle = DeskEarsStyle.none;
@@ -431,7 +402,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _stickFigureSpacing = 100;
   double _stickFigureEnergy = 55;
   bool _appearancePreviewReferencePose = true;
-  bool _behaviorDraftDirty = false;
   bool _appearanceDraftDirty = false;
   Timer? _liveSyncTimer;
   final Stopwatch _scenePlaybackClock = Stopwatch();
@@ -505,9 +475,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     DeskPersonality currentPersonality,
     DeskPetMode currentPetMode,
   ) {
-    if (_behaviorDraftDirty) {
-      return;
-    }
     _selectedPersonality = currentPersonality;
     _selectedPetMode = currentPetMode;
   }
@@ -613,7 +580,32 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _syncAppearanceDraft(controller);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Companion Studio')),
+      appBar: AppBar(
+        title: const Text('Companion Studio'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _StatusDot(
+                  active: controller.wifiConnected,
+                  tooltip: controller.wifiConnected
+                      ? 'Wi-Fi: ${controller.connectedSsid}'
+                      : 'Wi-Fi: not connected',
+                ),
+                const SizedBox(width: 6),
+                _StatusDot(
+                  active: controller.isRelayOnline,
+                  tooltip: controller.isRelayOnline
+                      ? 'Relay: online'
+                      : 'Relay: offline',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -885,130 +877,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 16),
                 ],
                 if (_activeWorkspace == _StudioWorkspace.studio) ...[
-                _SectionCard(
-                  title: 'Companion behavior',
-                  subtitle:
-                      'Choose the vibe and reactions here without mirroring the selected mode back on the display.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _ChipLabel(label: 'Bond ${controller.bondLevel}%'),
-                          _ChipLabel(label: 'Energy ${controller.energyLevel}%'),
-                          _ChipLabel(label: 'Boredom ${controller.boredomLevel}%'),
-                          _ChipLabel(
-                            label: controller.canControlDevice
-                                ? 'Linked'
-                                : 'Waiting for link',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _StudioGroup(
-                        title: 'Personality',
-                        subtitle: _selectedPersonality.description,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildStudioDropdown(
-                              context,
-                              label: 'Personality',
-                              value: _selectedPersonality,
-                              values: DeskPersonality.values,
-                              labelBuilder: (value) => value.label,
-                              enabled: !controller.busy,
-                              onChanged: (value) => setState(() {
-                                _behaviorDraftDirty = true;
-                                _selectedPersonality = value;
-                              }),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: controller.busy ||
-                                        !controller.canControlDevice
-                                    ? null
-                                    : () => _sendPersonality(controller),
-                                icon: const Icon(Icons.pets_outlined),
-                                label: const Text('Apply personality'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _StudioGroup(
-                        title: 'Mode',
-                        subtitle: _selectedPetMode.description,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildStudioDropdown(
-                              context,
-                              label: 'Mode',
-                              value: _selectedPetMode,
-                              values: DeskPetMode.values,
-                              labelBuilder: (value) => value.label,
-                              enabled: !controller.busy,
-                              onChanged: (value) => setState(() {
-                                _behaviorDraftDirty = true;
-                                _selectedPetMode = value;
-                              }),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: controller.busy ||
-                                        !controller.canControlDevice
-                                    ? null
-                                    : () => _triggerPetMode(controller),
-                                icon: const Icon(Icons.auto_awesome_outlined),
-                                label: const Text('Apply mode'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _StudioGroup(
-                        title: 'Care',
-                        subtitle: _selectedCareAction.description,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildStudioDropdown(
-                              context,
-                              label: 'Care action',
-                              value: _selectedCareAction,
-                              values: DeskCareAction.values,
-                              labelBuilder: (value) => value.label,
-                              enabled: !controller.busy,
-                              onChanged: (value) => setState(() => _selectedCareAction = value),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: controller.busy ||
-                                        !controller.canControlDevice
-                                    ? null
-                                    : () => _sendCareAction(controller),
-                                icon: const Icon(Icons.favorite_outline),
-                                label: const Text('Send care action'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
                 _buildStyleStudioSection(
                   context,
                   controller,
@@ -1814,6 +1682,34 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  Widget _buildAccessoryChipRow<T>(
+    BuildContext context,
+    String label,
+    List<T> values,
+    T selected,
+    ValueChanged<T> onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: values.map((value) {
+            final labelText = (value as dynamic).label as String;
+            return ChoiceChip(
+              label: Text(labelText),
+              selected: selected == value,
+              onSelected: (_) => onChanged(value),
+            );
+          }).toList(growable: false),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStudioSlider(
     BuildContext context,
     String label,
@@ -2190,6 +2086,53 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     ),
                   ),
                 ],
+                if (_selectedVisualModel == CompanionVisualModel.classic) ...[
+                  const SizedBox(height: 12),
+                  _StudioGroup(
+                    title: 'Accessories',
+                    subtitle: 'Quick picks applied on top of your active expression. Use the editor for fine adjustments.',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildAccessoryChipRow<DeskHairStyle>(
+                          context, 'Hair', DeskHairStyle.values,
+                          _selectedHairStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedHairStyle = v; }),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildAccessoryChipRow<DeskEarsStyle>(
+                          context, 'Ears', DeskEarsStyle.values,
+                          _selectedEarsStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedEarsStyle = v; }),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildAccessoryChipRow<DeskMustacheStyle>(
+                          context, 'Mustache', DeskMustacheStyle.values,
+                          _selectedMustacheStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedMustacheStyle = v; }),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildAccessoryChipRow<DeskGlassesStyle>(
+                          context, 'Glasses', DeskGlassesStyle.values,
+                          _selectedGlassesStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedGlassesStyle = v; }),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildAccessoryChipRow<DeskHeadwearStyle>(
+                          context, 'Headwear', DeskHeadwearStyle.values,
+                          _selectedHeadwearStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedHeadwearStyle = v; }),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildAccessoryChipRow<DeskPiercingStyle>(
+                          context, 'Piercing', DeskPiercingStyle.values,
+                          _selectedPiercingStyle,
+                          (v) => setState(() { _appearanceDraftDirty = true; _selectedPiercingStyle = v; }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2523,29 +2466,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     await _perform(
       () => controller.sendExpression(_selectedExpression.command),
       success: '${_selectedExpression.label} expression sent.',
-    );
-  }
-
-  Future<void> _sendPersonality(DeskCompanionController controller) async {
-    await _perform(
-      () => controller.setPetPersonality(_selectedPersonality.command),
-      success: 'Companion personality updated.',
-    );
-    _behaviorDraftDirty = false;
-  }
-
-  Future<void> _triggerPetMode(DeskCompanionController controller) async {
-    await _perform(
-      () => controller.triggerPetMode(_selectedPetMode.command),
-      success: 'Companion mode updated.',
-    );
-    _behaviorDraftDirty = false;
-  }
-
-  Future<void> _sendCareAction(DeskCompanionController controller) async {
-    await _perform(
-      () => controller.sendCareAction(_selectedCareAction.command),
-      success: '${_selectedCareAction.label} action sent.',
     );
   }
 
@@ -3090,6 +3010,28 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       }
     }
     return null;
+  }
+}
+
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.active, required this.tooltip});
+
+  final bool active;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF4CAF50) : const Color(0xFFBDBDBD),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
   }
 }
 
