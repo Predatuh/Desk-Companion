@@ -2946,15 +2946,16 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_rotation") {
-    int rot = extractJsonIntField(body, "rotation", 1);
-    rot = rot < 0 ? 0 : (rot > 3 ? 3 : rot);
-    tft.setRotation((uint8_t)rot);
+    static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
+    int rot = extractJsonIntField(body, "rotation", 0) & 3;
+    tft.setRotation(1);  // reset geometry to 320×240
+    { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.sendCommand(0x36, &m, 1); }
     preferences.begin("desk-cfg", false);
     preferences.putInt("display_rot", rot);
     preferences.end();
     tft.fillScreen(COL_BG);
     renderCurrentMode();
-    statusText = String("Rotation ") + String(rot);
+    statusText = String("MADCTL slot ") + String(rot);
     publishStatus();
     return;
   }
@@ -3330,11 +3331,19 @@ void setupDisplay() {
   tft.init(240, 320);
   tft.setSPISpeed(40000000);  // lock in 40 MHz after init
   Serial.println("[TFT] tft.init() done.");
-  // Load saved rotation (default 1). User can change via set_rotation BLE command.
+  // Adafruit's setRotation() sends wrong MADCTL values for this Freenove panel.
+  // Use setRotation(1) only to set the internal 320×240 geometry, then override
+  // MADCTL via raw SPI.  Four landscape variants the user can cycle through:
+  //   0 → 0x28 (MV|RGB)            1 → 0x68 (MX|MV|RGB)
+  //   2 → 0xA8 (MY|MV|RGB)         3 → 0xE8 (MX|MY|MV|RGB)
+  static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
+  tft.setRotation(1);  // sets internal W=320 H=240
   preferences.begin("desk-cfg", true);
-  int displayRot = preferences.getInt("display_rot", 1);
+  int displayRot = preferences.getInt("display_rot", 0);
   preferences.end();
-  tft.setRotation((uint8_t)displayRot);
+  displayRot = displayRot & 3;
+  { uint8_t m = LANDSCAPE_MADCTL[displayRot]; tft.sendCommand(0x36, &m, 1); }
+  Serial.printf("[TFT] MADCTL override: slot %d → 0x%02X\n", displayRot, LANDSCAPE_MADCTL[displayRot]);
   tft.fillScreen(COL_BG);
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");

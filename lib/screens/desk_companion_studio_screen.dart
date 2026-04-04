@@ -927,9 +927,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
-                  title: 'Display rotation',
+                  title: 'Display orientation',
                   subtitle:
-                      'If the screen shows upside-down or mirrored, try each rotation until it looks correct. The device saves your choice.',
+                      'Tap each option and hit Apply until the screen looks correct. The device remembers your pick.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -939,7 +939,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         children: List.generate(
                           4,
                           (i) => ChoiceChip(
-                            label: Text('Rotation $i'),
+                            label: Text('Landscape ${String.fromCharCode(65 + i)}'),
                             selected: _displayRotation == i,
                             onSelected: (_) =>
                                 setState(() => _displayRotation = i),
@@ -2076,8 +2076,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     String label,
     List<T> values,
     T selected,
-    ValueChanged<T> onChanged,
-  ) {
+    ValueChanged<T> onChanged, {
+    required String Function(T) labelBuilder,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2087,9 +2088,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           spacing: 6,
           runSpacing: 6,
           children: values.map((value) {
-            final labelText = (value as dynamic).label as String;
             return ChoiceChip(
-              label: Text(labelText),
+              label: Text(labelBuilder(value)),
               selected: selected == value,
               onSelected: (_) => onChanged(value),
             );
@@ -2487,36 +2487,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           context, 'Hair', DeskHairStyle.values,
                           _selectedHairStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedHairStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                         const SizedBox(height: 10),
                         _buildAccessoryChipRow<DeskEarsStyle>(
                           context, 'Ears', DeskEarsStyle.values,
                           _selectedEarsStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedEarsStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                         const SizedBox(height: 10),
                         _buildAccessoryChipRow<DeskMustacheStyle>(
                           context, 'Mustache', DeskMustacheStyle.values,
                           _selectedMustacheStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedMustacheStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                         const SizedBox(height: 10),
                         _buildAccessoryChipRow<DeskGlassesStyle>(
                           context, 'Glasses', DeskGlassesStyle.values,
                           _selectedGlassesStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedGlassesStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                         const SizedBox(height: 10),
                         _buildAccessoryChipRow<DeskHeadwearStyle>(
                           context, 'Headwear', DeskHeadwearStyle.values,
                           _selectedHeadwearStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedHeadwearStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                         const SizedBox(height: 10),
                         _buildAccessoryChipRow<DeskPiercingStyle>(
                           context, 'Piercing', DeskPiercingStyle.values,
                           _selectedPiercingStyle,
                           (v) => setState(() { _appearanceDraftDirty = true; _selectedPiercingStyle = v; }),
+                          labelBuilder: (v) => v.label,
                         ),
                       ],
                     ),
