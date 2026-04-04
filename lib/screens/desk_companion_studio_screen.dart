@@ -39,6 +39,47 @@ extension DeskFlowerExt on DeskFlower {
       };
 }
 
+enum DeskScene { wave, bow, hug, holdHands, kiss, shyLeanIn }
+
+extension DeskSceneExt on DeskScene {
+  String get label => switch (this) {
+        DeskScene.wave => 'Wave',
+        DeskScene.bow => 'Bow',
+        DeskScene.hug => 'Hug',
+        DeskScene.holdHands => 'Hold hands',
+        DeskScene.kiss => 'Kiss',
+        DeskScene.shyLeanIn => 'Shy lean-in',
+      };
+
+  // These must match the firmware's currentScene string comparisons exactly.
+  String get command => switch (this) {
+        DeskScene.wave => 'wave',
+        DeskScene.bow => 'bow',
+        DeskScene.hug => 'hug',
+        DeskScene.holdHands => 'holdHands',
+        DeskScene.kiss => 'kiss',
+        DeskScene.shyLeanIn => 'shyLeanIn',
+      };
+}
+
+enum DeskParticle { fireworks, heartRain, snowfall, starfield }
+
+extension DeskParticleExt on DeskParticle {
+  String get label => switch (this) {
+        DeskParticle.fireworks => 'Fireworks',
+        DeskParticle.heartRain => 'Heart rain',
+        DeskParticle.snowfall => 'Snowfall',
+        DeskParticle.starfield => 'Starfield',
+      };
+
+  String get command => switch (this) {
+        DeskParticle.fireworks => 'fireworks',
+        DeskParticle.heartRain => 'heart_rain',
+        DeskParticle.snowfall => 'snowfall',
+        DeskParticle.starfield => 'starfield',
+      };
+}
+
 enum DeskExpression {
   happy,
   smile,
@@ -362,6 +403,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   bool _obscurePassword = true;
 
   DeskFlower _selectedFlower = DeskFlower.rose;
+  DeskScene _selectedDeskScene = DeskScene.wave;
+  DeskParticle _selectedParticle = DeskParticle.fireworks;
+  int _countdownHours = 0;
+  int _countdownMinutes = 5;
+  double _timezoneOffsetHours = 0;
+  int _displayRotation = 1;
+  final _weatherLatController = TextEditingController();
+  final _weatherLonController = TextEditingController();
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
@@ -461,6 +510,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _noteController.removeListener(_onNoteTextChanged);
     _noteController.dispose();
     _bannerController.dispose();
+    _weatherLatController.dispose();
+    _weatherLonController.dispose();
     _liveSyncTimer?.cancel();
     _stopLiveScenePlayback(updateUi: false);
     super.dispose();
@@ -875,6 +926,166 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Display rotation',
+                  subtitle:
+                      'If the screen shows upside-down or mirrored, try each rotation until it looks correct. The device saves your choice.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: List.generate(
+                          4,
+                          (i) => ChoiceChip(
+                            label: Text('Rotation $i'),
+                            selected: _displayRotation == i,
+                            onSelected: (_) =>
+                                setState(() => _displayRotation = i),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller
+                                        .setDisplayRotation(_displayRotation),
+                                    success:
+                                        'Rotation $_displayRotation applied — check the screen!',
+                                  ),
+                          icon: const Icon(Icons.screen_rotation_outlined),
+                          label: const Text('Apply rotation'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Timezone',
+                  subtitle:
+                      'UTC offset for the on-screen clock. Requires Wi-Fi to be connected.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'UTC offset: ${_timezoneOffsetHours >= 0 ? '+' : ''}${_timezoneOffsetHours.toStringAsFixed(1)} h',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      Slider(
+                        min: -12,
+                        max: 14,
+                        divisions: 52,
+                        value: _timezoneOffsetHours,
+                        onChanged: (v) =>
+                            setState(() => _timezoneOffsetHours = v),
+                      ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller.setTimezone(
+                                        (_timezoneOffsetHours * 3600).round()),
+                                    success: 'Timezone sent.',
+                                  ),
+                          icon: const Icon(Icons.access_time_outlined),
+                          label: const Text('Send timezone'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Weather location',
+                  subtitle:
+                      'Set latitude and longitude so the device can fetch live weather from open-meteo.com. Requires Wi-Fi.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _weatherLatController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      signed: true, decimal: true),
+                              decoration: const InputDecoration(
+                                  labelText: 'Latitude'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _weatherLonController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      signed: true, decimal: true),
+                              decoration: const InputDecoration(
+                                  labelText: 'Longitude'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy ||
+                                      !controller.canControlDevice
+                                  ? null
+                                  : () {
+                                      final lat = double.tryParse(
+                                          _weatherLatController.text.trim());
+                                      final lon = double.tryParse(
+                                          _weatherLonController.text.trim());
+                                      if (lat == null || lon == null) {
+                                        _showMessage(
+                                            'Enter valid latitude and longitude.');
+                                        return;
+                                      }
+                                      _perform(
+                                        () => controller.setLocation(lat, lon),
+                                        success:
+                                            'Location sent. Weather will refresh soon.',
+                                      );
+                                    },
+                              icon: const Icon(Icons.location_on_outlined),
+                              label: const Text('Set location'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: controller.busy ||
+                                      !controller.canControlDevice
+                                  ? null
+                                  : () => _perform(
+                                        () => controller.showWeather(),
+                                        success:
+                                            'Switching to weather display.',
+                                      ),
+                              icon: const Icon(Icons.cloud_outlined),
+                              label: const Text('Show weather'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 ],
                 if (_activeWorkspace == _StudioWorkspace.studio) ...[
                 _buildStyleStudioSection(
@@ -1176,6 +1387,184 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Scenes',
+                  subtitle: 'Two-figure stick animations — wave, hug, kiss, and more.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskScene.values
+                            .map(
+                              (scene) => ChoiceChip(
+                                label: Text(scene.label),
+                                selected: _selectedDeskScene == scene,
+                                onSelected: (_) =>
+                                    setState(() => _selectedDeskScene = scene),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller
+                                        .sendScene(_selectedDeskScene.command),
+                                    success:
+                                        '${_selectedDeskScene.label} scene started!',
+                                  ),
+                          icon: const Icon(Icons.people_outline),
+                          label: Text('Start ${_selectedDeskScene.label}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Particles',
+                  subtitle:
+                      'Full-screen ambient animations — fireworks, heart rain, snowfall, and starfield.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskParticle.values
+                            .map(
+                              (p) => ChoiceChip(
+                                label: Text(p.label),
+                                selected: _selectedParticle == p,
+                                onSelected: (_) =>
+                                    setState(() => _selectedParticle = p),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller.sendParticle(
+                                        _selectedParticle.command),
+                                    success:
+                                        '${_selectedParticle.label} started!',
+                                  ),
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: Text('Send ${_selectedParticle.label}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Goodnight',
+                  subtitle:
+                      'Switches the display to a calm sleep scene with a crescent moon and drifting stars.',
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: controller.busy || !controller.canControlDevice
+                          ? null
+                          : () => _perform(
+                                () => controller.sendGoodnight(),
+                                success: 'Goodnight! Sleep scene started.',
+                              ),
+                      icon: const Icon(Icons.nights_stay_outlined),
+                      label: const Text('Send goodnight'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Countdown',
+                  subtitle: 'Displays a large live countdown timer on screen.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hours: $_countdownHours',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                Slider(
+                                  min: 0,
+                                  max: 23,
+                                  divisions: 23,
+                                  value: _countdownHours.toDouble(),
+                                  onChanged: (v) => setState(
+                                      () => _countdownHours = v.round()),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Minutes: $_countdownMinutes',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                Slider(
+                                  min: 0,
+                                  max: 59,
+                                  divisions: 59,
+                                  value: _countdownMinutes.toDouble(),
+                                  onChanged: (v) => setState(
+                                      () => _countdownMinutes = v.round()),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () {
+                                  final secs = _countdownHours * 3600 +
+                                      _countdownMinutes * 60;
+                                  if (secs <= 0) {
+                                    _showMessage('Set at least 1 minute.');
+                                    return;
+                                  }
+                                  _perform(
+                                    () => controller.startCountdown(secs),
+                                    success:
+                                        'Countdown started (${_countdownHours}h ${_countdownMinutes}m).',
+                                  );
+                                },
+                          icon: const Icon(Icons.timer_outlined),
+                          label: const Text('Start countdown'),
+                        ),
                       ),
                     ],
                   ),

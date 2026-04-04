@@ -1650,8 +1650,8 @@ void drawZzz(int x, int y, int phase) {
 
 void renderExpressionFrame() {
   if (!displayAvailable) return;
-  // Clear only the face/content area — preserves the bottom status bar region
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  // Clear face/content area only — preserves clock strip (top 40px) and status bar
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
 
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
   const int LX = 68;
@@ -2048,7 +2048,7 @@ void drawStickFigure(int cx, int cy, int sc,
 
 void renderSceneFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
 
   float t    = (float)expressionPhase / 63.f;
   float bob  = sinf(t * 3.14159f * 2.f) * 2.f;
@@ -2135,7 +2135,7 @@ void initFireworks() {
 
 void renderFireworksFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   bool anyAlive = false;
   for (uint8_t i = 0; i < gPtclCount; i++) {
     if (gPtcl[i].life == 0) continue;
@@ -2167,7 +2167,7 @@ void initHeartRain() {
 
 void renderHeartRainFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   for (uint8_t i = 0; i < gPtclCount; i++) {
     gPtcl[i].y += gPtcl[i].vy;
     if (gPtcl[i].y > SCREEN_HEIGHT - 18) {
@@ -2197,7 +2197,7 @@ void initSnowfall() {
 
 void renderSnowfallFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   for (uint8_t i = 0; i < gPtclCount; i++) {
     gPtcl[i].x += gPtcl[i].vx;
     gPtcl[i].y += gPtcl[i].vy;
@@ -2223,7 +2223,7 @@ void initStarfield() {
 
 void renderStarfieldFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   const int CX = SCREEN_WIDTH / 2, CY = (SCREEN_HEIGHT - 18) / 2;
   for (uint8_t i = 0; i < gPtclCount; i++) {
     float z = gPtcl[i].life / 64.f + 0.01f;
@@ -2255,7 +2255,7 @@ void setParticleMode(const String& name) {
 
 void renderCountdownFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   long elapsed   = (long)((millis() - countdownStartMs) / 1000UL);
   long remaining = countdownSeconds - elapsed;
   if (remaining < 0) remaining = 0;
@@ -2360,7 +2360,7 @@ void drawWeatherBadge(int x, int y) {
 
 void renderWeatherFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   if (weatherCode < 0) {
     tft.setTextSize(2);
     tft.setTextColor(COL_FG);
@@ -2523,7 +2523,7 @@ void detectEmojiReaction(const String& text) {
 
 void renderSleepFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   const float t = (float)(expressionPhase % 64) / 63.f;
   // Gentle pulsing moon
   const int MCX = 125, MCY = 90;
@@ -2661,7 +2661,7 @@ void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
 
 void renderFlowerFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
   int cx = 120, cy = 100;
   // Stem
   tft.drawLine(cx,     cy + 42, cx,     SCREEN_HEIGHT - 10, COL_FG);
@@ -2942,6 +2942,20 @@ void handleCommandJson(const String& body) {
 
   if (type == "goodnight") {
     setSleepMode();
+    return;
+  }
+
+  if (type == "set_rotation") {
+    int rot = extractJsonIntField(body, "rotation", 1);
+    rot = rot < 0 ? 0 : (rot > 3 ? 3 : rot);
+    tft.setRotation((uint8_t)rot);
+    preferences.begin("desk-cfg", false);
+    preferences.putInt("display_rot", rot);
+    preferences.end();
+    tft.fillScreen(COL_BG);
+    renderCurrentMode();
+    statusText = String("Rotation ") + String(rot);
+    publishStatus();
     return;
   }
 
@@ -3316,7 +3330,11 @@ void setupDisplay() {
   tft.init(240, 320);
   tft.setSPISpeed(40000000);  // lock in 40 MHz after init
   Serial.println("[TFT] tft.init() done.");
-  tft.setRotation(1);  // landscape 320×240, rotation 1 = correct left-right orientation for FNK0104
+  // Load saved rotation (default 1). User can change via set_rotation BLE command.
+  preferences.begin("desk-cfg", true);
+  int displayRot = preferences.getInt("display_rot", 1);
+  preferences.end();
+  tft.setRotation((uint8_t)displayRot);
   tft.fillScreen(COL_BG);
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");

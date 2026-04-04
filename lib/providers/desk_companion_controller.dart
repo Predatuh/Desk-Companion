@@ -682,6 +682,94 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendScene(String scene) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_scene', 'scene': scene},
+        mode: 'scene',
+        bleLabel: 'Scene sent over BLE.',
+        relayLabel: 'Scene queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendParticle(String mode) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_particle', 'particle': mode},
+        mode: 'particle',
+        bleLabel: 'Particle mode sent over BLE.',
+        relayLabel: 'Particle mode queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendGoodnight() async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'goodnight'},
+        mode: 'sleep',
+        bleLabel: 'Goodnight sent over BLE.',
+        relayLabel: 'Goodnight queued through relay.',
+      );
+    });
+  }
+
+  Future<void> startCountdown(int seconds) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_countdown', 'seconds': seconds},
+        mode: 'countdown',
+        bleLabel: 'Countdown started over BLE.',
+        relayLabel: 'Countdown queued through relay.',
+      );
+    });
+  }
+
+  Future<void> setTimezone(int offsetSeconds) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_timezone', 'offsetSeconds': offsetSeconds},
+        mode: _mode,
+        bleLabel: 'Timezone sent over BLE.',
+        relayLabel: 'Timezone queued through relay.',
+      );
+    });
+  }
+
+  Future<void> setLocation(double lat, double lon) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_location', 'lat': lat, 'lon': lon},
+        mode: _mode,
+        bleLabel: 'Location sent over BLE.',
+        relayLabel: 'Location queued through relay.',
+      );
+    });
+  }
+
+  Future<void> showWeather() async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'show_weather'},
+        mode: 'weather',
+        bleLabel: 'Weather display sent over BLE.',
+        relayLabel: 'Show weather queued through relay.',
+      );
+    });
+  }
+
+  Future<void> setDisplayRotation(int rotation) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_rotation', 'rotation': rotation.clamp(0, 3)},
+        mode: _mode,
+        bleLabel: 'Display rotation sent over BLE.',
+        relayLabel: 'Display rotation queued through relay.',
+      );
+    });
+  }
+
   Future<void> setPetPersonality(String personality) async {
     await _runBusy(() async {
       await _sendCommand(
