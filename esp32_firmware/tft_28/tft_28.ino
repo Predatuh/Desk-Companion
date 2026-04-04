@@ -1874,27 +1874,43 @@ void renderExpressionFrame() {
 
 void renderIdle() {
   if (!displayAvailable) return;
-  // Clear content area, leave bottom 18px for status bar
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
-  // NTP clock above face box (y=0..39)
+
+  // ── Clock/header strip (rows 0..FACE_OFFSET_Y-1) ─────────────────────────
+  // Only clear and redraw this strip when the minute changes, so the clock
+  // never flashes black on every 500 ms tick.
+  static int  s_idleLastMin  = -1;
+  static unsigned long s_idleLastCallMs = 0;
+  const  unsigned long nowMs = millis();
+  // If we haven't called renderIdle recently we're re-entering from another
+  // mode; the clock area may have been painted over — force a refresh.
+  if (nowMs - s_idleLastCallMs > 1500UL) s_idleLastMin = -1;
+  s_idleLastCallMs = nowMs;
   {
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100) {
-      char tBuf[8], dBuf[14];
-      strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
-      strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
-      tft.setTextSize(2);
-      tft.setTextColor(COL_ACCENT);
-      tft.setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
-      tft.print(tBuf);
-      tft.setTextSize(1);
-      tft.setTextColor(COL_FG);
-      tft.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
-      tft.print(dBuf);
+    bool timeOk = getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100;
+    int  curMin = timeOk ? (int)timeinfo.tm_min : -1;
+    if (curMin != s_idleLastMin) {
+      s_idleLastMin = curMin;
+      tft.fillRect(0, 0, SCREEN_WIDTH, FACE_OFFSET_Y, COL_BG);
+      if (timeOk) {
+        char tBuf[8], dBuf[14];
+        strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
+        strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
+        tft.setTextSize(2);
+        tft.setTextColor(COL_ACCENT);
+        tft.setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
+        tft.print(tBuf);
+        tft.setTextSize(1);
+        tft.setTextColor(COL_FG);
+        tft.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
+        tft.print(dBuf);
+      }
+      drawWeatherBadge(296, 15);
     }
   }
-  // Weather badge top-right (above face box)
-  drawWeatherBadge(296, 15);
+
+  // ── Face box: only clear the interior each tick (border stays on screen) ──
+  tft.fillRect(1, FACE_OFFSET_Y + 1, SCREEN_WIDTH - 2, 178, COL_BG);
   tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 18, COL_FG);
 
   const int leftX = 70;
@@ -3300,7 +3316,7 @@ void setupDisplay() {
   tft.init(240, 320);
   tft.setSPISpeed(40000000);  // lock in 40 MHz after init
   Serial.println("[TFT] tft.init() done.");
-  tft.setRotation(3);  // landscape 320×240, correct orientation for FNK0104
+  tft.setRotation(1);  // landscape 320×240, rotation 1 = correct left-right orientation for FNK0104
   tft.fillScreen(COL_BG);
   displayAvailable = true;
   Serial.println("[TFT] Screen cleared.");
@@ -3330,8 +3346,10 @@ void handleTouch() {
     touchActive  = true;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
-    touchStartX  = p.x;
-    touchStartY  = p.y;
+    // Map raw portrait touch coords → landscape screen coords for setRotation(1):
+    // portrait-Y → screen-X, (240 - portrait-X) → screen-Y
+    touchStartX  = (int)p.y;
+    touchStartY  = 240 - (int)p.x;
   }
 
   if (!isTouched && touchActive) {
