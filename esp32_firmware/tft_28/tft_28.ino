@@ -40,9 +40,17 @@
 #define SCREEN_HEIGHT 240
 
 // Color palette
-#define COL_BG      ST77XX_BLACK
-#define COL_FG      ST77XX_WHITE
-#define COL_ACCENT  ST77XX_CYAN
+#define COL_BG       ST77XX_BLACK
+#define COL_FG       ST77XX_WHITE
+#define COL_ACCENT   ST77XX_CYAN
+// Extended RGB565 color palette
+#define COL_ROSE     0xFB56  // Hot pink / rose  (255, 106, 176)
+#define COL_GOLD     0xFFE0  // Yellow-gold      (255, 224,   0)
+#define COL_PINK     0xFDB8  // Soft light pink  (255, 182, 193)
+#define COL_MINT     0x07E0  // Fresh mint green (  0, 255,   0)
+#define COL_LAVENDER 0x92BD  // Soft purple      (148,  87, 235)
+#define COL_PEACH    0xFED6  // Warm peach       (255, 218, 181)
+#define COL_SKYBLUE  0x867D  // Sky blue         (135, 206, 235)
 
 #ifndef BTN_NEXT_PIN
 #define BTN_NEXT_PIN -1  // touch replaces physical buttons
@@ -134,11 +142,13 @@ enum DisplayMode {
   MODE_IMAGE,
   MODE_EXPRESSION,
   MODE_FLOWER,
+  MODE_SCENE,
 };
 
 DisplayMode currentMode = MODE_IDLE;
 String statusText = "Booting";
 String currentFlower = "rose";
+String currentScene  = "wave";
 String currentNote = "hi honey";
 String currentBanner = "hello from your desk buddy";
 String currentExpression = "happy";
@@ -299,6 +309,9 @@ void pollRelay();
 void setupBle();
 void setupDisplay();
 void handleTouch();
+void drawStickFigure(int cx, int cy, int sc, float armLA, float armRA, float legLA, float legRA, uint16_t color);
+void renderSceneFrame();
+void setScene(const String& name);
 
 // ─── BLE value helpers ───
 
@@ -550,6 +563,8 @@ const char* modeName(DisplayMode mode) {
       return "expression";
     case MODE_FLOWER:
       return "flower";
+    case MODE_SCENE:
+      return "scene";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1053,12 +1068,12 @@ void publishStatusWithNetworks() {
 // STATUS_Y is used for a status bar at the bottom.
 
 static const int FACE_OFFSET_Y = 40;  // vertical offset to center the face area
-static const int STATUS_BAR_Y = 280;  // y position for status text
+static const int STATUS_BAR_Y = 222;  // y position for status text (within 240px screen)
 
 void drawIconHeart(int cx, int cy, int s) {
-  tft.fillCircle(cx - s, cy - s / 3, s, COL_FG);
-  tft.fillCircle(cx + s, cy - s / 3, s, COL_FG);
-  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, COL_FG);
+  tft.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
+  tft.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
+  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, COL_ROSE);
 }
 
 void drawIconStar(int cx, int cy, int r) {
@@ -1066,9 +1081,9 @@ void drawIconStar(int cx, int cy, int r) {
     float angle = i * 3.14159f / 3.0f;
     int x2 = cx + (int)(r * 0.97f * cos(angle));
     int y2 = cy + (int)(r * 0.97f * sin(angle));
-    tft.drawLine(cx, cy, x2, y2, COL_FG);
+    tft.drawLine(cx, cy, x2, y2, COL_GOLD);
   }
-  tft.fillCircle(cx, cy, r / 3, COL_FG);
+  tft.fillCircle(cx, cy, r / 3, COL_GOLD);
 }
 
 void drawIconFlower(int cx, int cy, int r) {
@@ -1115,12 +1130,12 @@ void drawNoteBorder(int style) {
       break;
     case 4:
       for (int x = 8; x < SCREEN_WIDTH; x += 10) {
-        tft.fillCircle(x, 5, 2, COL_FG);
-        tft.fillCircle(x, SCREEN_HEIGHT - 6, 2, COL_FG);
+        tft.fillCircle(x, 5, 2, COL_LAVENDER);
+        tft.fillCircle(x, SCREEN_HEIGHT - 6, 2, COL_LAVENDER);
       }
       for (int y = 14; y < SCREEN_HEIGHT - 10; y += 10) {
-        tft.fillCircle(5, y, 2, COL_FG);
-        tft.fillCircle(SCREEN_WIDTH - 6, y, 2, COL_FG);
+        tft.fillCircle(5, y, 2, COL_LAVENDER);
+        tft.fillCircle(SCREEN_WIDTH - 6, y, 2, COL_LAVENDER);
       }
       break;
     default:
@@ -1259,10 +1274,16 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
 
 void renderBannerFrame() {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
-  tft.setTextColor(COL_FG);
   tft.setTextSize(4);
   tft.setTextWrap(false);
+  if (bannerOffset >= SCREEN_WIDTH) {
+    // First frame of this banner — clear whole canvas once
+    tft.fillScreen(COL_BG);
+  } else {
+    // Subsequent frames — only erase the text strip (~40px tall) to avoid full-screen blank flash
+    tft.fillRect(0, SCREEN_HEIGHT / 2 - 20, SCREEN_WIDTH, 46, COL_BG);
+  }
+  tft.setTextColor(COL_PINK);
   tft.setCursor(bannerOffset, SCREEN_HEIGHT / 2 - 16);
   tft.print(currentBanner);
 }
@@ -1334,9 +1355,9 @@ void drawKissLips(int cx, int cy) {
 }
 
 void drawBigHeart(int cx, int cy, int s) {
-  tft.fillCircle(cx - s, cy - s / 3, s, COL_FG);
-  tft.fillCircle(cx + s, cy - s / 3, s, COL_FG);
-  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2, COL_FG);
+  tft.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
+  tft.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
+  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2, COL_ROSE);
 }
 
 void drawTear(int cx, int cy, int s) {
@@ -1543,7 +1564,8 @@ void drawZzz(int x, int y, int phase) {
 
 void renderExpressionFrame() {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
+  // Clear only the face/content area — preserves the bottom status bar region
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
 
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
   const int LX = 68;
@@ -1566,6 +1588,9 @@ void renderExpressionFrame() {
   } else if (currentExpression == "love") {
     drawEye(LX, EY, EW, EH, ER, 0, 0);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Blush cheeks
+    tft.fillCircle(LX + 22, EY + 18, 7, COL_PINK);
+    tft.fillCircle(RX - 22, EY + 18, 7, COL_PINK);
     drawBigHeart(LX, EY, 7);
     drawBigHeart(RX, EY, 7);
     drawSmile(SCREEN_WIDTH / 2, MY - 4, 52);
@@ -1685,6 +1710,9 @@ void renderExpressionFrame() {
     float r2 = fmod(t * 1.5f + 0.45f, 1.0f);
     drawBlinkEye(LX, EY, EW, 7, ER);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Blush cheeks
+    tft.fillCircle(LX + 20, EY + 14, 6, COL_PINK);
+    tft.fillCircle(RX - 20, EY + 14, 6, COL_PINK);
     drawKissLips(SCREEN_WIDTH / 2, MY);
     if (r1 < 0.85f) {
       int hx = SCREEN_WIDTH / 2 - 18 + (int)(sin(r1 * 3.14159f) * 14.0f);
@@ -1760,7 +1788,8 @@ void renderExpressionFrame() {
 
 void renderIdle() {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
+  // Clear content area, leave bottom 18px for status bar
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
   tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 18, COL_FG);
 
   const int leftX = 70;
@@ -1808,14 +1837,15 @@ void renderIdle() {
 
   drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
 
-  // Status bar at bottom of screen
-  tft.setTextSize(2);
+  // Status bar at bottom of screen (size-1 font fits within the 18px gap)
+  tft.fillRect(0, SCREEN_HEIGHT - 18, SCREEN_WIDTH, 18, COL_BG);
+  tft.setTextSize(1);
   tft.setTextColor(COL_ACCENT);
-  tft.setCursor(10, STATUS_BAR_Y);
-  tft.print(statusText.substring(0, 19));
+  tft.setCursor(4, STATUS_BAR_Y);
+  tft.print(statusText.substring(0, 30));
   if (WiFi.status() == WL_CONNECTED) {
     tft.setTextColor(ST77XX_GREEN);
-    tft.setCursor(10, STATUS_BAR_Y + 20);
+    tft.setCursor(SCREEN_WIDTH / 2, STATUS_BAR_Y);
     tft.print(ipAddress);
   }
 }
@@ -1842,11 +1872,108 @@ void renderCurrentMode() {
     case MODE_FLOWER:
       renderFlowerFrame();
       break;
+    case MODE_SCENE:
+      renderSceneFrame();
+      break;
     case MODE_IDLE:
     default:
       renderIdle();
       break;
   }
+}
+
+// ─── Stick figure scene helpers ───
+
+void drawStickFigure(int cx, int cy, int sc,
+                     float armLA, float armRA,
+                     float legLA, float legRA,
+                     uint16_t color) {
+  // Head
+  tft.drawCircle(cx, cy - sc * 3, sc, color);
+  // Body (neck → hips)
+  tft.drawLine(cx, cy - sc * 2, cx, cy + sc * 2, color);
+  // Left arm (armLA = angle below left-horizontal; 0=straight out, PI/4=45° down)
+  int sY = cy - sc;
+  tft.drawLine(cx, sY,
+               cx - (int)(sc * 3.f * cosf(armLA)),
+               sY + (int)(sc * 3.f * sinf(armLA)), color);
+  // Right arm (armRA = angle below right-horizontal)
+  tft.drawLine(cx, sY,
+               cx + (int)(sc * 3.f * cosf(armRA)),
+               sY + (int)(sc * 3.f * sinf(armRA)), color);
+  // Left leg (legLA = spread angle from straight down)
+  int hY = cy + sc * 2;
+  tft.drawLine(cx, hY,
+               cx - (int)(sc * 3.f * sinf(legLA)),
+               hY + (int)(sc * 3.f * cosf(legLA)), color);
+  // Right leg (legRA = spread angle from straight down)
+  tft.drawLine(cx, hY,
+               cx + (int)(sc * 3.f * sinf(legRA)),
+               hY + (int)(sc * 3.f * cosf(legRA)), color);
+}
+
+void renderSceneFrame() {
+  if (!displayAvailable) return;
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+
+  float t    = (float)expressionPhase / 63.f;
+  float bob  = sinf(t * 3.14159f * 2.f) * 2.f;
+
+  if (currentScene == "wave") {
+    drawStickFigure(90, 120, 14, 0.3f, 0.3f, 0.3f, 0.3f, COL_FG);
+    float waveA = 0.2f + sinf(t * 3.14159f * 4.f) * 0.5f;
+    drawStickFigure(220, 120 + (int)bob, 14, 0.3f, -waveA, 0.3f, 0.3f, COL_ROSE);
+    int hx = 160, hy = 70 - (int)(t * 18.f);
+    tft.fillCircle(hx - 4, hy - 2, 4, COL_ROSE);
+    tft.fillCircle(hx + 4, hy - 2, 4, COL_ROSE);
+    tft.fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, COL_ROSE);
+
+  } else if (currentScene == "bow") {
+    drawStickFigure(130, 120, 14, 0.5f, 0.5f, 0.25f, 0.25f, COL_FG);
+    float bowY = sinf(t * 3.14159f) * 12.f;
+    drawStickFigure(205, 130 - (int)bowY, 14,
+                   0.25f + bowY * 0.04f, 0.25f + bowY * 0.04f,
+                   0.25f, 0.25f, COL_ROSE);
+
+  } else if (currentScene == "hug") {
+    float hugP = 0.2f + sinf(t * 3.14159f * 2.f) * 0.15f;
+    drawStickFigure(140, 120, 14, 0.3f, -hugP, 0.25f, 0.25f, COL_FG);
+    drawStickFigure(185, 120, 14,  hugP, 0.3f, 0.25f, 0.25f, COL_ROSE);
+
+  } else if (currentScene == "holdHands") {
+    float handBob = sinf(t * 3.14159f * 2.f) * 3.f;
+    drawStickFigure(100, 125 + (int)handBob, 14, 0.4f, 0.0f, 0.3f, 0.3f, COL_FG);
+    drawStickFigure(220, 125 + (int)handBob, 14, 0.0f, 0.4f, 0.3f, 0.3f, COL_ROSE);
+    tft.fillCircle(160, 110, 5, COL_GOLD);
+
+  } else if (currentScene == "kiss") {
+    float lean = sinf(t * 3.14159f) * 8.f;
+    drawStickFigure(130 + (int)lean, 120, 14, 0.5f, -0.2f, 0.25f, 0.25f, COL_FG);
+    drawStickFigure(190 - (int)lean, 120, 14,  0.2f,  0.5f, 0.25f, 0.25f, COL_ROSE);
+    if (lean > 5.f) {
+      for (int i = 0; i < 3; i++) {
+        int hx2 = 160 + (i - 1) * 14;
+        int hy2 = 76 - (int)(t * 15.f);
+        tft.fillCircle(hx2 - 3, hy2,   3, COL_ROSE);
+        tft.fillCircle(hx2 + 3, hy2,   3, COL_ROSE);
+        tft.fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, COL_ROSE);
+      }
+    }
+  } else { // shyLeanIn (default)
+    float lean2 = sinf(t * 3.14159f * 1.5f) * 5.f;
+    drawStickFigure(105, 125 - (int)lean2, 14, 0.6f, 0.1f, 0.3f, 0.3f, COL_FG);
+    drawStickFigure(215, 125,              14, 0.3f, 0.7f, 0.3f, 0.3f, COL_ROSE);
+    tft.fillCircle(160, 95, 4, COL_PINK);
+    tft.fillCircle(155, 85, 3, COL_PINK);
+    tft.fillCircle(165, 80, 2, COL_PINK);
+  }
+}
+
+void setScene(const String& name) {
+  currentScene         = name;
+  currentMode          = MODE_SCENE;
+  expressionPhase      = 0;
+  lastExpressionTickMs = 0;
 }
 
 // ─── Flower drawing helpers (scaled 2×) ───
@@ -1869,15 +1996,15 @@ void drawFlowerRose(int cx, int cy, int scale, int phase) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff;
     int px = cx + (int)(outerDist * cosf(a));
     int py = cy + (int)(outerDist * sinf(a));
-    tft.fillCircle(px, py, outerR, COL_FG);
+    tft.fillCircle(px, py, outerR, COL_ROSE);
   }
   for (int i = 0; i < 5; i++) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff + 0.314f;
     int px = cx + (int)(midDist * cosf(a));
     int py = cy + (int)(midDist * sinf(a));
-    tft.fillCircle(px, py, midR, COL_FG);
+    tft.fillCircle(px, py, midR, COL_PINK);
   }
-  tft.fillCircle(cx, cy, centerR + 2, COL_FG);
+  tft.fillCircle(cx, cy, centerR + 2, COL_GOLD);
   tft.fillCircle(cx, cy, centerR - 1, COL_BG);
 }
 
@@ -1900,7 +2027,7 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
       float perp_a = a + 3.14159f / 2.f;
       int dx = (int)(w * cosf(perp_a));
       int dy = (int)(w * sinf(perp_a));
-      tft.drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, COL_FG);
+      tft.drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, COL_GOLD);
     }
   }
   tft.fillCircle(cx, cy, centerR, COL_FG);
@@ -1935,7 +2062,7 @@ void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
     float side_a = a + 3.14159f / 2.f;
     int sx = (int)(bractW * cosf(side_a));
     int sy = (int)(bractW * sinf(side_a));
-    tft.fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, COL_FG);
+    tft.fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, COL_PEACH);
   }
   tft.fillCircle(cx, cy, centerR, COL_FG);
   tft.fillCircle(cx, cy, centerR - 5, COL_BG);
@@ -1945,7 +2072,7 @@ void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
 
 void renderFlowerFrame() {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
+  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
   int cx = 120, cy = 100;
   // Stem
   tft.drawLine(cx,     cy + 42, cx,     SCREEN_HEIGHT - 10, COL_FG);
@@ -2182,6 +2309,11 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_relay") {
     saveRelaySettings(extractJsonStringField(body, "relayUrl"), extractJsonStringField(body, "deviceToken"));
+    return;
+  }
+
+  if (type == "set_scene") {
+    setScene(extractJsonStringField(body, "scene", "wave"));
     return;
   }
 
@@ -2700,6 +2832,15 @@ void loop() {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderFlowerFrame();
+    }
+  }
+
+  if (currentMode == MODE_SCENE) {
+    const unsigned long now = millis();
+    if (now - lastExpressionTickMs >= 30) {
+      lastExpressionTickMs = now;
+      expressionPhase = (expressionPhase + 1) % 64;
+      renderSceneFrame();
     }
   }
 
