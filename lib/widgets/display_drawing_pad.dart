@@ -2,10 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-typedef OledPixelCallback = void Function(int x, int y);
+typedef DisplayPixelCallback = void Function(int x, int y);
 
-class OledDrawingPad extends StatefulWidget {
-  const OledDrawingPad({
+class DisplayDrawingPad extends StatefulWidget {
+  const DisplayDrawingPad({
     super.key,
     required this.bitmap,
     required this.onPixel,
@@ -15,16 +15,16 @@ class OledDrawingPad extends StatefulWidget {
   });
 
   final Uint8List bitmap;
-  final OledPixelCallback onPixel;
+  final DisplayPixelCallback onPixel;
   final bool showGrid;
   final bool enabled;
   final bool showOutline;
 
   @override
-  State<OledDrawingPad> createState() => _OledDrawingPadState();
+  State<DisplayDrawingPad> createState() => _DisplayDrawingPadState();
 }
 
-class _OledDrawingPadState extends State<OledDrawingPad> {
+class _DisplayDrawingPadState extends State<DisplayDrawingPad> {
   Offset? _lastGridPoint;
 
   Offset _toGridPoint(Offset localPosition, Size size) {
@@ -118,7 +118,7 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
                   onPanEnd: widget.enabled ? (_) => _resetStroke() : null,
                   onPanCancel: widget.enabled ? _resetStroke : null,
                   child: CustomPaint(
-                    painter: _OledDrawingPadPainter(
+                    painter: _DisplayDrawingPadPainter(
                       bitmap: widget.bitmap,
                       showGrid: widget.showGrid,
                       showOutline: widget.showOutline,
@@ -154,8 +154,8 @@ class _OledDrawingPadState extends State<OledDrawingPad> {
   }
 }
 
-class _OledDrawingPadPainter extends CustomPainter {
-  const _OledDrawingPadPainter({
+class _DisplayDrawingPadPainter extends CustomPainter {
+  const _DisplayDrawingPadPainter({
     required this.bitmap,
     required this.showGrid,
     required this.showOutline,
@@ -224,7 +224,7 @@ class _OledDrawingPadPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _OledDrawingPadPainter oldDelegate) {
+  bool shouldRepaint(covariant _DisplayDrawingPadPainter oldDelegate) {
     return oldDelegate.bitmap != bitmap ||
         oldDelegate.showGrid != showGrid ||
         oldDelegate.showOutline != showOutline;

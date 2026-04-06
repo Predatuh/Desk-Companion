@@ -10,10 +10,10 @@ import '../models/companion_visual_model.dart';
 import '../models/companion_image_payload.dart';
 import '../providers/desk_companion_controller.dart';
 import '../theme/companion_theme.dart';
-import '../utils/oled_bitmap_codec.dart';
+import '../utils/display_bitmap_codec.dart';
 import '../widgets/companion_face_preview.dart';
 import '../widgets/note_card_preview.dart';
-import '../widgets/oled_drawing_pad.dart';
+import '../widgets/display_drawing_pad.dart';
 
 const int kMaxNoteCharacters = 80;
 
@@ -417,7 +417,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   final _weatherLonController = TextEditingController();
 
   CompanionImagePayload? _selectedImage;
-  Uint8List _drawBitmap = Uint8List(OledBitmapCodec.byteLength);
+  Uint8List _drawBitmap = Uint8List(DisplayBitmapCodec.byteLength);
   bool _invertImage = false;
   bool _showGrid = true;
   bool _drawModeEnabled = false;
@@ -1250,7 +1250,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OledDrawingPad(
+                      DisplayDrawingPad(
                         bitmap: _drawBitmap,
                         showGrid: _showGrid,
                         enabled: _drawModeEnabled,
@@ -1319,7 +1319,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ? null
                                   : () {
                                       setState(() => _drawBitmap = Uint8List(
-                                          OledBitmapCodec.byteLength));
+                                          DisplayBitmapCodec.byteLength));
                                       _queueLiveDraw();
                                     },
                               icon: const Icon(Icons.layers_clear_outlined),
@@ -1400,7 +1400,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                     ?.copyWith(color: Colors.white),
                               ),
                               Text(
-                                '${_selectedImage!.byteLength} bytes ready for OLED',
+                                '${_selectedImage!.byteLength} bytes ready for display',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -1654,7 +1654,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     }
 
     try {
-      final payload = OledBitmapCodec.encodeImage(
+      final payload = DisplayBitmapCodec.encodeImage(
         sourceBytes: bytes,
         name: file.name,
         invert: _invertImage,
@@ -1672,14 +1672,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final next = Uint8List.fromList(_drawBitmap);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
     for (var py = y - radius; py <= y + radius; py++) {
-      if (py < 0 || py >= 64) {
+      if (py < 0 || py >= 240) {
         continue;
       }
       for (var px = x - radius; px <= x + radius; px++) {
-        if (px < 0 || px >= 128) {
+        if (px < 0 || px >= 320) {
           continue;
         }
-        final byteIndex = py * 16 + (px >> 3);
+        final byteIndex = py * 40 + (px >> 3);
         final bitMask = 1 << (7 - (px & 7));
         if (_eraserMode) {
           next[byteIndex] &= ~bitMask;
@@ -1696,7 +1696,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   void _fillCanvas() {
     setState(() {
       _drawBitmap = Uint8List.fromList(
-          List<int>.filled(OledBitmapCodec.byteLength, 0xFF));
+          List<int>.filled(DisplayBitmapCodec.byteLength, 0xFF));
     });
     _queueLiveDraw();
   }
@@ -2236,7 +2236,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final guideLabel = usesNativeClassicSend
         ? 'Classic native send is ready.'
       : streamsLiveBleScene
-            ? 'BLE is connected, so this scene can stream live to the OLED.'
+            ? 'BLE is connected, so this scene can stream live to the display.'
         : supportsLiveBleScene
           ? 'Reference pose stays on a still frame so BLE is not wasted on identical redraws.'
             : 'Without BLE, non-classic scenes fall back to a still bitmap snapshot.';
@@ -2328,7 +2328,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Guide frame marks the real OLED area. $guideLabel',
+                  'Guide frame marks the real display area. $guideLabel',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
@@ -2817,8 +2817,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: SizedBox(
-                        width: 128 * 3.0,
-                        height: 64 * 3.0,
+                        width: 320 * 1.5,
+                        height: 240 * 1.5,
                         child: FittedBox(
                           fit: BoxFit.fill,
                           child: NoteCardPreview(
@@ -3281,14 +3281,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
     await _perform(
       () => controller.sendImage(payload),
-      success: 'Scene snapshot delivered to the OLED.',
+      success: 'Scene snapshot delivered to the display.',
     );
   }
 
   Future<void> _sendCanvas(DeskCompanionController controller) async {
-    final payload = OledBitmapCodec.fromBitmap(
+    final payload = DisplayBitmapCodec.fromBitmap(
       bitmap: _drawBitmap,
-      name: 'oled_drawing',
+      name: 'drawing',
     );
     await _perform(
       () => controller.sendImage(payload),
@@ -3725,7 +3725,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
               child: FractionallySizedBox(
                 widthFactor: 1,
                 heightFactor: 1,
-                child: OledDrawingPad(
+                child: DisplayDrawingPad(
                   bitmap: _bitmap,
                   showGrid: _showGrid,
                   enabled: true,
@@ -3844,7 +3844,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                                 ? null
                                 : () {
                                     setState(() => _bitmap =
-                                        Uint8List(OledBitmapCodec.byteLength));
+                                        Uint8List(DisplayBitmapCodec.byteLength));
                                     _queueLiveDraw();
                                   },
                             icon: const Icon(Icons.layers_clear_outlined),
@@ -3857,9 +3857,9 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                             onPressed: controller.busy
                                 ? null
                                 : () {
-                                    final payload = OledBitmapCodec.fromBitmap(
+                                    final payload = DisplayBitmapCodec.fromBitmap(
                                       bitmap: _bitmap,
-                                      name: 'oled_drawing',
+                                      name: 'drawing',
                                     );
                                     controller.sendImage(payload);
                                   },
@@ -3882,14 +3882,14 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
     final next = Uint8List.fromList(_bitmap);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
     for (var py = y - radius; py <= y + radius; py++) {
-      if (py < 0 || py >= 64) {
+      if (py < 0 || py >= 240) {
         continue;
       }
       for (var px = x - radius; px <= x + radius; px++) {
-        if (px < 0 || px >= 128) {
+        if (px < 0 || px >= 320) {
           continue;
         }
-        final byteIndex = py * 16 + (px >> 3);
+        final byteIndex = py * 40 + (px >> 3);
         final bitMask = 1 << (7 - (px & 7));
         if (_eraserMode) {
           next[byteIndex] &= ~bitMask;
@@ -4376,7 +4376,7 @@ class _FullscreenAppearanceEditorState
           ),
           const SizedBox(height: 8),
           Text(
-            'Guide frame marks the real OLED area. $moodLabel',
+            'Guide frame marks the real display area. $moodLabel',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -4500,7 +4500,7 @@ class _FullscreenAppearanceEditorState
           Text(
             _visualModel.isDeviceSupported
                 ? 'This model is ready to send directly to the desk companion.'
-                : 'This model is app-rendered. Over BLE it can stream live to the OLED, and over relay it falls back to a single snapshot.',
+                : 'This model is app-rendered. Over BLE it can stream live to the display, and over relay it falls back to a single snapshot.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -5055,8 +5055,8 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: SizedBox(
-                  width: 128 * 3.0,
-                  height: 64 * 3.0,
+                  width: 320 * 1.5,
+                  height: 240 * 1.5,
                   child: FittedBox(
                     fit: BoxFit.fill,
                     child: NoteCardPreview(

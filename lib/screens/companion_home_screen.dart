@@ -195,7 +195,7 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Sticky note',
-                  subtitle: 'Plain message centered on the OLED.',
+                  subtitle: 'Plain message centered on the display.',
                   child: Column(
                     children: [
                       TextField(
@@ -271,7 +271,7 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Image',
-                  subtitle: 'Any image is resized to 128×64 and converted to a 1-bit OLED bitmap.',
+                  subtitle: 'Any image is resized to 320×240 and converted to a display bitmap.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -305,7 +305,7 @@ class _CompanionHomeScreenState extends State<CompanionHomeScreen> {
                                     ?.copyWith(color: Colors.white),
                               ),
                               Text(
-                                '${_selectedImage!.byteLength} bytes ready for OLED',
+                                '${_selectedImage!.byteLength} bytes ready for display',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -483,7 +483,7 @@ class _HeroPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Send a quick note, a scrolling banner, or a tiny bitmap straight to the ESP32-S3 zero with its 1.3 inch I2C OLED.',
+            'Send a quick note, a scrolling banner, or a bitmap straight to the ESP32-S3 and its 2.8 inch TFT display.',
             style: Theme.of(context)
                 .textTheme
                 .bodyLarge

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../models/companion_image_payload.dart';
 import '../models/companion_scene.dart';
 import '../models/companion_visual_model.dart';
-import '../utils/oled_bitmap_codec.dart';
+import '../utils/display_bitmap_codec.dart';
 
 Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   required CompanionVisualModel visualModel,
@@ -96,23 +96,23 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawRect(
-    const Rect.fromLTWH(0, 0, 128, 64),
+    const Rect.fromLTWH(0, 0, 320, 240),
     Paint()
       ..color = Colors.black
       ..style = PaintingStyle.fill,
   );
-  painter.paint(canvas, const Size(128, 64));
+  painter.paint(canvas, const Size(320, 240));
 
-  final image = await recorder.endRecording().toImage(128, 64);
+  final image = await recorder.endRecording().toImage(320, 240);
   final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) {
     throw const FormatException('Could not render studio preview.');
   }
 
-  return OledBitmapCodec.fromRgbaBytes(
+  return DisplayBitmapCodec.fromRgbaBytes(
     rgbaBytes: Uint8List.fromList(byteData.buffer.asUint8List()),
-    sourceWidth: 128,
-    sourceHeight: 64,
+    sourceWidth: 320,
+    sourceHeight: 240,
     name: name,
     threshold: 128,
     invert: true,
@@ -355,17 +355,17 @@ class _StickFigurePainter extends CustomPainter {
   final int stickFigureEnergy;
   final double animationProgress;
 
-  static const _visibleScreenRect = Rect.fromLTWH(2, 5, 124, 57);
+  static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(size.width / 128, size.height / 64);
+    canvas.scale(size.width / 320, size.height / 240);
 
     final stroke = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = false;
     final fill = Paint()
@@ -379,13 +379,13 @@ class _StickFigurePainter extends CustomPainter {
     final boundary = Paint()
       ..color = const Color(0xFF9B9B9B)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..isAntiAlias = false;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(0, 0, 127, 63),
-        const Radius.circular(10),
+        const Rect.fromLTWH(0, 0, 319, 239),
+        const Radius.circular(18),
       ),
       stroke,
     );
@@ -393,7 +393,7 @@ class _StickFigurePainter extends CustomPainter {
     final normalizedExpression = expression?.trim();
     final sceneToRender = referencePose ? CompanionScene.none : scene;
     final scale = stickFigureScale.clamp(70, 150) / 100;
-    final spacing = 18 * (stickFigureSpacing.clamp(70, 150) / 100);
+    final spacing = 45 * (stickFigureSpacing.clamp(70, 150) / 100);
     final energy = stickFigureEnergy.clamp(0, 100) / 100;
     final isSleepy = !referencePose &&
         (normalizedExpression == 'sleepy' ||
@@ -476,10 +476,10 @@ class _StickFigurePainter extends CustomPainter {
     }
 
     if (showScreenBoundary) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, 128, _visibleScreenRect.top), mask);
-      canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.bottom, 128, 64 - _visibleScreenRect.bottom), mask);
+      canvas.drawRect(Rect.fromLTWH(0, 0, 320, _visibleScreenRect.top), mask);
+      canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.bottom, 320, 240 - _visibleScreenRect.bottom), mask);
       canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.top, _visibleScreenRect.left, _visibleScreenRect.height), mask);
-      canvas.drawRect(Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 128 - _visibleScreenRect.right, _visibleScreenRect.height), mask);
+      canvas.drawRect(Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 320 - _visibleScreenRect.right, _visibleScreenRect.height), mask);
       canvas.drawRect(_visibleScreenRect, boundary);
     }
 
@@ -502,26 +502,26 @@ class _StickFigurePainter extends CustomPainter {
     required bool isSurprised,
     required bool isLooking,
   }) {
-    final bob = math.sin(animationProgress * math.pi * 2) * (isSleepy ? 0.4 : 1.1);
+    final bob = math.sin(animationProgress * math.pi * 2) * (isSleepy ? 1.5 : 4.0);
     final waveLift = scene == CompanionScene.wave
-        ? (math.sin(animationProgress * math.pi * 4) * (7 + energy * 4)).abs()
+        ? (math.sin(animationProgress * math.pi * 4) * (21 + energy * 12)).abs()
         : 0.0;
     final bowLean = scene == CompanionScene.bow
-        ? _lerp(0, 6.5, (math.sin(animationProgress * math.pi * 2) * 0.5) + 0.5)
+        ? _lerp(0, 19.5, (math.sin(animationProgress * math.pi * 2) * 0.5) + 0.5)
         : 0.0;
-    final stride = math.sin(animationProgress * math.pi * 8) * (scene == CompanionScene.wave ? 1.5 : 0.5);
+    final stride = math.sin(animationProgress * math.pi * 8) * (scene == CompanionScene.wave ? 4.5 : 1.5);
 
     _drawFigure(
       canvas,
       stroke,
       fill,
-      headCenter: Offset(64 + bowLean * 0.35, 18 + bob + bowLean * 0.2),
+      headCenter: Offset(160 + bowLean * 0.35, 68 + bob + bowLean * 0.2),
       scale: scale,
       lean: bowLean,
-      leftArmVector: Offset(-12 * scale, scene == CompanionScene.bow ? 2 : 0),
-      rightArmVector: Offset(12 * scale, -waveLift),
-      leftLegVector: Offset(-7 * scale + stride, 10 * scale),
-      rightLegVector: Offset(7 * scale - stride, 10 * scale),
+      leftArmVector: Offset(-36 * scale, scene == CompanionScene.bow ? 6 : 0),
+      rightArmVector: Offset(36 * scale, -waveLift),
+      leftLegVector: Offset(-21 * scale + stride, 30 * scale),
+      rightLegVector: Offset(21 * scale - stride, 30 * scale),
       facingRight: true,
       isOff: isOff,
       isSleepy: isSleepy,
@@ -534,7 +534,7 @@ class _StickFigurePainter extends CustomPainter {
     );
 
     if (scene == CompanionScene.wave) {
-      _drawSpark(canvas, stroke, const Offset(82, 13), 3);
+      _drawSpark(canvas, stroke, const Offset(205, 49), 9);
     }
   }
 
@@ -548,27 +548,27 @@ class _StickFigurePainter extends CustomPainter {
     required CompanionScene scene,
     required bool showHeart,
   }) {
-    final leftCenter = 64 - spacing / 2;
-    final rightCenter = 64 + spacing / 2;
-    final sway = math.sin(animationProgress * math.pi * 2) * (1 + energy * 0.6);
-    final stride = math.sin(animationProgress * math.pi * 6) * 1.1;
+    final leftCenter = 160 - spacing / 2;
+    final rightCenter = 160 + spacing / 2;
+    final sway = math.sin(animationProgress * math.pi * 2) * (3 + energy * 1.8);
+    final stride = math.sin(animationProgress * math.pi * 6) * 3.3;
     final lean = scene == CompanionScene.kiss
-        ? 3.6
+        ? 10.8
         : scene == CompanionScene.hug
-            ? 2.6
-            : 1.8;
+            ? 7.8
+            : 5.4;
 
     _drawFigure(
       canvas,
       stroke,
       fill,
-      headCenter: Offset(leftCenter + lean, 18 + sway * 0.3),
+      headCenter: Offset(leftCenter + lean, 68 + sway * 0.3),
       scale: scale,
       lean: lean,
-      leftArmVector: Offset(-11 * scale, 2),
-      rightArmVector: Offset(7 * scale, scene == CompanionScene.hug ? 2 : 4),
-      leftLegVector: Offset(-7 * scale + stride, 10 * scale),
-      rightLegVector: Offset(7 * scale - stride, 10 * scale),
+      leftArmVector: Offset(-33 * scale, 6),
+      rightArmVector: Offset(21 * scale, scene == CompanionScene.hug ? 6 : 12),
+      leftLegVector: Offset(-21 * scale + stride, 30 * scale),
+      rightLegVector: Offset(21 * scale - stride, 30 * scale),
       facingRight: true,
       isAffectionate: true,
     );
@@ -576,22 +576,22 @@ class _StickFigurePainter extends CustomPainter {
       canvas,
       stroke,
       fill,
-      headCenter: Offset(rightCenter - lean, 18 - sway * 0.3),
+      headCenter: Offset(rightCenter - lean, 68 - sway * 0.3),
       scale: scale,
       lean: -lean,
-      leftArmVector: Offset(-7 * scale, scene == CompanionScene.hug ? 2 : 4),
-      rightArmVector: Offset(11 * scale, 2),
-      leftLegVector: Offset(-7 * scale - stride, 10 * scale),
-      rightLegVector: Offset(7 * scale + stride, 10 * scale),
+      leftArmVector: Offset(-21 * scale, scene == CompanionScene.hug ? 6 : 12),
+      rightArmVector: Offset(33 * scale, 6),
+      leftLegVector: Offset(-21 * scale - stride, 30 * scale),
+      rightLegVector: Offset(21 * scale + stride, 30 * scale),
       facingRight: false,
       isAffectionate: true,
     );
 
     if (showHeart) {
       final heartY = scene == CompanionScene.kiss
-          ? 14 - math.sin(animationProgress * math.pi * 2) * 2
-          : 17 - math.sin(animationProgress * math.pi * 2) * 1.2;
-      _drawHeart(canvas, fill, Offset(64, heartY), scene == CompanionScene.kiss ? 4 : 3);
+          ? 53 - math.sin(animationProgress * math.pi * 2) * 6
+          : 64 - math.sin(animationProgress * math.pi * 2) * 3.6;
+      _drawHeart(canvas, fill, Offset(160, heartY), scene == CompanionScene.kiss ? 12 : 9);
     }
   }
 
@@ -622,34 +622,34 @@ class _StickFigurePainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: visibility)
       ..style = PaintingStyle.fill
       ..isAntiAlias = false;
-    final holdHalfGap = (spacing * 0.62).clamp(12.0, 16.0);
-    final meetingLeft = 64.0 - holdHalfGap;
-    final meetingRight = 64.0 + holdHalfGap;
-    final awayHalfGap = _lerp(holdHalfGap, 1.2, away);
-    final awayLeft = 64.0 - awayHalfGap;
-    final awayRight = 64.0 + awayHalfGap;
-    final walkInLeft = _lerp(-16, meetingLeft, approach);
-    final walkInRight = _lerp(144, meetingRight, approach);
+    final holdHalfGap = (spacing * 0.62).clamp(30.0, 40.0);
+    final meetingLeft = 160.0 - holdHalfGap;
+    final meetingRight = 160.0 + holdHalfGap;
+    final awayHalfGap = _lerp(holdHalfGap, 3.6, away);
+    final awayLeft = 160.0 - awayHalfGap;
+    final awayRight = 160.0 + awayHalfGap;
+    final walkInLeft = _lerp(-40, meetingLeft, approach);
+    final walkInRight = _lerp(360, meetingRight, approach);
     final pairedLeft = _lerp(meetingLeft, awayLeft, away);
     final pairedRight = _lerp(meetingRight, awayRight, away);
     final leftX = away > 0 ? pairedLeft : walkInLeft;
     final rightX = away > 0 ? pairedRight : walkInRight;
     final currentScale = scale * _lerp(1.0, 0.06, away);
-    final baseY = _lerp(18.5, 4.0, away);
+    final baseY = _lerp(68, 15, away);
     final walkPhase = animationProgress * math.pi * 10;
-    final stride = math.sin(walkPhase) * _lerp(2.4 + energy * 1.6, 0.2, away);
-    final bobAmount = _lerp(1.2 + energy * 0.6, 0.12, away);
+    final stride = math.sin(walkPhase) * _lerp(7.2 + energy * 4.8, 0.6, away);
+    final bobAmount = _lerp(3.6 + energy * 1.8, 0.36, away);
     final leftY = baseY + math.sin(walkPhase) * bobAmount;
     final rightY = baseY + math.sin(walkPhase + math.pi) * bobAmount * 0.82;
-    final leftShoulder = Offset(leftX, leftY + 15 * currentScale);
-    final rightShoulder = Offset(rightX, rightY + 15 * currentScale);
-    final relaxedInnerLeftArm = Offset(8.2 * currentScale, 2.4 + math.sin(walkPhase) * 0.8);
-    final relaxedInnerRightArm = Offset(-8.2 * currentScale, 2.4 - math.sin(walkPhase) * 0.8);
-    final outerLeftArm = Offset(-10.2 * currentScale, _lerp(2.4, 1.0, away));
-    final outerRightArm = Offset(10.2 * currentScale, _lerp(2.4, 1.0, away));
+    final leftShoulder = Offset(leftX, leftY + 45 * currentScale);
+    final rightShoulder = Offset(rightX, rightY + 45 * currentScale);
+    final relaxedInnerLeftArm = Offset(24.6 * currentScale, 7.2 + math.sin(walkPhase) * 2.4);
+    final relaxedInnerRightArm = Offset(-24.6 * currentScale, 7.2 - math.sin(walkPhase) * 2.4);
+    final outerLeftArm = Offset(-30.6 * currentScale, _lerp(7.2, 3.0, away));
+    final outerRightArm = Offset(30.6 * currentScale, _lerp(7.2, 3.0, away));
     final handJoin = Offset(
       (leftShoulder.dx + rightShoulder.dx) / 2,
-      ((leftShoulder.dy + rightShoulder.dy) / 2) + _lerp(2.6, 0.4, hold) + _lerp(0.0, 0.8, away),
+      ((leftShoulder.dy + rightShoulder.dy) / 2) + _lerp(7.8, 1.2, hold) + _lerp(0.0, 2.4, away),
     );
     final leftInnerArm = Offset.lerp(relaxedInnerLeftArm, handJoin - leftShoulder, reach)!;
     final rightInnerArm = Offset.lerp(relaxedInnerRightArm, handJoin - rightShoulder, reach)!;
@@ -660,16 +660,16 @@ class _StickFigurePainter extends CustomPainter {
       sceneFill,
       headCenter: Offset(leftX, leftY),
       scale: currentScale,
-      lean: _lerp(0.0, 1.15, reach) - away * 0.22,
+      lean: _lerp(0.0, 3.45, reach) - away * 0.66,
       leftArmVector: outerLeftArm,
       rightArmVector: leftInnerArm,
-      leftLegVector: Offset(-7 * currentScale + stride, 10 * currentScale),
-      rightLegVector: Offset(7 * currentScale - stride, 10 * currentScale),
+      leftLegVector: Offset(-21 * currentScale + stride, 30 * currentScale),
+      rightLegVector: Offset(21 * currentScale - stride, 30 * currentScale),
       facingRight: true,
-      rightArmBend: 2.1 * currentScale,
-      leftArmBend: -1.2 * currentScale,
-      leftLegBend: -1.0 * currentScale,
-      rightLegBend: 0.9 * currentScale,
+      rightArmBend: 6.3 * currentScale,
+      leftArmBend: -3.6 * currentScale,
+      leftLegBend: -3.0 * currentScale,
+      rightLegBend: 2.7 * currentScale,
     );
     _drawFigure(
       canvas,
@@ -677,28 +677,28 @@ class _StickFigurePainter extends CustomPainter {
       sceneFill,
       headCenter: Offset(rightX, rightY),
       scale: currentScale,
-      lean: _lerp(0.0, -1.15, reach) + away * 0.22,
+      lean: _lerp(0.0, -3.45, reach) + away * 0.66,
       leftArmVector: rightInnerArm,
       rightArmVector: outerRightArm,
-      leftLegVector: Offset(-7 * currentScale - stride, 10 * currentScale),
-      rightLegVector: Offset(7 * currentScale + stride, 10 * currentScale),
+      leftLegVector: Offset(-21 * currentScale - stride, 30 * currentScale),
+      rightLegVector: Offset(21 * currentScale + stride, 30 * currentScale),
       facingRight: false,
-      leftArmBend: -2.1 * currentScale,
-      rightArmBend: 1.2 * currentScale,
-      leftLegBend: -0.9 * currentScale,
-      rightLegBend: 1.0 * currentScale,
+      leftArmBend: -6.3 * currentScale,
+      rightArmBend: 3.6 * currentScale,
+      leftLegBend: -2.7 * currentScale,
+      rightLegBend: 3.0 * currentScale,
     );
 
     if (reach > 0.72) {
-      final claspSize = math.max(0.45, 0.95 * currentScale) * visibility;
+      final claspSize = math.max(1.35, 2.85 * currentScale) * visibility;
       canvas.drawCircle(handJoin, claspSize, sceneFill);
     }
 
     if (reach > 0 || away > 0) {
-      final heartRise = baseY - _lerp(0, 3.5, hold) - _lerp(0, 11, away);
-      final heartSize = _lerp(0.0, 3.8, math.max(reach, hold)) * visibility;
-      if (heartSize > 0.25) {
-        _drawHeart(canvas, sceneFill, Offset(64, heartRise), heartSize);
+      final heartRise = baseY - _lerp(0, 10.5, hold) - _lerp(0, 33, away);
+      final heartSize = _lerp(0.0, 11.4, math.max(reach, hold)) * visibility;
+      if (heartSize > 0.75) {
+        _drawHeart(canvas, sceneFill, Offset(160, heartRise), heartSize);
       }
     }
   }
@@ -729,30 +729,30 @@ class _StickFigurePainter extends CustomPainter {
     bool isLooking = false,
   }) {
     final direction = facingRight ? 1.0 : -1.0;
-    final headRadius = (isSurprised ? 8.0 : 7.0) * scale;
-    final eyeOffsetX = math.max(1.9, 3.0 * scale);
-    final eyeRadius = math.max(0.75, 1.2 * scale);
-    final mouthOffsetY = math.max(2.7, 6.0 * scale);
-    final mouthWidth = math.max(5.0, 10.0 * scale);
-    final mouthHeight = math.max(3.2, 6.0 * scale);
-    final mouthSadWidth = math.max(4.2, 8.0 * scale);
-    final mouthSadHeight = math.max(2.8, 5.0 * scale);
-    final faceLineHalf = math.max(2.2, 3.0 * scale);
-    final thoughtBubbleNear = math.max(1.0, 1.3 * scale);
-    final thoughtBubbleFar = math.max(1.6, 2.0 * scale);
-    final emotionOffsetX = headRadius + math.max(4.5, 5.5 * scale);
-    final emotionOffsetY = math.max(1.5, 2.0 * scale);
-    final torsoTop = Offset(headCenter.dx, headCenter.dy + 10 * scale);
-    final torsoBottom = Offset(headCenter.dx + lean * 0.4, headCenter.dy + 26 * scale);
-    final shoulder = Offset(headCenter.dx, headCenter.dy + 15 * scale);
+    final headRadius = (isSurprised ? 24.0 : 21.0) * scale;
+    final eyeOffsetX = math.max(5.7, 9.0 * scale);
+    final eyeRadius = math.max(2.25, 3.6 * scale);
+    final mouthOffsetY = math.max(8.1, 18.0 * scale);
+    final mouthWidth = math.max(15.0, 30.0 * scale);
+    final mouthHeight = math.max(9.6, 18.0 * scale);
+    final mouthSadWidth = math.max(12.6, 24.0 * scale);
+    final mouthSadHeight = math.max(8.4, 15.0 * scale);
+    final faceLineHalf = math.max(6.6, 9.0 * scale);
+    final thoughtBubbleNear = math.max(3.0, 3.9 * scale);
+    final thoughtBubbleFar = math.max(4.8, 6.0 * scale);
+    final emotionOffsetX = headRadius + math.max(13.5, 16.5 * scale);
+    final emotionOffsetY = math.max(4.5, 6.0 * scale);
+    final torsoTop = Offset(headCenter.dx, headCenter.dy + 30 * scale);
+    final torsoBottom = Offset(headCenter.dx + lean * 0.4, headCenter.dy + 78 * scale);
+    final shoulder = Offset(headCenter.dx, headCenter.dy + 45 * scale);
     final leftArmEnd = shoulder + leftArmVector;
     final rightArmEnd = shoulder + rightArmVector;
     final leftLegEnd = torsoBottom + leftLegVector;
     final rightLegEnd = torsoBottom + rightLegVector;
-    final resolvedLeftArmBend = leftArmBend ?? (facingRight ? -0.9 : 0.9) * scale;
-    final resolvedRightArmBend = rightArmBend ?? (facingRight ? 0.9 : -0.9) * scale;
-    final resolvedLeftLegBend = leftLegBend ?? (-0.85 * scale);
-    final resolvedRightLegBend = rightLegBend ?? (0.85 * scale);
+    final resolvedLeftArmBend = leftArmBend ?? (facingRight ? -2.7 : 2.7) * scale;
+    final resolvedRightArmBend = rightArmBend ?? (facingRight ? 2.7 : -2.7) * scale;
+    final resolvedLeftLegBend = leftLegBend ?? (-2.55 * scale);
+    final resolvedRightLegBend = rightLegBend ?? (2.55 * scale);
 
     canvas.drawCircle(headCenter, headRadius, stroke);
     canvas.drawLine(torsoTop, torsoBottom, stroke);
@@ -806,13 +806,13 @@ class _StickFigurePainter extends CustomPainter {
         Offset(headCenter.dx + faceLineHalf, headCenter.dy + mouthOffsetY),
         stroke,
       );
-      if (headCenter.dx >= 64) {
+      if (headCenter.dx >= 160) {
         _drawZ(canvas, stroke, Offset(headCenter.dx + emotionOffsetX + 1, headCenter.dy - emotionOffsetY - 1), math.max(0.65, 0.9 * scale));
       }
       return;
     }
 
-    final gazeOffset = isLooking ? 2.0 * direction : 0.0;
+    final gazeOffset = isLooking ? 6.0 * direction : 0.0;
     canvas.drawCircle(Offset(headCenter.dx - eyeOffsetX + gazeOffset, headCenter.dy), eyeRadius, fill);
     canvas.drawCircle(Offset(headCenter.dx + eyeOffsetX + gazeOffset, headCenter.dy), eyeRadius, fill);
 
@@ -829,7 +829,7 @@ class _StickFigurePainter extends CustomPainter {
         math.pi,
       );
     } else if (isSurprised) {
-      canvas.drawCircle(Offset(headCenter.dx, headCenter.dy + mouthOffsetY), math.max(1.1, 1.9 * scale), stroke);
+      canvas.drawCircle(Offset(headCenter.dx, headCenter.dy + mouthOffsetY), math.max(3.3, 5.7 * scale), stroke);
     } else if (isThinking) {
       canvas.drawLine(
         Offset(headCenter.dx - faceLineHalf, headCenter.dy + mouthOffsetY),
@@ -837,7 +837,7 @@ class _StickFigurePainter extends CustomPainter {
         stroke,
       );
       canvas.drawCircle(Offset(headCenter.dx + emotionOffsetX, headCenter.dy - emotionOffsetY), thoughtBubbleNear, stroke);
-      canvas.drawCircle(Offset(headCenter.dx + emotionOffsetX + 4 * scale, headCenter.dy - emotionOffsetY - 3 * scale), thoughtBubbleFar, stroke);
+      canvas.drawCircle(Offset(headCenter.dx + emotionOffsetX + 12 * scale, headCenter.dy - emotionOffsetY - 9 * scale), thoughtBubbleFar, stroke);
     } else {
       _drawArcMouth(
         canvas,
@@ -852,11 +852,11 @@ class _StickFigurePainter extends CustomPainter {
       );
     }
 
-    if (isAffectionate && headCenter.dx > 60) {
-      _drawHeart(canvas, fill, Offset(headCenter.dx + emotionOffsetX + 1, headCenter.dy - emotionOffsetY * 0.5), math.max(2.2, 3.5 * scale));
+    if (isAffectionate && headCenter.dx > 150) {
+      _drawHeart(canvas, fill, Offset(headCenter.dx + emotionOffsetX + 3, headCenter.dy - emotionOffsetY * 0.5), math.max(6.6, 10.5 * scale));
     } else if (isExcited) {
-      _drawSpark(canvas, stroke, Offset(headCenter.dx - emotionOffsetX, headCenter.dy - emotionOffsetY), math.max(1.8, 3 * scale));
-      _drawSpark(canvas, stroke, Offset(headCenter.dx + emotionOffsetX, headCenter.dy - emotionOffsetY - 1), math.max(1.8, 3 * scale));
+      _drawSpark(canvas, stroke, Offset(headCenter.dx - emotionOffsetX, headCenter.dy - emotionOffsetY), math.max(5.4, 9 * scale));
+      _drawSpark(canvas, stroke, Offset(headCenter.dx + emotionOffsetX, headCenter.dy - emotionOffsetY - 3), math.max(5.4, 9 * scale));
     }
   }
 
@@ -869,7 +869,7 @@ class _StickFigurePainter extends CustomPainter {
 
   double currentScaleStrokeWidth(double scale, double away) {
     final fadedScale = scale * _lerp(1.0, 0.06, away);
-    return fadedScale < 0.22 ? 0.6 : 1.0;
+    return fadedScale < 0.22 ? 1.2 : 2.0;
   }
 
   double _lerp(double start, double end, double t) {
@@ -917,8 +917,8 @@ class _StickFigurePainter extends CustomPainter {
   }
 
   void _drawZ(Canvas canvas, Paint stroke, Offset origin, double scale) {
-    final width = 6.0 * scale;
-    final height = 6.0 * scale;
+    final width = 12.0 * scale;
+    final height = 12.0 * scale;
     canvas.drawLine(origin, Offset(origin.dx + width, origin.dy), stroke);
     canvas.drawLine(Offset(origin.dx + width, origin.dy), Offset(origin.dx, origin.dy + height), stroke);
     canvas.drawLine(Offset(origin.dx, origin.dy + height), Offset(origin.dx + width, origin.dy + height), stroke);
@@ -952,17 +952,17 @@ class _RobotPainter extends CustomPainter {
   final String? expression;
   final double animationProgress;
 
-  static const _visibleScreenRect = Rect.fromLTWH(2, 5, 124, 57);
+  static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(size.width / 128, size.height / 64);
+    canvas.scale(size.width / 320, size.height / 240);
 
     final stroke = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..isAntiAlias = false;
     final fill = Paint()
       ..color = Colors.white
@@ -975,33 +975,33 @@ class _RobotPainter extends CustomPainter {
     final boundary = Paint()
       ..color = const Color(0xFF9B9B9B)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..isAntiAlias = false;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(0, 0, 127, 63),
-        const Radius.circular(10),
+        const Rect.fromLTWH(0, 0, 319, 239),
+        const Radius.circular(18),
       ),
       stroke,
     );
 
     final pulse = (math.sin(animationProgress * math.pi * 2) + 1) / 2;
     if (scene.isDuo) {
-      _drawRobot(canvas, stroke, fill, centerX: 48, pulse: pulse, facingRight: true, scene: scene);
-      _drawRobot(canvas, stroke, fill, centerX: 80, pulse: 1 - pulse, facingRight: false, scene: scene);
+      _drawRobot(canvas, stroke, fill, centerX: 120, pulse: pulse, facingRight: true, scene: scene);
+      _drawRobot(canvas, stroke, fill, centerX: 200, pulse: 1 - pulse, facingRight: false, scene: scene);
       if (scene == CompanionScene.kiss || scene == CompanionScene.shyLeanIn) {
-        _drawHeart(canvas, fill, Offset(64, 15 - pulse * 2), scene == CompanionScene.kiss ? 4 : 3);
+        _drawHeart(canvas, fill, Offset(160, 56 - pulse * 6), scene == CompanionScene.kiss ? 12 : 9);
       }
     } else {
-      _drawRobot(canvas, stroke, fill, centerX: 64, pulse: pulse, facingRight: true, scene: scene);
+      _drawRobot(canvas, stroke, fill, centerX: 160, pulse: pulse, facingRight: true, scene: scene);
     }
 
     if (showScreenBoundary) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, 128, _visibleScreenRect.top), mask);
-      canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.bottom, 128, 64 - _visibleScreenRect.bottom), mask);
+      canvas.drawRect(Rect.fromLTWH(0, 0, 320, _visibleScreenRect.top), mask);
+      canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.bottom, 320, 240 - _visibleScreenRect.bottom), mask);
       canvas.drawRect(Rect.fromLTWH(0, _visibleScreenRect.top, _visibleScreenRect.left, _visibleScreenRect.height), mask);
-      canvas.drawRect(Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 128 - _visibleScreenRect.right, _visibleScreenRect.height), mask);
+      canvas.drawRect(Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 320 - _visibleScreenRect.right, _visibleScreenRect.height), mask);
       canvas.drawRect(_visibleScreenRect, boundary);
     }
 
@@ -1018,30 +1018,30 @@ class _RobotPainter extends CustomPainter {
     required CompanionScene scene,
   }) {
     final direction = facingRight ? 1.0 : -1.0;
-    final hover = math.sin(animationProgress * math.pi * 2 + (facingRight ? 0 : math.pi / 3)) * 1.4;
-    final head = Rect.fromCenter(center: Offset(centerX, 18 + hover), width: 16, height: 13);
-    final torso = Rect.fromCenter(center: Offset(centerX, 34 + hover * 0.5), width: 12, height: 14);
-    final antennaTop = Offset(centerX, head.top - 5 - pulse * 1.5);
-    final shoulderY = torso.top + 2;
-    final handReach = scene == CompanionScene.holdHands ? 6 : scene == CompanionScene.wave ? 8 : 4;
+    final hover = math.sin(animationProgress * math.pi * 2 + (facingRight ? 0 : math.pi / 3)) * 4.2;
+    final head = Rect.fromCenter(center: Offset(centerX, 68 + hover), width: 48, height: 39);
+    final torso = Rect.fromCenter(center: Offset(centerX, 116 + hover * 0.5), width: 36, height: 42);
+    final antennaTop = Offset(centerX, head.top - 15 - pulse * 4.5);
+    final shoulderY = torso.top + 6;
+    final handReach = scene == CompanionScene.holdHands ? 18 : scene == CompanionScene.wave ? 24 : 12;
 
-    canvas.drawRRect(RRect.fromRectAndRadius(head, const Radius.circular(3)), stroke);
-    canvas.drawRRect(RRect.fromRectAndRadius(torso, const Radius.circular(3)), stroke);
+    canvas.drawRRect(RRect.fromRectAndRadius(head, const Radius.circular(9)), stroke);
+    canvas.drawRRect(RRect.fromRectAndRadius(torso, const Radius.circular(9)), stroke);
     canvas.drawLine(Offset(centerX, head.top), antennaTop, stroke);
-    canvas.drawCircle(antennaTop, 1.5 + pulse * 0.8, stroke);
-    canvas.drawLine(Offset(centerX - 4, torso.bottom), Offset(centerX - 6, torso.bottom + 9), stroke);
-    canvas.drawLine(Offset(centerX + 4, torso.bottom), Offset(centerX + 6, torso.bottom + 9), stroke);
-    canvas.drawLine(Offset(centerX - 6, shoulderY), Offset(centerX - 11, shoulderY + 4), stroke);
+    canvas.drawCircle(antennaTop, 4.5 + pulse * 2.4, stroke);
+    canvas.drawLine(Offset(centerX - 12, torso.bottom), Offset(centerX - 18, torso.bottom + 27), stroke);
+    canvas.drawLine(Offset(centerX + 12, torso.bottom), Offset(centerX + 18, torso.bottom + 27), stroke);
+    canvas.drawLine(Offset(centerX - 18, shoulderY), Offset(centerX - 33, shoulderY + 12), stroke);
     canvas.drawLine(
-      Offset(centerX + 6, shoulderY),
-      Offset(centerX + 6 + handReach * direction, shoulderY - (scene == CompanionScene.wave ? 7 * pulse : 1)),
+      Offset(centerX + 18, shoulderY),
+      Offset(centerX + 18 + handReach * direction, shoulderY - (scene == CompanionScene.wave ? 21 * pulse : 3)),
       stroke,
     );
 
-    final eyeWidth = expression == 'angry' ? 5.5 : 4.0 + pulse * 0.8;
-    canvas.drawRect(Rect.fromCenter(center: Offset(centerX - 4, head.center.dy), width: eyeWidth, height: 1.6), fill);
-    canvas.drawRect(Rect.fromCenter(center: Offset(centerX + 4, head.center.dy), width: eyeWidth, height: 1.6), fill);
-    canvas.drawLine(Offset(centerX - 4, head.center.dy + 4), Offset(centerX + 4, head.center.dy + 4), stroke);
+    final eyeWidth = expression == 'angry' ? 16.5 : 12.0 + pulse * 2.4;
+    canvas.drawRect(Rect.fromCenter(center: Offset(centerX - 12, head.center.dy), width: eyeWidth, height: 4.8), fill);
+    canvas.drawRect(Rect.fromCenter(center: Offset(centerX + 12, head.center.dy), width: eyeWidth, height: 4.8), fill);
+    canvas.drawLine(Offset(centerX - 12, head.center.dy + 12), Offset(centerX + 12, head.center.dy + 12), stroke);
   }
 
   void _drawHeart(Canvas canvas, Paint fill, Offset center, double size) {
@@ -1116,17 +1116,17 @@ class _CompanionFacePainter extends CustomPainter {
   final int mustacheOffsetX;
   final int mustacheOffsetY;
 
-  static const _visibleScreenRect = Rect.fromLTWH(2, 5, 124, 57);
+  static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(size.width / 128, size.height / 64);
+    canvas.scale(size.width / 320, size.height / 240);
 
     final stroke = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..isAntiAlias = false;
     final fill = Paint()
       ..color = Colors.white
@@ -1139,20 +1139,20 @@ class _CompanionFacePainter extends CustomPainter {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(0, 0, 127, 63),
-        const Radius.circular(10),
+        const Rect.fromLTWH(0, 0, 319, 239),
+        const Radius.circular(18),
       ),
       stroke,
     );
 
-    const idleLeftX = 38.0;
-    const idleRightX = 90.0;
-    final idleEyeY = 31.0 + _clampOffset(eyeOffsetY);
-    final idleMouthY = 47.0 + _clampOffset(mouthOffsetY);
-    const expressionLeftX = 36.0;
-    const expressionRightX = 92.0;
-    final expressionEyeY = 24.0 + _clampOffset(eyeOffsetY);
-    final expressionMouthY = 52.0 + _clampOffset(mouthOffsetY);
+    const idleLeftX = 70.0;
+    const idleRightX = 170.0;
+    final idleEyeY = 100.0 + _clampOffset(eyeOffsetY) * 2.0;
+    final idleMouthY = 150.0 + _clampOffset(mouthOffsetY) * 2.0;
+    const expressionLeftX = 68.0;
+    const expressionRightX = 172.0;
+    final expressionEyeY = 85.0 + _clampOffset(eyeOffsetY) * 2.0;
+    final expressionMouthY = 140.0 + _clampOffset(mouthOffsetY) * 2.0;
 
     final normalizedExpression = expression?.trim();
 
@@ -1175,9 +1175,9 @@ class _CompanionFacePainter extends CustomPainter {
     final isParty = !referencePose && normalizedExpression == null && petMode == 'party';
 
     if (referencePose) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 24, 16, 5, 0, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 24, 16, 5, 0, 0);
-      _drawOvalMouth(canvas, stroke, 64, idleMouthY, 5, 4);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 0, 0);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, 0, 0);
+      _drawOvalMouth(canvas, stroke, 160, idleMouthY, 9, 7);
     } else if (normalizedExpression != null) {
       _drawExpressionPreview(
         canvas,
@@ -1189,35 +1189,35 @@ class _CompanionFacePainter extends CustomPainter {
         mouthY: expressionMouthY,
       );
     } else if (isOff) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 22, 14, 5, 0, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 22, 14, 5, 0, 0);
-      canvas.drawLine(Offset(57, idleMouthY), Offset(71, idleMouthY), stroke);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 40, 26, 9, 0, 0);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 40, 26, 9, 0, 0);
+      canvas.drawLine(Offset(143, idleMouthY), Offset(178, idleMouthY), stroke);
     } else if (isSleepy) {
-      _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 24, 4, 4);
-      _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 24, 4, 4);
-      canvas.drawLine(Offset(56, idleMouthY), Offset(72, idleMouthY), stroke);
-      _drawZ(canvas, stroke, const Offset(100, 23), 1.0);
-      _drawZ(canvas, stroke, const Offset(108, 18), 0.8);
+      _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 44, 8, 7);
+      _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 44, 8, 7);
+      canvas.drawLine(Offset(140, idleMouthY), Offset(180, idleMouthY), stroke);
+      _drawZ(canvas, stroke, const Offset(200, 86), 2.5);
+      _drawZ(canvas, stroke, const Offset(216, 68), 2.0);
     } else if (isCuddly) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 24, 16, 5, 0, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 24, 16, 5, 0, 0);
-      _drawSmile(canvas, stroke, 64, idleMouthY - 1, 24);
-      _drawHeart(canvas, fill, const Offset(64, 55), 3);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 0, 0);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, 0, 0);
+      _drawSmile(canvas, stroke, 160, idleMouthY - 2, 44);
+      _drawHeart(canvas, fill, const Offset(160, 206), 6);
     } else if (isPlayful) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 26, 18, 5, 3, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 26, 18, 5, 3, 0);
-      _drawSmile(canvas, stroke, 64, idleMouthY - 2, 26);
-      canvas.drawCircle(const Offset(18, 49), 2, fill);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 6, 0);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, 6, 0);
+      _drawSmile(canvas, stroke, 160, idleMouthY - 4, 48);
+      canvas.drawCircle(const Offset(45, 184), 4, fill);
     } else if (isParty) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 26, 18, 5, 2, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 26, 18, 5, -2, 0);
-      _drawSmile(canvas, stroke, 64, idleMouthY - 2, 28);
-      _drawStar(canvas, stroke, const Offset(16, 15), 3);
-      _drawStar(canvas, stroke, const Offset(112, 17), 3);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 4, 0);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, -4, 0);
+      _drawSmile(canvas, stroke, 160, idleMouthY - 4, 52);
+      _drawStar(canvas, stroke, const Offset(40, 56), 6);
+      _drawStar(canvas, stroke, const Offset(280, 64), 6);
     } else {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 24, 16, 5, 2, 1);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 24, 16, 5, -1, -1);
-      _drawOvalMouth(canvas, stroke, 64, idleMouthY, 5, 4);
+      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 4, 2);
+      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, -2, -2);
+      _drawOvalMouth(canvas, stroke, 160, idleMouthY, 9, 7);
     }
 
     _drawAccessories(
@@ -1263,10 +1263,10 @@ class _CompanionFacePainter extends CustomPainter {
       ),
       fill,
     );
-    if (clampedH >= 10) {
+    if (clampedH >= 18) {
+      canvas.drawCircle(Offset(cx + pupilDx, cy + pupilDy), 9, cut);
+    } else if (clampedH >= 11) {
       canvas.drawCircle(Offset(cx + pupilDx, cy + pupilDy), 5, cut);
-    } else if (clampedH >= 6) {
-      canvas.drawCircle(Offset(cx + pupilDx, cy + pupilDy), 3, cut);
     }
   }
 
@@ -1282,15 +1282,15 @@ class _CompanionFacePainter extends CustomPainter {
 
   void _drawSmile(Canvas canvas, Paint stroke, double cx, double cy, double w) {
     final hw = w / 2;
-    for (var t = 0; t < 3; t++) {
-      canvas.drawLine(Offset(cx - hw, cy + t), Offset(cx - hw / 3, cy + 7 + t), stroke);
-      canvas.drawLine(Offset(cx - hw / 3, cy + 7 + t), Offset(cx + hw / 3, cy + 7 + t), stroke);
-      canvas.drawLine(Offset(cx + hw / 3, cy + 7 + t), Offset(cx + hw, cy + t), stroke);
+    for (var t = 0; t < 5; t++) {
+      canvas.drawLine(Offset(cx - hw, cy + t), Offset(cx - hw / 3, cy + 13 + t), stroke);
+      canvas.drawLine(Offset(cx - hw / 3, cy + 13 + t), Offset(cx + hw / 3, cy + 13 + t), stroke);
+      canvas.drawLine(Offset(cx + hw / 3, cy + 13 + t), Offset(cx + hw, cy + t), stroke);
     }
   }
 
   void _drawOvalMouth(Canvas canvas, Paint stroke, double cx, double cy, double rw, double rh) {
-    for (var t = 0; t < 2; t++) {
+    for (var t = 0; t < 4; t++) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(center: Offset(cx, cy + t), width: rw * 2, height: rh * 2),
@@ -1305,8 +1305,8 @@ class _CompanionFacePainter extends CustomPainter {
     canvas.drawCircle(Offset(center.dx - s, center.dy - s / 3), s, fill);
     canvas.drawCircle(Offset(center.dx + s, center.dy - s / 3), s, fill);
     final path = Path()
-      ..moveTo(center.dx - s * 2, center.dy - s / 3 + 1)
-      ..lineTo(center.dx + s * 2, center.dy - s / 3 + 1)
+      ..moveTo(center.dx - s * 2, center.dy - s / 3 + 2)
+      ..lineTo(center.dx + s * 2, center.dy - s / 3 + 2)
       ..lineTo(center.dx, center.dy + s * 2)
       ..close();
     canvas.drawPath(path, fill);
@@ -1315,22 +1315,22 @@ class _CompanionFacePainter extends CustomPainter {
   void _drawHappyArc(Canvas canvas, Paint stroke, double cx, double cy, double width) {
     final hw = width / 2;
     for (var t = 0; t < 5; t++) {
-      canvas.drawLine(Offset(cx - hw, cy + 5 + t), Offset(cx, cy - 5 + t), stroke);
-      canvas.drawLine(Offset(cx, cy - 5 + t), Offset(cx + hw, cy + 5 + t), stroke);
+      canvas.drawLine(Offset(cx - hw, cy + 10 + t), Offset(cx, cy - 10 + t), stroke);
+      canvas.drawLine(Offset(cx, cy - 10 + t), Offset(cx + hw, cy + 10 + t), stroke);
     }
   }
 
   void _drawSadArc(Canvas canvas, Paint stroke, double cx, double cy, double width) {
     final hw = width / 2;
-    for (var t = 0; t < 3; t++) {
-      canvas.drawLine(Offset(cx - hw, cy - 3 + t), Offset(cx, cy + 5 + t), stroke);
-      canvas.drawLine(Offset(cx, cy + 5 + t), Offset(cx + hw, cy - 3 + t), stroke);
+    for (var t = 0; t < 5; t++) {
+      canvas.drawLine(Offset(cx - hw, cy - 6 + t), Offset(cx, cy + 10 + t), stroke);
+      canvas.drawLine(Offset(cx, cy + 10 + t), Offset(cx + hw, cy - 6 + t), stroke);
     }
   }
 
   void _drawKissLips(Canvas canvas, Paint fill, Paint cut, double cx, double cy) {
-    canvas.drawCircle(Offset(cx, cy), 6, fill);
-    canvas.drawCircle(Offset(cx, cy), 3, cut);
+    canvas.drawCircle(Offset(cx, cy), 11, fill);
+    canvas.drawCircle(Offset(cx, cy), 6, cut);
   }
 
   void _drawTear(Canvas canvas, Paint fill, Offset center, double size) {
@@ -1344,7 +1344,7 @@ class _CompanionFacePainter extends CustomPainter {
   }
 
   void _drawBrow(Canvas canvas, Paint stroke, Offset start, Offset end) {
-    for (var t = 0; t < 3; t++) {
+    for (var t = 0; t < 5; t++) {
       canvas.drawLine(start.translate(0, t.toDouble()), end.translate(0, t.toDouble()), stroke);
     }
   }
@@ -1361,8 +1361,8 @@ class _CompanionFacePainter extends CustomPainter {
   }
 
   void _drawZ(Canvas canvas, Paint stroke, Offset origin, double scale) {
-    final width = 5 * scale;
-    final height = 5 * scale;
+    final width = 12 * scale;
+    final height = 12 * scale;
     canvas.drawLine(origin, Offset(origin.dx + width, origin.dy), stroke);
     canvas.drawLine(Offset(origin.dx + width, origin.dy), Offset(origin.dx, origin.dy + height), stroke);
     canvas.drawLine(Offset(origin.dx, origin.dy + height), Offset(origin.dx + width, origin.dy + height), stroke);
@@ -1386,130 +1386,130 @@ class _CompanionFacePainter extends CustomPainter {
     final mustacheCenterY = mouthY + _clampOffset(mustacheOffsetY);
 
     if (ears == 'cat') {
-      _triangle(canvas, stroke, Offset(leftX - 16, eyeY - 18), Offset(leftX - 8, eyeY - 30), Offset(leftX + 2, eyeY - 18));
-      _triangle(canvas, stroke, Offset(rightX - 2, eyeY - 18), Offset(rightX + 8, eyeY - 30), Offset(rightX + 16, eyeY - 18));
+      _triangle(canvas, stroke, Offset(leftX - 40, eyeY - 34), Offset(leftX - 20, eyeY - 56), Offset(leftX + 5, eyeY - 34));
+      _triangle(canvas, stroke, Offset(rightX - 5, eyeY - 34), Offset(rightX + 20, eyeY - 56), Offset(rightX + 40, eyeY - 34));
     } else if (ears == 'bear') {
-      canvas.drawCircle(Offset(leftX - 12, eyeY - 20), 6, stroke);
-      canvas.drawCircle(Offset(rightX + 12, eyeY - 20), 6, stroke);
+      canvas.drawCircle(Offset(leftX - 30, eyeY - 38), 11, stroke);
+      canvas.drawCircle(Offset(rightX + 30, eyeY - 38), 11, stroke);
     } else if (ears == 'bunny') {
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 15, eyeY - 34, 8, 16), const Radius.circular(4)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 38, eyeY - 64, 15, 30), const Radius.circular(7)),
         stroke,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(rightX + 7, eyeY - 34, 8, 16), const Radius.circular(4)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(rightX + 18, eyeY - 64, 15, 30), const Radius.circular(7)),
         stroke,
       );
     }
 
     if (hair == 'tuft') {
-      final lift = _scaleValue(12, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final spread = _scaleValue(5, _clampPercent((scaledHair * scaledHairWidth / 100).round()));
+      final lift = _scaleValue(22, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final spread = _scaleValue(10, _clampPercent((scaledHair * scaledHairWidth / 100).round()));
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
-          Offset(hairCenterX - spread, hairCenterY - 12 + strokeIndex),
-          Offset(hairCenterX, hairCenterY - 12 - lift + strokeIndex),
+          Offset(hairCenterX - spread, hairCenterY - 22 + strokeIndex),
+          Offset(hairCenterX, hairCenterY - 22 - lift + strokeIndex),
           stroke,
         );
         canvas.drawLine(
-          Offset(hairCenterX, hairCenterY - 12 - lift + strokeIndex),
-          Offset(hairCenterX + spread, hairCenterY - 12 + strokeIndex),
+          Offset(hairCenterX, hairCenterY - 22 - lift + strokeIndex),
+          Offset(hairCenterX + spread, hairCenterY - 22 + strokeIndex),
           stroke,
         );
         canvas.drawLine(
-          Offset(hairCenterX, hairCenterY - 12 - lift + strokeIndex),
-          Offset(hairCenterX + 1, hairCenterY - 8 + strokeIndex),
+          Offset(hairCenterX, hairCenterY - 22 - lift + strokeIndex),
+          Offset(hairCenterX + 2, hairCenterY - 15 + strokeIndex),
           stroke,
         );
       }
     } else if (hair == 'bangs') {
-      final topY = hairCenterY - 12 - _scaleValue(3, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final leftEdge = hairCenterX - _scaleValue(18, scaledHairWidth);
-      final rightEdge = hairCenterX + _scaleValue(18, scaledHairWidth);
+      final topY = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final leftEdge = hairCenterX - _scaleValue(45, scaledHairWidth);
+      final rightEdge = hairCenterX + _scaleValue(45, scaledHairWidth);
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(Offset(leftEdge, topY + strokeIndex), Offset(rightEdge, topY + strokeIndex), stroke);
       }
-      for (double x = leftX - 14; x <= rightX + 14; x += 8) {
+      for (double x = leftX - 35; x <= rightX + 35; x += 20) {
         final shiftedX = hairCenterX + (x - faceCenterX);
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
-            Offset(shiftedX, topY + 1 + strokeIndex),
-            Offset(shiftedX + _scaleValue(3, scaledHairWidth), hairCenterY - 7 + strokeIndex),
+            Offset(shiftedX, topY + 2 + strokeIndex),
+            Offset(shiftedX + _scaleValue(6, scaledHairWidth), hairCenterY - 13 + strokeIndex),
             stroke,
           );
         }
       }
     } else if (hair == 'spiky') {
-      for (double x = leftX - 14; x <= rightX + 14; x += 10) {
+      for (double x = leftX - 35; x <= rightX + 35; x += 25) {
         final shiftedX = hairCenterX + (x - faceCenterX);
-        final peak = hairCenterY - 10 - _scaleValue(9, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+        final peak = hairCenterY - 19 - _scaleValue(17, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
-            Offset(shiftedX, hairCenterY - 10 + strokeIndex),
-            Offset(shiftedX + _scaleValue(4, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX, hairCenterY - 19 + strokeIndex),
+            Offset(shiftedX + _scaleValue(10, scaledHairWidth), peak + strokeIndex),
             stroke,
           );
           canvas.drawLine(
-            Offset(shiftedX + _scaleValue(4, scaledHairWidth), peak + strokeIndex),
-            Offset(shiftedX + _scaleValue(8, scaledHairWidth), hairCenterY - 10 + strokeIndex),
+            Offset(shiftedX + _scaleValue(10, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX + _scaleValue(20, scaledHairWidth), hairCenterY - 19 + strokeIndex),
             stroke,
           );
         }
       }
     } else if (hair == 'swoop') {
-      final topY = hairCenterY - 12 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final topY = hairCenterY - 22 - _scaleValue(11, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
-          Offset(hairCenterX - _scaleValue(18, scaledHairWidth), hairCenterY - 9 + strokeIndex),
-          Offset(hairCenterX + _scaleValue(12, scaledHairWidth), topY + strokeIndex),
+          Offset(hairCenterX - _scaleValue(45, scaledHairWidth), hairCenterY - 17 + strokeIndex),
+          Offset(hairCenterX + _scaleValue(30, scaledHairWidth), topY + strokeIndex),
           stroke,
         );
         canvas.drawLine(
-          Offset(hairCenterX + _scaleValue(12, scaledHairWidth), topY + strokeIndex),
-          Offset(hairCenterX + _scaleValue(28, scaledHairWidth), hairCenterY - 5 + strokeIndex),
+          Offset(hairCenterX + _scaleValue(30, scaledHairWidth), topY + strokeIndex),
+          Offset(hairCenterX + _scaleValue(70, scaledHairWidth), hairCenterY - 9 + strokeIndex),
           stroke,
         );
         canvas.drawLine(
-          Offset(hairCenterX - _scaleValue(10, scaledHairWidth), hairCenterY - 10 + strokeIndex),
-          Offset(hairCenterX + _scaleValue(4, scaledHairWidth), topY + 2 + strokeIndex),
+          Offset(hairCenterX - _scaleValue(25, scaledHairWidth), hairCenterY - 19 + strokeIndex),
+          Offset(hairCenterX + _scaleValue(10, scaledHairWidth), topY + 4 + strokeIndex),
           stroke,
         );
       }
     } else if (hair == 'bob') {
-      final topY = hairCenterY - 11 - _scaleValue(4, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final width = _scaleValue((rightX - leftX) + 36, scaledHairWidth);
+      final topY = hairCenterY - 21 - _scaleValue(8, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final width = _scaleValue((rightX - leftX) + 90, scaledHairWidth);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(hairCenterX - width / 2, topY, width, 10 + _scaleValue(4, scaledHairHeight)),
-          const Radius.circular(5),
+          Rect.fromLTWH(hairCenterX - width / 2, topY, width, 19 + _scaleValue(8, scaledHairHeight)),
+          const Radius.circular(9),
         ),
         stroke,
       );
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
-          Offset(hairCenterX - width / 2, hairCenterY - 1 + strokeIndex),
-          Offset(hairCenterX - width / 2 + _scaleValue(6, scaledHairWidth), hairCenterY + 7 + strokeIndex),
+          Offset(hairCenterX - width / 2, hairCenterY - 2 + strokeIndex),
+          Offset(hairCenterX - width / 2 + _scaleValue(15, scaledHairWidth), hairCenterY + 13 + strokeIndex),
           stroke,
         );
         canvas.drawLine(
-          Offset(hairCenterX + width / 2, hairCenterY - 1 + strokeIndex),
-          Offset(hairCenterX + width / 2 - _scaleValue(6, scaledHairWidth), hairCenterY + 7 + strokeIndex),
+          Offset(hairCenterX + width / 2, hairCenterY - 2 + strokeIndex),
+          Offset(hairCenterX + width / 2 - _scaleValue(15, scaledHairWidth), hairCenterY + 13 + strokeIndex),
           stroke,
         );
       }
     } else if (hair == 'messy') {
-      for (double x = leftX - 10; x <= rightX + 12; x += 9) {
+      for (double x = leftX - 25; x <= rightX + 30; x += 22) {
         final shiftedX = hairCenterX + (x - faceCenterX);
-        final peak = hairCenterY - 8 - _scaleValue(7, _clampPercent((scaledHair * scaledHairHeight / 100).round())) + (((x ~/ 9) % 2 == 0) ? 0 : 3);
+        final peak = hairCenterY - 15 - _scaleValue(13, _clampPercent((scaledHair * scaledHairHeight / 100).round())) + (((x ~/ 22) % 2 == 0) ? 0 : 6);
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
-            Offset(shiftedX, hairCenterY - 8 + strokeIndex),
-            Offset(shiftedX + _scaleValue(3, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX, hairCenterY - 15 + strokeIndex),
+            Offset(shiftedX + _scaleValue(6, scaledHairWidth), peak + strokeIndex),
             stroke,
           );
           canvas.drawLine(
-            Offset(shiftedX + _scaleValue(3, scaledHairWidth), peak + strokeIndex),
-            Offset(shiftedX + _scaleValue(6, scaledHairWidth), hairCenterY - 9 + strokeIndex),
+            Offset(shiftedX + _scaleValue(6, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX + _scaleValue(15, scaledHairWidth), hairCenterY - 17 + strokeIndex),
             stroke,
           );
         }
@@ -1517,112 +1517,112 @@ class _CompanionFacePainter extends CustomPainter {
     }
 
     if (headwear == 'bow') {
-      _triangle(canvas, stroke, Offset(faceCenterX - 4, eyeY - 24), Offset(faceCenterX - 16, eyeY - 18), Offset(faceCenterX - 8, eyeY - 12));
-      _triangle(canvas, stroke, Offset(faceCenterX + 4, eyeY - 24), Offset(faceCenterX + 16, eyeY - 18), Offset(faceCenterX + 8, eyeY - 12));
-      canvas.drawCircle(Offset(faceCenterX, eyeY - 18), 2, stroke);
+      _triangle(canvas, stroke, Offset(faceCenterX - 10, eyeY - 45), Offset(faceCenterX - 40, eyeY - 34), Offset(faceCenterX - 20, eyeY - 22));
+      _triangle(canvas, stroke, Offset(faceCenterX + 10, eyeY - 45), Offset(faceCenterX + 40, eyeY - 34), Offset(faceCenterX + 20, eyeY - 22));
+      canvas.drawCircle(Offset(faceCenterX, eyeY - 34), 4, stroke);
     } else if (headwear == 'beanie') {
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(faceCenterX - 24, eyeY - 28, 48, 12), const Radius.circular(5)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(faceCenterX - 60, eyeY - 52, 120, 22), const Radius.circular(9)),
         stroke,
       );
-      canvas.drawLine(Offset(faceCenterX - 20, eyeY - 15), Offset(faceCenterX + 20, eyeY - 15), stroke);
-      canvas.drawCircle(Offset(faceCenterX, eyeY - 30), 3, stroke);
+      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 28), Offset(faceCenterX + 50, eyeY - 28), stroke);
+      canvas.drawCircle(Offset(faceCenterX, eyeY - 56), 6, stroke);
     } else if (headwear == 'crown') {
       final crown = Path()
-        ..moveTo(faceCenterX - 20, eyeY - 18)
-        ..lineTo(faceCenterX - 12, eyeY - 30)
-        ..lineTo(faceCenterX - 2, eyeY - 18)
-        ..lineTo(faceCenterX + 6, eyeY - 32)
-        ..lineTo(faceCenterX + 14, eyeY - 18)
-        ..lineTo(faceCenterX + 20, eyeY - 28);
+        ..moveTo(faceCenterX - 50, eyeY - 34)
+        ..lineTo(faceCenterX - 30, eyeY - 56)
+        ..lineTo(faceCenterX - 5, eyeY - 34)
+        ..lineTo(faceCenterX + 15, eyeY - 60)
+        ..lineTo(faceCenterX + 35, eyeY - 34)
+        ..lineTo(faceCenterX + 50, eyeY - 52);
       canvas.drawPath(crown, stroke);
-      canvas.drawLine(Offset(faceCenterX - 20, eyeY - 18), Offset(faceCenterX + 20, eyeY - 18), stroke);
+      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 34), Offset(faceCenterX + 50, eyeY - 34), stroke);
     }
 
     if (glasses == 'round') {
-      canvas.drawCircle(Offset(leftX, eyeY), 12, stroke);
-      canvas.drawCircle(Offset(rightX, eyeY), 12, stroke);
-      canvas.drawLine(Offset(leftX + 12, eyeY), Offset(rightX - 12, eyeY), stroke);
+      canvas.drawCircle(Offset(leftX, eyeY), 22, stroke);
+      canvas.drawCircle(Offset(rightX, eyeY), 22, stroke);
+      canvas.drawLine(Offset(leftX + 22, eyeY), Offset(rightX - 22, eyeY), stroke);
     } else if (glasses == 'square') {
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 14, eyeY - 11, 28, 22), const Radius.circular(4)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 26, eyeY - 20, 52, 40), const Radius.circular(7)),
         stroke,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(rightX - 14, eyeY - 11, 28, 22), const Radius.circular(4)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(rightX - 26, eyeY - 20, 52, 40), const Radius.circular(7)),
         stroke,
       );
-      canvas.drawLine(Offset(leftX + 14, eyeY), Offset(rightX - 14, eyeY), stroke);
+      canvas.drawLine(Offset(leftX + 26, eyeY), Offset(rightX - 26, eyeY), stroke);
     } else if (glasses == 'visor') {
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 18, eyeY - 12, (rightX - leftX) + 36, 20), const Radius.circular(6)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(leftX - 45, eyeY - 22, (rightX - leftX) + 90, 38), const Radius.circular(11)),
         stroke,
       );
     }
 
     if (mustache == 'classic') {
-      final wing = _scaleValue(12, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final inner = _scaleValue(4, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final rise = _scaleValue(4, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final wing = _scaleValue(22, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final inner = _scaleValue(8, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final rise = _scaleValue(8, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
       for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + strokeIndex), Offset(mustacheCenterX - inner, mustacheCenterY - 1 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + 1 + strokeIndex), Offset(mustacheCenterX - inner, mustacheCenterY + 1 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + inner, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + inner, mustacheCenterY + 1 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + 1 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + strokeIndex), Offset(mustacheCenterX - inner, mustacheCenterY - 2 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + 2 + strokeIndex), Offset(mustacheCenterX - inner, mustacheCenterY + 2 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + inner, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + inner, mustacheCenterY + 2 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + 2 + strokeIndex), stroke);
       }
     } else if (mustache == 'curled') {
-      final wing = _scaleValue(12, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final rise = _scaleValue(2, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final wing = _scaleValue(22, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final rise = _scaleValue(4, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
       for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + strokeIndex), Offset(mustacheCenterX - 2, mustacheCenterY - 1 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + 2, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - rise + strokeIndex), Offset(mustacheCenterX - 4, mustacheCenterY - 2 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + 4, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - rise + strokeIndex), stroke);
       }
-      canvas.drawCircle(Offset(mustacheCenterX - wing - 2, mustacheCenterY - rise - 1), 2, stroke);
-      canvas.drawCircle(Offset(mustacheCenterX + wing + 2, mustacheCenterY - rise - 1), 2, stroke);
+      canvas.drawCircle(Offset(mustacheCenterX - wing - 4, mustacheCenterY - rise - 2), 4, stroke);
+      canvas.drawCircle(Offset(mustacheCenterX + wing + 4, mustacheCenterY - rise - 2), 4, stroke);
     } else if (mustache == 'handlebar') {
-      final wing = _scaleValue(14, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final curl = _scaleValue(5, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
-      final curlWidth = _scaleValue(4, scaledMustacheWidth);
+      final wing = _scaleValue(26, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final curl = _scaleValue(10, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final curlWidth = _scaleValue(8, scaledMustacheWidth);
       for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX - 2, mustacheCenterY + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + 2, mustacheCenterY + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - 1 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX - wing - curlWidth, mustacheCenterY - curl + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + wing, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX + wing + curlWidth, mustacheCenterY - curl + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX - 4, mustacheCenterY + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + 4, mustacheCenterY + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - 2 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX - wing - curlWidth, mustacheCenterY - curl + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + wing + curlWidth, mustacheCenterY - curl + strokeIndex), stroke);
       }
     } else if (mustache == 'walrus') {
-      final width = _scaleValue(14, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final height = _scaleValue(4, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
-      final bridgeWidth = _scaleValue(4, scaledMustacheThickness);
+      final width = _scaleValue(26, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final height = _scaleValue(8, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final bridgeWidth = _scaleValue(8, scaledMustacheThickness);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(mustacheCenterX - width, mustacheCenterY - 6, width * 2, height + 2), const Radius.circular(3)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(mustacheCenterX - width, mustacheCenterY - 11, width * 2, height + 4), const Radius.circular(5)),
         fill,
       );
-      canvas.drawRect(Rect.fromLTWH(mustacheCenterX - bridgeWidth / 2, mustacheCenterY - 3, bridgeWidth, height + 4), fill);
+      canvas.drawRect(Rect.fromLTWH(mustacheCenterX - bridgeWidth / 2, mustacheCenterY - 6, bridgeWidth, height + 8), fill);
     } else if (mustache == 'pencil') {
-      final width = _scaleValue(13, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final inset = _scaleValue(2, scaledMustacheThickness);
+      final width = _scaleValue(24, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final inset = _scaleValue(4, scaledMustacheThickness);
       for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
-        canvas.drawLine(Offset(mustacheCenterX - width, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + width, mustacheCenterY - 2 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX - width + inset, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX + width - inset, mustacheCenterY - 1 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - width, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX + width, mustacheCenterY - 4 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - width + inset, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + width - inset, mustacheCenterY - 2 + strokeIndex), stroke);
       }
     } else if (mustache == 'imperial') {
-      final wing = _scaleValue(12, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
-      final rise = _scaleValue(9, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
-      final flare = _scaleValue(2, scaledMustacheWidth);
+      final wing = _scaleValue(22, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final rise = _scaleValue(17, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final flare = _scaleValue(4, scaledMustacheWidth);
       for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX - 1, mustacheCenterY - 1 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + 1, mustacheCenterY - 1 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - 2 + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX - wing - flare, mustacheCenterY - rise + strokeIndex), stroke);
-        canvas.drawLine(Offset(mustacheCenterX + wing, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + wing + flare, mustacheCenterY - rise + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX - 2, mustacheCenterY - 2 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + 2, mustacheCenterY - 2 + strokeIndex), Offset(mustacheCenterX + wing, mustacheCenterY - 4 + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX - wing - flare, mustacheCenterY - rise + strokeIndex), stroke);
+        canvas.drawLine(Offset(mustacheCenterX + wing, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX + wing + flare, mustacheCenterY - rise + strokeIndex), stroke);
       }
     }
 
     if (piercing == 'brow') {
-      canvas.drawLine(Offset(rightX + 6, eyeY - 14), Offset(rightX + 14, eyeY - 12), stroke);
+      canvas.drawLine(Offset(rightX + 15, eyeY - 26), Offset(rightX + 35, eyeY - 22), stroke);
     } else if (piercing == 'nose') {
-      canvas.drawCircle(Offset(faceCenterX + 4, mouthY - 10), 2, stroke);
+      canvas.drawCircle(Offset(faceCenterX + 8, mouthY - 19), 4, stroke);
     } else if (piercing == 'lip') {
-      canvas.drawCircle(Offset(faceCenterX + 8, mouthY + 2), 2, stroke);
+      canvas.drawCircle(Offset(faceCenterX + 15, mouthY + 4), 4, stroke);
     }
   }
 
@@ -1645,149 +1645,149 @@ class _CompanionFacePainter extends CustomPainter {
     required double mouthY,
   }
   ) {
-    const leftX = 36.0;
-    const rightX = 92.0;
-    const eyeWidth = 28.0;
-    const eyeHeight = 22.0;
-    const eyeRadius = 7.0;
-    final eyeShift = eyeY - 24.0;
-    final mouthShift = mouthY - 52.0;
+    const leftX = 68.0;
+    const rightX = 172.0;
+    const eyeWidth = 52.0;
+    const eyeHeight = 40.0;
+    const eyeRadius = 13.0;
+    final eyeShift = eyeY - 85.0;
+    final mouthShift = mouthY - 140.0;
 
     switch (expression) {
       case 'heart':
-        _drawHeart(canvas, fill, const Offset(64, 30), 10);
+        _drawHeart(canvas, fill, const Offset(160, 112), 19);
         break;
       case 'love':
         _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawHeart(canvas, fill, Offset(leftX, eyeY), 4);
-        _drawHeart(canvas, fill, Offset(rightX, eyeY), 4);
-        _drawSmile(canvas, stroke, 64, mouthY - 2, 28);
-        _drawHeart(canvas, fill, Offset(24, 22 + eyeShift), 3);
-        _drawHeart(canvas, fill, Offset(104, 18 + eyeShift), 2);
+        _drawHeart(canvas, fill, Offset(leftX, eyeY), 8);
+        _drawHeart(canvas, fill, Offset(rightX, eyeY), 8);
+        _drawSmile(canvas, stroke, 160, mouthY - 4, 52);
+        _drawHeart(canvas, fill, Offset(60, 82 + eyeShift), 6);
+        _drawHeart(canvas, fill, Offset(260, 68 + eyeShift), 4);
         break;
       case 'surprised':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth + 4, eyeHeight + 8, eyeRadius + 2, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth + 4, eyeHeight + 8, eyeRadius + 2, 0, 0);
-        _drawBrow(canvas, stroke, Offset(22, 7 + eyeShift), Offset(50, 7 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(78, 7 + eyeShift), Offset(106, 7 + eyeShift));
-        _drawOvalMouth(canvas, stroke, 64, mouthY, 6, 5);
+        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
+        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
+        _drawBrow(canvas, stroke, Offset(55, 26 + eyeShift), Offset(125, 26 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(195, 26 + eyeShift), Offset(265, 26 + eyeShift));
+        _drawOvalMouth(canvas, stroke, 160, mouthY, 11, 9);
         break;
       case 'angry':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 2, eyeWidth, eyeHeight - 2, eyeRadius, 0, 2);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 2, eyeWidth, eyeHeight - 2, eyeRadius, 0, 2);
-        canvas.drawRect(Rect.fromLTWH(22, 15 + eyeShift, 28, 4), cut);
-        canvas.drawRect(Rect.fromLTWH(78, 15 + eyeShift, 28, 4), cut);
-        _drawBrow(canvas, stroke, Offset(22, 8 + eyeShift), Offset(44, 18 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(106, 8 + eyeShift), Offset(84, 18 + eyeShift));
-        for (var line = 0; line < 3; line++) {
-          canvas.drawLine(Offset(54, mouthY + line), Offset(74, mouthY + line), stroke);
+        _drawEye(canvas, fill, cut, leftX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
+        _drawEye(canvas, fill, cut, rightX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
+        canvas.drawRect(Rect.fromLTWH(55, 56 + eyeShift, 52, 8), cut);
+        canvas.drawRect(Rect.fromLTWH(195, 56 + eyeShift, 52, 8), cut);
+        _drawBrow(canvas, stroke, Offset(55, 30 + eyeShift), Offset(110, 68 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(265, 30 + eyeShift), Offset(210, 68 + eyeShift));
+        for (var line = 0; line < 5; line++) {
+          canvas.drawLine(Offset(135, mouthY + line), Offset(185, mouthY + line), stroke);
         }
         break;
       case 'sad':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 3, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 3, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
-        _drawBrow(canvas, stroke, Offset(22, 18 + eyeShift), Offset(46, 8 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(106, 18 + eyeShift), Offset(82, 8 + eyeShift));
-        _drawSadArc(canvas, stroke, 64, mouthY - 2, 16);
-        _drawTear(canvas, fill, Offset(52, 36 + eyeShift), 3);
+        _drawEye(canvas, fill, cut, leftX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
+        _drawEye(canvas, fill, cut, rightX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
+        _drawBrow(canvas, stroke, Offset(55, 68 + eyeShift), Offset(115, 30 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(265, 68 + eyeShift), Offset(205, 30 + eyeShift));
+        _drawSadArc(canvas, stroke, 160, mouthY - 4, 30);
+        _drawTear(canvas, fill, Offset(130, 135 + eyeShift), 6);
         break;
       case 'sleepy':
-        _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 5, eyeRadius);
-        _drawBlinkEye(canvas, fill, rightX, eyeY, eyeWidth, 5, eyeRadius);
-        canvas.drawLine(Offset(56, mouthY), Offset(72, mouthY), stroke);
-        _drawZ(canvas, stroke, Offset(100, 12 + eyeShift), 1.0);
-        _drawZ(canvas, stroke, Offset(108, 18 + eyeShift), 0.8);
+        _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 9, eyeRadius);
+        _drawBlinkEye(canvas, fill, rightX, eyeY, eyeWidth, 9, eyeRadius);
+        canvas.drawLine(Offset(140, mouthY), Offset(180, mouthY), stroke);
+        _drawZ(canvas, stroke, Offset(250, 45 + eyeShift), 1.0);
+        _drawZ(canvas, stroke, Offset(270, 68 + eyeShift), 0.8);
         break;
       case 'thinking':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth - 6, 12, eyeRadius, 5, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 5, 0);
-        canvas.drawCircle(Offset(108, 38 + eyeShift), 2, fill);
-        canvas.drawCircle(Offset(114, 28 + eyeShift), 3, fill);
-        canvas.drawCircle(Offset(118, 16 + eyeShift), 4, fill);
-        canvas.drawLine(Offset(56, mouthY), Offset(70, mouthY - 2), stroke);
-        canvas.drawLine(Offset(56, mouthY + 1), Offset(70, mouthY - 1), stroke);
+        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth - 11, 22, eyeRadius, 9, 0);
+        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, 0);
+        canvas.drawCircle(Offset(270, 143 + eyeShift), 4, fill);
+        canvas.drawCircle(Offset(285, 105 + eyeShift), 6, fill);
+        canvas.drawCircle(Offset(295, 60 + eyeShift), 8, fill);
+        canvas.drawLine(Offset(140, mouthY), Offset(175, mouthY - 4), stroke);
+        canvas.drawLine(Offset(140, mouthY + 2), Offset(175, mouthY - 2), stroke);
         break;
       case 'smile':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
-        _drawSmile(canvas, stroke, 64, mouthY - 2, 24);
+        _drawSmile(canvas, stroke, 160, mouthY - 4, 44);
         break;
       case 'confused':
-        _drawEye(canvas, fill, cut, leftX, eyeY - 2, eyeWidth, eyeHeight + 2, eyeRadius, -2, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 3, eyeWidth - 6, eyeHeight - 6, eyeRadius - 2, 2, 0);
-        _drawBrow(canvas, stroke, Offset(22, 9 + eyeShift), Offset(46, 13 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(84, 15 + eyeShift), Offset(106, 11 + eyeShift));
-        for (var line = 0; line < 3; line++) {
-          canvas.drawLine(Offset(52, mouthY + 4 + line), Offset(76, mouthY - 2 + line), stroke);
+        _drawEye(canvas, fill, cut, leftX, eyeY - 4, eyeWidth, eyeHeight + 4, eyeRadius, -4, 0);
+        _drawEye(canvas, fill, cut, rightX, eyeY + 6, eyeWidth - 11, eyeHeight - 11, eyeRadius - 4, 4, 0);
+        _drawBrow(canvas, stroke, Offset(55, 34 + eyeShift), Offset(115, 49 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(210, 56 + eyeShift), Offset(265, 41 + eyeShift));
+        for (var line = 0; line < 5; line++) {
+          canvas.drawLine(Offset(130, mouthY + 8 + line), Offset(190, mouthY - 4 + line), stroke);
         }
         break;
       case 'look_around':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 5, -1);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 5, -1);
-        canvas.drawLine(Offset(57, mouthY), Offset(71, mouthY), stroke);
-        canvas.drawLine(Offset(57, mouthY + 1), Offset(71, mouthY + 1), stroke);
+        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, -2);
+        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, -2);
+        canvas.drawLine(Offset(143, mouthY), Offset(178, mouthY), stroke);
+        canvas.drawLine(Offset(143, mouthY + 2), Offset(178, mouthY + 2), stroke);
         break;
       case 'kiss':
-        _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 4, eyeRadius);
+        _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 8, eyeRadius);
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawKissLips(canvas, fill, cut, 64, mouthY);
-        _drawHeart(canvas, fill, Offset(54, 28 + eyeShift), 3);
-        _drawHeart(canvas, fill, Offset(80, 20 + eyeShift), 2);
+        _drawKissLips(canvas, fill, cut, 160, mouthY);
+        _drawHeart(canvas, fill, Offset(135, 105 + eyeShift), 6);
+        _drawHeart(canvas, fill, Offset(200, 75 + eyeShift), 4);
         break;
       case 'wink':
-        for (var line = 0; line < 3; line++) {
+        for (var line = 0; line < 5; line++) {
           canvas.drawLine(Offset(leftX - eyeWidth / 2, eyeY + line), Offset(leftX + eyeWidth / 2, eyeY + line), stroke);
         }
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawSmile(canvas, stroke, 64, mouthY - 2, 20);
+        _drawSmile(canvas, stroke, 160, mouthY - 4, 38);
         break;
       case 'laugh':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(54, 47 + mouthShift, 20, 12), const Radius.circular(4)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(135, 126 + mouthShift, 38, 22), const Radius.circular(7)),
           fill,
         );
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(56, 49 + mouthShift, 16, 8), const Radius.circular(3)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(140, 130 + mouthShift, 30, 15), const Radius.circular(5)),
           cut,
         );
         break;
       case 'star_eyes':
         _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawStar(canvas, stroke, Offset(leftX, eyeY), 5);
-        _drawStar(canvas, stroke, Offset(rightX, eyeY), 5);
-        _drawSmile(canvas, stroke, 64, mouthY - 2, 24);
+        _drawStar(canvas, stroke, Offset(leftX, eyeY), 9);
+        _drawStar(canvas, stroke, Offset(rightX, eyeY), 9);
+        _drawSmile(canvas, stroke, 160, mouthY - 4, 44);
         break;
       case 'excited':
-        _drawEye(canvas, fill, cut, leftX, eyeY - 3, eyeWidth + 4, eyeHeight + 4, eyeRadius, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY - 3, eyeWidth + 4, eyeHeight + 4, eyeRadius, 0, 0);
-        _drawBrow(canvas, stroke, Offset(22, eyeShift), Offset(50, eyeShift));
-        _drawBrow(canvas, stroke, Offset(78, eyeShift), Offset(106, eyeShift));
-        _drawSmile(canvas, stroke, 64, mouthY - 4, 28);
+        _drawEye(canvas, fill, cut, leftX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
+        _drawEye(canvas, fill, cut, rightX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
+        _drawBrow(canvas, stroke, Offset(55, eyeShift), Offset(125, eyeShift));
+        _drawBrow(canvas, stroke, Offset(195, eyeShift), Offset(265, eyeShift));
+        _drawSmile(canvas, stroke, 160, mouthY - 8, 52);
         break;
       case 'tongue':
-        for (var line = 0; line < 3; line++) {
+        for (var line = 0; line < 5; line++) {
           canvas.drawLine(Offset(leftX - eyeWidth / 2, eyeY + line), Offset(leftX + eyeWidth / 2, eyeY + line), stroke);
         }
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        for (var line = 0; line < 2; line++) {
-          canvas.drawLine(Offset(54, mouthY - 2 + line), Offset(64, mouthY + 2 + line), stroke);
-          canvas.drawLine(Offset(64, mouthY + 2 + line), Offset(74, mouthY - 2 + line), stroke);
+        for (var line = 0; line < 4; line++) {
+          canvas.drawLine(Offset(135, mouthY - 4 + line), Offset(160, mouthY + 4 + line), stroke);
+          canvas.drawLine(Offset(160, mouthY + 4 + line), Offset(185, mouthY - 4 + line), stroke);
         }
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(58, 55 + mouthShift, 12, 8), const Radius.circular(4)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(145, 146 + mouthShift, 22, 15), const Radius.circular(7)),
           fill,
         );
-        canvas.drawCircle(Offset(64, 60 + mouthShift), 2, cut);
+        canvas.drawCircle(Offset(160, 156 + mouthShift), 4, cut);
         break;
       case 'happy':
       default:
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 1);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 1);
-        _drawSmile(canvas, stroke, 64, mouthY - 3, 24);
+        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
+        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
+        _drawSmile(canvas, stroke, 160, mouthY - 6, 44);
         break;
     }
 
@@ -1805,11 +1805,11 @@ class _CompanionFacePainter extends CustomPainter {
       ..isAntiAlias = false;
 
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, 128, _visibleScreenRect.top),
+      Rect.fromLTWH(0, 0, 320, _visibleScreenRect.top),
       mask,
     );
     canvas.drawRect(
-      Rect.fromLTWH(0, _visibleScreenRect.bottom, 128, 64 - _visibleScreenRect.bottom),
+      Rect.fromLTWH(0, _visibleScreenRect.bottom, 320, 240 - _visibleScreenRect.bottom),
       mask,
     );
     canvas.drawRect(
@@ -1817,7 +1817,7 @@ class _CompanionFacePainter extends CustomPainter {
       mask,
     );
     canvas.drawRect(
-      Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 128 - _visibleScreenRect.right, _visibleScreenRect.height),
+      Rect.fromLTWH(_visibleScreenRect.right, _visibleScreenRect.top, 320 - _visibleScreenRect.right, _visibleScreenRect.height),
       mask,
     );
     canvas.drawRect(_visibleScreenRect, boundary);

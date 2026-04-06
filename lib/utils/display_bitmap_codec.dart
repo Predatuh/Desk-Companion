@@ -4,8 +4,8 @@ import 'package:image/image.dart' as img;
 
 import '../models/companion_image_payload.dart';
 
-class OledBitmapCodec {
-  OledBitmapCodec._();
+class DisplayBitmapCodec {
+  DisplayBitmapCodec._();
 
   static const int width = 320;
   static const int height = 240;
@@ -54,7 +54,7 @@ class OledBitmapCodec {
 
   static CompanionImagePayload fromBitmap({
     required Uint8List bitmap,
-    String name = 'oled_bitmap',
+    String name = 'bitmap',
   }) {
     if (bitmap.length != byteLength) {
       throw ArgumentError('Bitmap must be exactly $byteLength bytes for ${width}x$height TFT output.');

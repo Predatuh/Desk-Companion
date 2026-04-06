@@ -5,7 +5,7 @@ import 'package:flutter/painting.dart';
 import 'package:image/image.dart' as img;
 
 import '../models/companion_image_payload.dart';
-import 'oled_bitmap_codec.dart';
+import 'display_bitmap_codec.dart';
 
 class NoteCardBitmapRenderer {
   NoteCardBitmapRenderer._();
@@ -64,7 +64,7 @@ class NoteCardBitmapRenderer {
       }
     }
 
-    return OledBitmapCodec.encodeImage(
+    return DisplayBitmapCodec.encodeImage(
       sourceBytes: Uint8List.fromList(img.encodePng(baseImage)),
       name: 'custom_note_card',
       threshold: 128,
@@ -111,8 +111,8 @@ class NoteCardBitmapRenderer {
     );
 
     final image = await recorder.endRecording().toImage(
-          (OledBitmapCodec.width * scale).round(),
-          (OledBitmapCodec.height * scale).round(),
+          (DisplayBitmapCodec.width * scale).round(),
+          (DisplayBitmapCodec.height * scale).round(),
         );
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
@@ -126,8 +126,8 @@ class NoteCardBitmapRenderer {
 
     final downsampled = img.copyResize(
       highRes,
-      width: OledBitmapCodec.width,
-      height: OledBitmapCodec.height,
+      width: DisplayBitmapCodec.width,
+      height: DisplayBitmapCodec.height,
       interpolation: img.Interpolation.average,
     );
     return Uint8List.fromList(img.encodePng(downsampled));

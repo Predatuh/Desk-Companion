@@ -1910,13 +1910,13 @@ void renderIdle() {
         tft.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
         tft.print(dBuf);
       }
-      drawWeatherBadge(296, 15);
+      drawWeatherBadge(280, 15);
     }
   }
 
   // ── Face box: only clear the interior each tick (border stays on screen) ──
   tft.fillRect(1, FACE_OFFSET_Y + 1, SCREEN_WIDTH - 2, 178, COL_BG);
-  tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 18, userFaceColor);
+  tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
 
   const int leftX = 70;
   const int rightX = 170;
@@ -2453,10 +2453,10 @@ void drawStatusBar() {
   bool relayOk = (lastRelaySuccessMs > 0 && millis() - lastRelaySuccessMs < 120000UL);
   tft.setTextSize(1);
   // WiFi dot
-  tft.fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 3,
+  tft.fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 5,
                  wifiOk ? ST77XX_GREEN : COL_ROSE);
   // Relay dot
-  tft.fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 3,
+  tft.fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 5,
                  relayOk ? ST77XX_GREEN : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
 }
 
@@ -3533,7 +3533,7 @@ void loop() {
     const unsigned long interval = bannerSpeed <= 0 ? 40 : 1000UL / bannerSpeed;
     if (now - lastBannerTickMs >= interval) {
       lastBannerTickMs = now;
-      bannerOffset -= 2;  // 2px per tick for wider screen
+      bannerOffset -= 3;  // 3px per tick for wider screen
       const int textWidth = currentBanner.length() * 24;  // textSize 4 → 24px/char
       if (bannerOffset < -textWidth) {
         bannerOffset = SCREEN_WIDTH;
