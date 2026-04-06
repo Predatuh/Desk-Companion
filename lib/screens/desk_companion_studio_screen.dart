@@ -452,6 +452,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(DisplayBitmapCodec.byteLength);
+  Uint8List _drawColorData = Uint8List(DisplayBitmapCodec.colorByteLength);
   bool _invertImage = false;
   bool _showGrid = true;
   bool _drawModeEnabled = false;
@@ -1135,8 +1136,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
-                  title: 'Scenes',
-                  subtitle: 'Two-figure stick animations — wave, hug, kiss, and more.',
+                  title: 'Live scenes',
+                  subtitle: 'Send a duo animation to the device — these play directly on the display.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1169,60 +1170,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ),
                           icon: const Icon(Icons.people_outline),
                           label: Text('Start ${_selectedDeskScene.label}'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Colors',
-                  subtitle:
-                      'Customise eye, face, accent and body colors on the display.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ColorRow(
-                        label: 'Eyes',
-                        color: _eyeColor,
-                        onChanged: (c) => setState(() => _eyeColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Face / outline',
-                        color: _faceColor,
-                        onChanged: (c) => setState(() => _faceColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Accent',
-                        color: _accentColor,
-                        onChanged: (c) => setState(() => _accentColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Body',
-                        color: _bodyColor,
-                        onChanged: (c) => setState(() => _bodyColor = c),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller.sendColors(
-                                      eyeColor: _colorToRgb565(_eyeColor),
-                                      faceColor: _colorToRgb565(_faceColor),
-                                      accentColor: _colorToRgb565(_accentColor),
-                                      bodyColor: _colorToRgb565(_bodyColor),
-                                    ),
-                                    success: 'Colors applied!',
-                                  ),
-                          icon: const Icon(Icons.palette_outlined),
-                          label: const Text('Apply colors'),
                         ),
                       ),
                     ],
@@ -1546,6 +1493,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     children: [
                       DisplayDrawingPad(
                         bitmap: _drawBitmap,
+                        colorData: _drawColorData,
                         showGrid: _showGrid,
                         enabled: _drawModeEnabled,
                         pixelColor: _drawColor,
@@ -1608,7 +1556,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Draw color (preview only — device receives 1-bit)',
+                        'Draw color',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 6),
@@ -1657,8 +1605,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               onPressed: controller.busy
                                   ? null
                                   : () {
-                                      setState(() => _drawBitmap = Uint8List(
-                                          DisplayBitmapCodec.byteLength));
+                                      setState(() {
+                                        _drawBitmap = Uint8List(
+                                            DisplayBitmapCodec.byteLength);
+                                        _drawColorData = Uint8List(
+                                            DisplayBitmapCodec.colorByteLength);
+                                      });
                                       _queueLiveDraw();
                                     },
                               icon: const Icon(Icons.layers_clear_outlined),
@@ -1829,7 +1781,15 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   void _paintPixel(int x, int y) {
     final next = Uint8List.fromList(_drawBitmap);
+    final nextColor = Uint8List.fromList(_drawColorData);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
+    // Convert current draw color to RGB565
+    final r = _drawColor.r.round();
+    final g = _drawColor.g.round();
+    final b = _drawColor.b.round();
+    final rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    final hi = (rgb565 >> 8) & 0xFF;
+    final lo = rgb565 & 0xFF;
     for (var py = y - radius; py <= y + radius; py++) {
       if (py < 0 || py >= 240) {
         continue;
@@ -1844,11 +1804,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           next[byteIndex] &= ~bitMask;
         } else {
           next[byteIndex] |= bitMask;
+          final colorOffset = (py * 320 + px) * 2;
+          nextColor[colorOffset] = hi;
+          nextColor[colorOffset + 1] = lo;
         }
       }
     }
 
-    setState(() => _drawBitmap = next);
+    setState(() {
+      _drawBitmap = next;
+      _drawColorData = nextColor;
+    });
     _queueLiveDraw();
   }
 
@@ -2095,6 +2061,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       MaterialPageRoute(
         builder: (_) => _FullscreenDrawEditor(
           bitmap: _drawBitmap,
+          colorData: _drawColorData,
           showGrid: _showGrid,
           liveDraw: _liveDraw,
           eraserMode: _eraserMode,
@@ -2111,6 +2078,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
     setState(() {
       _drawBitmap = result.bitmap;
+      _drawColorData = result.colorData;
       _showGrid = result.showGrid;
       _liveDraw = result.liveDraw;
       _eraserMode = result.eraserMode;
@@ -2609,19 +2577,26 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         ),
                       ],
                       const SizedBox(height: 10),
-                      _buildStudioDropdown(
-                        context,
-                        label: 'Expression',
-                        value: _selectedExpression,
-                        values: DeskExpression.values,
-                        labelBuilder: (value) => value.label,
-                        enabled: !controller.busy,
-                        onChanged: (value) => setState(() {
-                          _selectedExpression = value;
-                          if (_appearancePreviewReferencePose) {
-                            _appearancePreviewReferencePose = false;
-                          }
-                        }),
+                      Text('Expression', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: DeskExpression.values.map((expr) {
+                          final active = expr == _selectedExpression;
+                          return ChoiceChip(
+                            label: Text(expr.label),
+                            selected: active,
+                            onSelected: controller.busy
+                                ? null
+                                : (_) => setState(() {
+                                      _selectedExpression = expr;
+                                      if (_appearancePreviewReferencePose) {
+                                        _appearancePreviewReferencePose = false;
+                                      }
+                                    }),
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -2805,6 +2780,59 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     ? 'The app is now streaming the full scene animation over BLE instead of flattening it to a still frame.'
                     : 'App-first models can still be sent over Wi-Fi or relay, but only as a single snapshot because live scene streaming requires BLE.',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          _StudioGroup(
+            title: 'Display colors',
+            subtitle: 'Customise eye, face, accent and body colors on the device display.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ColorRow(
+                  label: 'Eyes',
+                  color: _eyeColor,
+                  onChanged: (c) => setState(() => _eyeColor = c),
+                ),
+                const SizedBox(height: 8),
+                _ColorRow(
+                  label: 'Face / outline',
+                  color: _faceColor,
+                  onChanged: (c) => setState(() => _faceColor = c),
+                ),
+                const SizedBox(height: 8),
+                _ColorRow(
+                  label: 'Accent',
+                  color: _accentColor,
+                  onChanged: (c) => setState(() => _accentColor = c),
+                ),
+                const SizedBox(height: 8),
+                _ColorRow(
+                  label: 'Body',
+                  color: _bodyColor,
+                  onChanged: (c) => setState(() => _bodyColor = c),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: controller.busy ||
+                            !controller.canControlDevice
+                        ? null
+                        : () => _perform(
+                              () => controller.sendColors(
+                                eyeColor: _colorToRgb565(_eyeColor),
+                                faceColor: _colorToRgb565(_faceColor),
+                                accentColor: _colorToRgb565(_accentColor),
+                                bodyColor: _colorToRgb565(_bodyColor),
+                              ),
+                              success: 'Colors applied!',
+                            ),
+                    icon: const Icon(Icons.palette_outlined),
+                    label: const Text('Apply colors'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -3092,30 +3120,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       case CompanionVisualModel.classic:
         return const Duration(milliseconds: 90);
       case CompanionVisualModel.stickFigure:
-        final energyTrim = ((_stickFigureEnergy.round() - 40) / 15).floor();
-        var intervalMs = switch (_selectedScene) {
-          CompanionScene.holdHands => 70,
-          CompanionScene.hug ||
-          CompanionScene.kiss ||
-          CompanionScene.shyLeanIn => 76,
-          CompanionScene.wave || CompanionScene.bow => 64,
-          CompanionScene.none => 78,
-        };
-        intervalMs -= energyTrim.clamp(0, 3) * 4;
-        if (intervalMs < 58) {
-          intervalMs = 58;
-        }
-        return Duration(milliseconds: intervalMs);
+        // Target 60fps (16ms) for smooth stick figure animations
+        return const Duration(milliseconds: 16);
       case CompanionVisualModel.robot:
-        final intervalMs = switch (_selectedScene) {
-          CompanionScene.holdHands ||
-          CompanionScene.hug ||
-          CompanionScene.kiss ||
-          CompanionScene.shyLeanIn => 72,
-          CompanionScene.wave || CompanionScene.bow => 66,
-          CompanionScene.none => 76,
-        };
-        return Duration(milliseconds: intervalMs);
+        // Target 60fps (16ms) for smooth robot animations
+        return const Duration(milliseconds: 16);
     }
   }
 
@@ -3267,9 +3276,25 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Future<void> _sendCanvas(DeskCompanionController controller) async {
-    final payload = DisplayBitmapCodec.fromBitmap(
-      bitmap: _drawBitmap,
+    // Build a full-color RGB565 buffer from the bitmap + per-pixel color data.
+    final rgb565 = Uint8List(DisplayBitmapCodec.colorByteLength);
+    for (var y = 0; y < 240; y++) {
+      for (var x = 0; x < 320; x++) {
+        final byteIndex = y * 40 + (x >> 3);
+        final bitMask = 1 << (7 - (x & 7));
+        if ((_drawBitmap[byteIndex] & bitMask) != 0) {
+          final offset = (y * 320 + x) * 2;
+          rgb565[offset] = _drawColorData[offset];
+          rgb565[offset + 1] = _drawColorData[offset + 1];
+        }
+        // else: black (0x0000) — already zero-initialized
+      }
+    }
+    final payload = CompanionImagePayload(
       name: 'drawing',
+      bitmap: rgb565,
+      previewPng: Uint8List(0), // not needed for send
+      isColor: true,
     );
     await _perform(
       () => controller.sendImage(payload),
@@ -3626,6 +3651,7 @@ class _StudioGroup extends StatelessWidget {
 class _FullscreenDrawResult {
   const _FullscreenDrawResult({
     required this.bitmap,
+    required this.colorData,
     required this.showGrid,
     required this.liveDraw,
     required this.eraserMode,
@@ -3634,6 +3660,7 @@ class _FullscreenDrawResult {
   });
 
   final Uint8List bitmap;
+  final Uint8List colorData;
   final bool showGrid;
   final bool liveDraw;
   final bool eraserMode;
@@ -3644,6 +3671,7 @@ class _FullscreenDrawResult {
 class _FullscreenDrawEditor extends StatefulWidget {
   const _FullscreenDrawEditor({
     required this.bitmap,
+    required this.colorData,
     required this.showGrid,
     required this.liveDraw,
     required this.eraserMode,
@@ -3652,6 +3680,7 @@ class _FullscreenDrawEditor extends StatefulWidget {
   });
 
   final Uint8List bitmap;
+  final Uint8List colorData;
   final bool showGrid;
   final bool liveDraw;
   final bool eraserMode;
@@ -3664,18 +3693,21 @@ class _FullscreenDrawEditor extends StatefulWidget {
 
 class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
   late Uint8List _bitmap;
+  late Uint8List _colorData;
   late bool _showGrid;
   late bool _liveDraw;
   late bool _eraserMode;
   late double _brushSize;
   late Color _pixelColor;
   bool _controlsVisible = false;
+  bool _paletteVisible = false;
   Timer? _liveSyncTimer;
 
   @override
   void initState() {
     super.initState();
     _bitmap = Uint8List.fromList(widget.bitmap);
+    _colorData = Uint8List.fromList(widget.colorData);
     _showGrid = widget.showGrid;
     _liveDraw = widget.liveDraw;
     _eraserMode = widget.eraserMode;
@@ -3698,6 +3730,21 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
     super.dispose();
   }
 
+  static const List<Color> _paletteColors = [
+    Colors.white,
+    Color(0xFF00BFFF),
+    Color(0xFFFF69B4),
+    Color(0xFF00FF7F),
+    Color(0xFFFFD700),
+    Color(0xFFFF4500),
+    Color(0xFF8A2BE2),
+    Color(0xFFFF0000),
+    Color(0xFF00FFFF),
+    Color(0xFFFF1493),
+    Color(0xFF7CFC00),
+    Color(0xFFFF8C00),
+  ];
+
   Widget _buildEditorContent(DeskCompanionController controller) {
     return Stack(
       children: [
@@ -3714,6 +3761,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                 heightFactor: 1,
                 child: DisplayDrawingPad(
                   bitmap: _bitmap,
+                  colorData: _colorData,
                   showGrid: _showGrid,
                   enabled: true,
                   pixelColor: _pixelColor,
@@ -3723,19 +3771,71 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
             ),
           ),
         ),
+        // Floating color palette (left edge)
+        if (_paletteVisible)
+          Positioned(
+            left: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xDD1E1E1E),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _paletteColors.map((c) {
+                    final active = c == _pixelColor;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: GestureDetector(
+                        onTap: () => setState(() => _pixelColor = c),
+                        child: Container(
+                          width: active ? 30 : 24,
+                          height: active ? 30 : 24,
+                          decoration: BoxDecoration(
+                            color: c,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: active ? Colors.white : Colors.white24,
+                              width: active ? 2.5 : 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
         Positioned(
           top: 12,
           right: 12,
           child: SafeArea(
             bottom: false,
-            child: Align(
-              alignment: Alignment.topRight,
-              child: IconButton.filledTonal(
-                onPressed: () =>
-                    setState(() => _controlsVisible = !_controlsVisible),
-                icon: Icon(_controlsVisible ? Icons.menu_open : Icons.tune),
-                tooltip: _controlsVisible ? 'Hide controls' : 'Show controls',
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  onPressed: () =>
+                      setState(() => _controlsVisible = !_controlsVisible),
+                  icon: Icon(_controlsVisible ? Icons.menu_open : Icons.tune),
+                  tooltip: _controlsVisible ? 'Hide controls' : 'Show controls',
+                ),
+                const SizedBox(height: 8),
+                IconButton.filledTonal(
+                  onPressed: () =>
+                      setState(() => _paletteVisible = !_paletteVisible),
+                  icon: const Icon(Icons.palette),
+                  tooltip: _paletteVisible ? 'Hide palette' : 'Show palette',
+                  style: _paletteVisible
+                      ? IconButton.styleFrom(backgroundColor: _pixelColor.withValues(alpha: 0.5))
+                      : null,
+                ),
+              ],
             ),
           ),
         ),
@@ -3831,8 +3931,10 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                             onPressed: controller.busy
                                 ? null
                                 : () {
-                                    setState(() => _bitmap =
-                                        Uint8List(DisplayBitmapCodec.byteLength));
+                                    setState(() {
+                                      _bitmap = Uint8List(DisplayBitmapCodec.byteLength);
+                                      _colorData = Uint8List(DisplayBitmapCodec.colorByteLength);
+                                    });
                                     _queueLiveDraw();
                                   },
                             icon: const Icon(Icons.layers_clear_outlined),
@@ -3845,11 +3947,24 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                             onPressed: controller.busy
                                 ? null
                                 : () {
-                                    final payload = DisplayBitmapCodec.fromBitmap(
-                                      bitmap: _bitmap,
+                                    final rgb565 = Uint8List(DisplayBitmapCodec.colorByteLength);
+                                    for (var y = 0; y < 240; y++) {
+                                      for (var x = 0; x < 320; x++) {
+                                        final bi = y * 40 + (x >> 3);
+                                        final bm = 1 << (7 - (x & 7));
+                                        if ((_bitmap[bi] & bm) != 0) {
+                                          final o = (y * 320 + x) * 2;
+                                          rgb565[o] = _colorData[o];
+                                          rgb565[o + 1] = _colorData[o + 1];
+                                        }
+                                      }
+                                    }
+                                    controller.sendImage(CompanionImagePayload(
                                       name: 'drawing',
-                                    );
-                                    controller.sendImage(payload);
+                                      bitmap: rgb565,
+                                      previewPng: Uint8List(0),
+                                      isColor: true,
+                                    ));
                                   },
                             icon: const Icon(Icons.draw_outlined),
                             label: const Text('Push drawing'),
@@ -3868,7 +3983,14 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
 
   void _paintPixel(int x, int y) {
     final next = Uint8List.fromList(_bitmap);
+    final nextColor = Uint8List.fromList(_colorData);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
+    final r = _pixelColor.r.round();
+    final g = _pixelColor.g.round();
+    final b = _pixelColor.b.round();
+    final rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    final hi = (rgb565 >> 8) & 0xFF;
+    final lo = rgb565 & 0xFF;
     for (var py = y - radius; py <= y + radius; py++) {
       if (py < 0 || py >= 240) {
         continue;
@@ -3883,11 +4005,17 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
           next[byteIndex] &= ~bitMask;
         } else {
           next[byteIndex] |= bitMask;
+          final colorOffset = (py * 320 + px) * 2;
+          nextColor[colorOffset] = hi;
+          nextColor[colorOffset + 1] = lo;
         }
       }
     }
 
-    setState(() => _bitmap = next);
+    setState(() {
+      _bitmap = next;
+      _colorData = nextColor;
+    });
     _queueLiveDraw();
   }
 
@@ -3908,6 +4036,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
     Navigator.of(context).pop(
       _FullscreenDrawResult(
         bitmap: _bitmap,
+        colorData: _colorData,
         showGrid: _showGrid,
         liveDraw: _liveDraw,
         eraserMode: _eraserMode,

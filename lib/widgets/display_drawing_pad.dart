@@ -9,6 +9,7 @@ class DisplayDrawingPad extends StatefulWidget {
     super.key,
     required this.bitmap,
     required this.onPixel,
+    this.colorData,
     this.showGrid = true,
     this.enabled = true,
     this.showOutline = false,
@@ -16,6 +17,9 @@ class DisplayDrawingPad extends StatefulWidget {
   });
 
   final Uint8List bitmap;
+  /// Per-pixel RGB565 color data (320×240×2 bytes). If non-null, each set pixel
+  /// is rendered in its stored color instead of the uniform [pixelColor].
+  final Uint8List? colorData;
   final DisplayPixelCallback onPixel;
   final bool showGrid;
   final bool enabled;
@@ -122,6 +126,7 @@ class _DisplayDrawingPadState extends State<DisplayDrawingPad> {
                   child: CustomPaint(
                     painter: _DisplayDrawingPadPainter(
                       bitmap: widget.bitmap,
+                      colorData: widget.colorData,
                       showGrid: widget.showGrid,
                       showOutline: widget.showOutline,
                       pixelColor: widget.pixelColor,
@@ -160,12 +165,14 @@ class _DisplayDrawingPadState extends State<DisplayDrawingPad> {
 class _DisplayDrawingPadPainter extends CustomPainter {
   const _DisplayDrawingPadPainter({
     required this.bitmap,
+    this.colorData,
     required this.showGrid,
     required this.showOutline,
     required this.pixelColor,
   });
 
   final Uint8List bitmap;
+  final Uint8List? colorData;
   final bool showGrid;
   final bool showOutline;
   final Color pixelColor;
@@ -180,7 +187,8 @@ class _DisplayDrawingPadPainter extends CustomPainter {
 
     final pixelWidth = size.width / 320;
     final pixelHeight = size.height / 240;
-    final pixelPaint = Paint()..color = pixelColor;
+    final fallbackPaint = Paint()..color = pixelColor;
+    final hasColor = colorData != null && colorData!.length >= 320 * 240 * 2;
 
     for (var y = 0; y < 240; y++) {
       for (var x = 0; x < 320; x++) {
@@ -190,6 +198,20 @@ class _DisplayDrawingPadPainter extends CustomPainter {
           continue;
         }
 
+        Paint paint;
+        if (hasColor) {
+          final offset = (y * 320 + x) * 2;
+          final hi = colorData![offset];
+          final lo = colorData![offset + 1];
+          final rgb565 = (hi << 8) | lo;
+          final r = ((rgb565 >> 11) & 0x1F) * 255 ~/ 31;
+          final g = ((rgb565 >> 5) & 0x3F) * 255 ~/ 63;
+          final b = (rgb565 & 0x1F) * 255 ~/ 31;
+          paint = Paint()..color = Color.fromARGB(255, r, g, b);
+        } else {
+          paint = fallbackPaint;
+        }
+
         canvas.drawRect(
           Rect.fromLTWH(
             x * pixelWidth,
@@ -197,7 +219,7 @@ class _DisplayDrawingPadPainter extends CustomPainter {
             pixelWidth + 0.1,
             pixelHeight + 0.1,
           ),
-          pixelPaint,
+          paint,
         );
       }
     }
@@ -231,6 +253,7 @@ class _DisplayDrawingPadPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DisplayDrawingPadPainter oldDelegate) {
     return oldDelegate.bitmap != bitmap ||
+        oldDelegate.colorData != colorData ||
         oldDelegate.showGrid != showGrid ||
         oldDelegate.showOutline != showOutline ||
         oldDelegate.pixelColor != pixelColor;
