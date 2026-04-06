@@ -639,6 +639,12 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendNoteAsImage(Uint8List rgb565) async {
+    await _runBusy(() async {
+      await _sendColorBitmap(rgb565);
+    });
+  }
+
   Future<void> sendBanner(String text, {required int speed}) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -652,11 +658,15 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendImage(CompanionImagePayload payload) async {
     await _runBusy(() async {
-      await _sendBitmap(
-        payload.bitmap,
-        allowRelay: true,
-        silent: false,
-      );
+      if (payload.isColor) {
+        await _sendColorBitmap(payload.bitmap);
+      } else {
+        await _sendBitmap(
+          payload.bitmap,
+          allowRelay: true,
+          silent: false,
+        );
+      }
     });
   }
 
@@ -1013,6 +1023,33 @@ class DeskCompanionController extends ChangeNotifier {
     if (!silent) {
       _setStatus('Image sent over BLE.');
     }
+  }
+
+  Future<void> _sendColorBitmap(Uint8List rgb565) async {
+    if (!isBleConnected ||
+        _imageCharacteristic == null ||
+        _commandCharacteristic == null) {
+      throw const HttpException(
+          'BLE is not connected. Color images require BLE.');
+    }
+
+    await _sendBleCommand(
+        {'type': 'begin_color_image', 'total': rgb565.length});
+
+    final chunkSize = Platform.isAndroid ? 244 : 180;
+    for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
+      final end = (offset + chunkSize < rgb565.length)
+          ? offset + chunkSize
+          : rgb565.length;
+      await _imageCharacteristic!.write(
+        rgb565.sublist(offset, end),
+        withoutResponse: true,
+      );
+    }
+
+    await _sendBleCommand({'type': 'commit_color_image'});
+    _mode = 'color_image';
+    _setStatus('Color image sent over BLE.');
   }
 
   Future<bool> _postRelay(Map<String, dynamic> command) async {

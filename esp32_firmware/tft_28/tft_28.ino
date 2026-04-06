@@ -2,10 +2,11 @@
 // Adapted from mini.ino for the ST7789 240×320 IPS TFT with FT6336U capacitive touch.
 // Target board: Freenove ESP32-S3 Display (FNK0104) — all-in-one CYD.
 // All logic (BLE, Wi-Fi, relay, pet, commands) is identical to the Mini OLED.
-// Display calls adapted: SPI TFT, colors, scaled coordinates.
+// Display calls adapted: SPI TFT with TFT_eSPI sprite double-buffer for flicker-free rendering.
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
+// TFT_eSPI pin config must be defined BEFORE including the library header.
+// See User_Setup.h in the TFT_eSPI library folder for pin/driver settings.
+#include <TFT_eSPI.h>
 #include <Wire.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
@@ -15,7 +16,6 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <SPI.h>
 #include <esp_system.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -23,13 +23,9 @@
 #include <time.h>
 
 // ─── TFT SPI pin configuration (Freenove FNK0104 Touch variant) ───
-#define TFT_CS    10
-#define TFT_DC    46
-#define TFT_MOSI  11
-#define TFT_SCK   12
-#define TFT_MISO  13
+// Pin definitions are in User_Setup.h for TFT_eSPI.
+// Backlight pin is managed manually:
 #define TFT_BL    45   // backlight, active HIGH
-#define TFT_RST   -1   // no dedicated reset
 
 // ─── FT6336U capacitive touch I2C pins ───
 #define TOUCH_SDA  16
@@ -40,10 +36,10 @@
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 240
 
-// Color palette
-#define COL_BG       ST77XX_BLACK
-#define COL_FG       ST77XX_WHITE
-#define COL_ACCENT   ST77XX_CYAN
+// Color palette (TFT_eSPI constants)
+#define COL_BG       TFT_BLACK
+#define COL_FG       TFT_WHITE
+#define COL_ACCENT   TFT_CYAN
 // Extended RGB565 color palette
 #define COL_ROSE     0xFB56  // Hot pink / rose  (255, 106, 176)
 #define COL_GOLD     0xFFE0  // Yellow-gold      (255, 224,   0)
@@ -87,7 +83,8 @@ static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
 static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
-Adafruit_ST7789* pTft = nullptr;
+TFT_eSPI tft = TFT_eSPI();
+TFT_eSprite spr = TFT_eSprite(&tft);
 Preferences preferences;
 bool displayAvailable = false;
 bool touchAvailable = false;
@@ -128,8 +125,7 @@ TouchPoint ft6336u_getPoint() {
   return pt;
 }
 
-// Convenience reference for display (set once in setupDisplay)
-#define tft (*pTft)
+// tft is now a global TFT_eSPI object; spr is the sprite double-buffer.
 
 BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
@@ -141,6 +137,7 @@ enum DisplayMode {
   MODE_NOTE,
   MODE_BANNER,
   MODE_IMAGE,
+  MODE_COLOR_IMAGE,
   MODE_EXPRESSION,
   MODE_FLOWER,
   MODE_SCENE,
@@ -240,6 +237,12 @@ size_t expectedImageBytes = 0;
 size_t receivedImageBytes = 0;
 bool imageTransferActive = false;
 
+// Color image buffer (RGB565, 153600 bytes, PSRAM-backed)
+uint16_t* colorImageBuffer = nullptr;
+size_t expectedColorBytes = 0;
+size_t receivedColorBytes = 0;
+bool colorImageTransferActive = false;
+
 // Touch state for virtual buttons
 bool touchActive = false;
 unsigned long touchStartMs = 0;
@@ -293,6 +296,7 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
 void renderBannerFrame();
 void renderExpressionFrame();
 void renderImage();
+void renderColorImage();
 void renderIdle();
 void renderCurrentMode();
 String petDisplayLabel(const String& value);
@@ -636,6 +640,8 @@ const char* modeName(DisplayMode mode) {
       return "banner";
     case MODE_IMAGE:
       return "image";
+    case MODE_COLOR_IMAGE:
+      return "color_image";
     case MODE_EXPRESSION:
       return "expression";
     case MODE_FLOWER:
@@ -1162,9 +1168,9 @@ static const int FACE_OFFSET_Y = 40;  // vertical offset to center the face area
 static const int STATUS_BAR_Y = 222;  // y position for status text (within 240px screen)
 
 void drawIconHeart(int cx, int cy, int s) {
-  tft.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
-  tft.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
-  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, COL_ROSE);
+  spr.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
+  spr.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
+  spr.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, COL_ROSE);
 }
 
 void drawIconStar(int cx, int cy, int r) {
@@ -1172,9 +1178,9 @@ void drawIconStar(int cx, int cy, int r) {
     float angle = i * 3.14159f / 3.0f;
     int x2 = cx + (int)(r * 0.97f * cos(angle));
     int y2 = cy + (int)(r * 0.97f * sin(angle));
-    tft.drawLine(cx, cy, x2, y2, COL_GOLD);
+    spr.drawLine(cx, cy, x2, y2, COL_GOLD);
   }
-  tft.fillCircle(cx, cy, r / 3, COL_GOLD);
+  spr.fillCircle(cx, cy, r / 3, COL_GOLD);
 }
 
 void drawIconFlower(int cx, int cy, int r) {
@@ -1182,35 +1188,35 @@ void drawIconFlower(int cx, int cy, int r) {
     float angle = i * 3.14159f * 2.0f / 5.0f;
     int px = cx + (int)(r * cos(angle));
     int py = cy + (int)(r * sin(angle));
-    tft.fillCircle(px, py, r / 2, userAccentColor);
+    spr.fillCircle(px, py, r / 2, userAccentColor);
   }
-  tft.fillCircle(cx, cy, r / 2 + 1, userAccentColor);
+  spr.fillCircle(cx, cy, r / 2 + 1, userAccentColor);
 }
 
 void drawIconNote(int cx, int cy, int s) {
-  tft.fillCircle(cx - s / 2, cy + s - 1, s - 2, userAccentColor);
-  tft.drawLine(cx - s / 2 + s - 3, cy + s - 1, cx - s / 2 + s - 3, cy - s, userAccentColor);
-  tft.drawLine(cx - s / 2 + s - 3, cy - s, cx + s, cy - s + 2, userAccentColor);
+  spr.fillCircle(cx - s / 2, cy + s - 1, s - 2, userAccentColor);
+  spr.drawLine(cx - s / 2 + s - 3, cy + s - 1, cx - s / 2 + s - 3, cy - s, userAccentColor);
+  spr.drawLine(cx - s / 2 + s - 3, cy - s, cx + s, cy - s + 2, userAccentColor);
 }
 
 void drawIconMoon(int cx, int cy, int r) {
-  tft.fillCircle(cx, cy, r, userAccentColor);
-  tft.fillCircle(cx + r / 2, cy - r / 3, r - 1, COL_BG);
+  spr.fillCircle(cx, cy, r, userAccentColor);
+  spr.fillCircle(cx + r / 2, cy - r / 3, r - 1, COL_BG);
 }
 
 void drawNoteBorder(int style) {
   switch (style) {
     case 1:
-      tft.drawRoundRect(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 12, userFaceColor);
+      spr.drawRoundRect(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 12, userFaceColor);
       break;
     case 2:
       for (int x = 10; x < SCREEN_WIDTH - 10; x += 12) {
-        tft.drawLine(x, 6, x + 6, 6, userFaceColor);
-        tft.drawLine(x, SCREEN_HEIGHT - 7, x + 6, SCREEN_HEIGHT - 7, userFaceColor);
+        spr.drawLine(x, 6, x + 6, 6, userFaceColor);
+        spr.drawLine(x, SCREEN_HEIGHT - 7, x + 6, SCREEN_HEIGHT - 7, userFaceColor);
       }
       for (int y = 10; y < SCREEN_HEIGHT - 10; y += 12) {
-        tft.drawLine(6, y, 6, y + 6, userFaceColor);
-        tft.drawLine(SCREEN_WIDTH - 7, y, SCREEN_WIDTH - 7, y + 6, userFaceColor);
+        spr.drawLine(6, y, 6, y + 6, userFaceColor);
+        spr.drawLine(SCREEN_WIDTH - 7, y, SCREEN_WIDTH - 7, y + 6, userFaceColor);
       }
       break;
     case 3:
@@ -1221,12 +1227,12 @@ void drawNoteBorder(int style) {
       break;
     case 4:
       for (int x = 8; x < SCREEN_WIDTH; x += 10) {
-        tft.fillCircle(x, 5, 2, COL_LAVENDER);
-        tft.fillCircle(x, SCREEN_HEIGHT - 6, 2, COL_LAVENDER);
+        spr.fillCircle(x, 5, 2, COL_LAVENDER);
+        spr.fillCircle(x, SCREEN_HEIGHT - 6, 2, COL_LAVENDER);
       }
       for (int y = 14; y < SCREEN_HEIGHT - 10; y += 10) {
-        tft.fillCircle(5, y, 2, COL_LAVENDER);
-        tft.fillCircle(SCREEN_WIDTH - 6, y, 2, COL_LAVENDER);
+        spr.fillCircle(5, y, 2, COL_LAVENDER);
+        spr.fillCircle(SCREEN_WIDTH - 6, y, 2, COL_LAVENDER);
       }
       break;
     default:
@@ -1285,8 +1291,8 @@ void drawLineWithSymbols(const String& line, int startX, int startY, int fontSiz
         if (sym == 'm') { drawIconMoon(cx + charW, cy + charH / 2, iconS / 3); cx += charW * 2; i += 3; continue; }
       }
     }
-    tft.setCursor(cx, cy);
-    tft.print(line[i]);
+    spr.setCursor(cx, cy);
+    spr.print(line[i]);
     cx += charW;
     i++;
   }
@@ -1312,9 +1318,9 @@ int lineVisualWidth(const String& line, int fontSize) {
 
 void drawWrappedText(const String& text, int fontSize, int border, const String& icons) {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   drawNoteBorder(border);
-  tft.setTextColor(userFaceColor);
+  spr.setTextColor(userFaceColor);
   // Scale font up: size 1 on OLED → size 2 on TFT for readability
   const int safeFontSize = fontSize < 1 ? 2 : (fontSize > 4 ? 4 : fontSize + 1);
   const bool hasIcons = icons.length() > 0;
@@ -1347,8 +1353,8 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
     remaining.trim();
   }
 
-  tft.setTextSize(safeFontSize);
-  tft.setTextWrap(false);
+  spr.setTextSize(safeFontSize);
+  spr.setTextWrap(false);
   const int totalHeight = lineCount * lineHeight;
   int cursorY = topPad + (availH - totalHeight) / 2;
   if (cursorY < topPad) cursorY = topPad;
@@ -1361,28 +1367,32 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
   }
 
   if (hasIcons) drawNoteIcons(icons, 14, 8);
+  spr.pushSprite(0, 0);
 }
 
 void renderBannerFrame() {
   if (!displayAvailable) return;
-  tft.setTextSize(4);
-  tft.setTextWrap(false);
-  if (bannerOffset >= SCREEN_WIDTH) {
-    // First frame of this banner — clear whole canvas once
-    tft.fillScreen(COL_BG);
-  } else {
-    // Subsequent frames — only erase the text strip (~40px tall) to avoid full-screen blank flash
-    tft.fillRect(0, SCREEN_HEIGHT / 2 - 20, SCREEN_WIDTH, 46, COL_BG);
-  }
-  tft.setTextColor(COL_PINK);
-  tft.setCursor(bannerOffset, SCREEN_HEIGHT / 2 - 16);
-  tft.print(currentBanner);
+  spr.fillSprite(COL_BG);
+  spr.setTextSize(4);
+  spr.setTextWrap(false);
+  spr.setTextColor(COL_PINK);
+  spr.setCursor(bannerOffset, SCREEN_HEIGHT / 2 - 16);
+  spr.print(currentBanner);
+  spr.pushSprite(0, 0);
 }
 
 void renderImage() {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
-  tft.drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, userFaceColor);
+  spr.fillSprite(COL_BG);
+  spr.drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, userFaceColor);
+  spr.pushSprite(0, 0);
+}
+
+void renderColorImage() {
+  if (!displayAvailable || !colorImageBuffer) return;
+  // Push the RGB565 pixel data directly into the sprite
+  memcpy(spr.getPointer(), colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+  spr.pushSprite(0, 0);
 }
 
 // ─── Face rendering (scaled 2× from 128×64) ───
@@ -1396,69 +1406,69 @@ static inline float ease(int phase, int max) {
 
 void drawEye(int cx, int cy, int w, int h, int r, int pupilDx, int pupilDy) {
   int clampedH = h < 5 ? 5 : h;
-  tft.fillRoundRect(cx - w / 2, cy - clampedH / 2, w, clampedH, r, userEyeColor);
+  spr.fillRoundRect(cx - w / 2, cy - clampedH / 2, w, clampedH, r, userEyeColor);
   if (clampedH >= 18) {
-    tft.fillCircle(cx + pupilDx, cy + pupilDy, 9, COL_BG);
+    spr.fillCircle(cx + pupilDx, cy + pupilDy, 9, COL_BG);
   } else if (clampedH >= 10) {
-    tft.fillCircle(cx + pupilDx, cy + pupilDy, 5, COL_BG);
+    spr.fillCircle(cx + pupilDx, cy + pupilDy, 5, COL_BG);
   }
 }
 
 void drawBlinkEye(int cx, int cy, int w, int h, int r) {
   int clampedH = h < 5 ? 5 : h;
-  tft.fillRoundRect(cx - w / 2, cy - clampedH / 2, w, clampedH, r, userEyeColor);
+  spr.fillRoundRect(cx - w / 2, cy - clampedH / 2, w, clampedH, r, userEyeColor);
 }
 
 void drawHappyArc(int cx, int cy, int w) {
   for (int t = 0; t < 8; t++) {
     int hw = w / 2;
-    tft.drawLine(cx - hw, cy + 8 + t, cx, cy - 8 + t, userFaceColor);
-    tft.drawLine(cx, cy - 8 + t, cx + hw, cy + 8 + t, userFaceColor);
+    spr.drawLine(cx - hw, cy + 8 + t, cx, cy - 8 + t, userFaceColor);
+    spr.drawLine(cx, cy - 8 + t, cx + hw, cy + 8 + t, userFaceColor);
   }
 }
 
 void drawSadArc(int cx, int cy, int w) {
   for (int t = 0; t < 5; t++) {
     int hw = w / 2;
-    tft.drawLine(cx - hw, cy - 5 + t, cx, cy + 9 + t, userFaceColor);
-    tft.drawLine(cx, cy + 9 + t, cx + hw, cy - 5 + t, userFaceColor);
+    spr.drawLine(cx - hw, cy - 5 + t, cx, cy + 9 + t, userFaceColor);
+    spr.drawLine(cx, cy + 9 + t, cx + hw, cy - 5 + t, userFaceColor);
   }
 }
 
 void drawSmile(int cx, int cy, int w) {
   for (int t = 0; t < 5; t++) {
     int hw = w / 2;
-    tft.drawLine(cx - hw, cy + t, cx - hw / 3, cy + 12 + t, userFaceColor);
-    tft.drawLine(cx - hw / 3, cy + 12 + t, cx + hw / 3, cy + 12 + t, userFaceColor);
-    tft.drawLine(cx + hw / 3, cy + 12 + t, cx + hw, cy + t, userFaceColor);
+    spr.drawLine(cx - hw, cy + t, cx - hw / 3, cy + 12 + t, userFaceColor);
+    spr.drawLine(cx - hw / 3, cy + 12 + t, cx + hw / 3, cy + 12 + t, userFaceColor);
+    spr.drawLine(cx + hw / 3, cy + 12 + t, cx + hw, cy + t, userFaceColor);
   }
 }
 
 void drawOvalMouth(int cx, int cy, int rw, int rh) {
   for (int t = 0; t < 3; t++) {
-    tft.drawRoundRect(cx - rw, cy - rh + t, rw * 2, rh * 2, rh, userFaceColor);
+    spr.drawRoundRect(cx - rw, cy - rh + t, rw * 2, rh * 2, rh, userFaceColor);
   }
 }
 
 void drawKissLips(int cx, int cy) {
-  tft.fillCircle(cx, cy, 10, userFaceColor);
-  tft.fillCircle(cx, cy, 5, COL_BG);
+  spr.fillCircle(cx, cy, 10, userFaceColor);
+  spr.fillCircle(cx, cy, 5, COL_BG);
 }
 
 void drawBigHeart(int cx, int cy, int s) {
-  tft.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
-  tft.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
-  tft.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2, COL_ROSE);
+  spr.fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
+  spr.fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
+  spr.fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2, COL_ROSE);
 }
 
 void drawTear(int cx, int cy, int s) {
-  tft.fillCircle(cx, cy + s, s, userFaceColor);
-  tft.fillTriangle(cx - s, cy + s, cx + s, cy + s, cx, cy, userFaceColor);
+  spr.fillCircle(cx, cy + s, s, userFaceColor);
+  spr.fillTriangle(cx - s, cy + s, cx + s, cy + s, cx, cy, userFaceColor);
 }
 
 void drawBrow(int x1, int y1, int x2, int y2) {
   for (int t = 0; t < 5; t++) {
-    tft.drawLine(x1, y1 + t, x2, y2 + t, userFaceColor);
+    spr.drawLine(x1, y1 + t, x2, y2 + t, userFaceColor);
   }
 }
 
@@ -1481,14 +1491,14 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
 
   // Ears (scaled 2x)
   if (companionEars == "cat") {
-    tft.drawTriangle(leftX - 30, eyeY - 34, leftX - 14, eyeY - 56, leftX + 4, eyeY - 34, userFaceColor);
-    tft.drawTriangle(rightX - 4, eyeY - 34, rightX + 14, eyeY - 56, rightX + 30, eyeY - 34, userFaceColor);
+    spr.drawTriangle(leftX - 30, eyeY - 34, leftX - 14, eyeY - 56, leftX + 4, eyeY - 34, userFaceColor);
+    spr.drawTriangle(rightX - 4, eyeY - 34, rightX + 14, eyeY - 56, rightX + 30, eyeY - 34, userFaceColor);
   } else if (companionEars == "bear") {
-    tft.drawCircle(leftX - 22, eyeY - 38, 11, userFaceColor);
-    tft.drawCircle(rightX + 22, eyeY - 38, 11, userFaceColor);
+    spr.drawCircle(leftX - 22, eyeY - 38, 11, userFaceColor);
+    spr.drawCircle(rightX + 22, eyeY - 38, 11, userFaceColor);
   } else if (companionEars == "bunny") {
-    tft.drawRoundRect(leftX - 28, eyeY - 64, 14, 30, 7, userFaceColor);
-    tft.drawRoundRect(rightX + 14, eyeY - 64, 14, 30, 7, userFaceColor);
+    spr.drawRoundRect(leftX - 28, eyeY - 64, 14, 30, 7, userFaceColor);
+    spr.drawRoundRect(rightX + 14, eyeY - 64, 14, 30, 7, userFaceColor);
   }
 
   // Hair (scaled 2x)
@@ -1496,21 +1506,21 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     const int lift = scaleByPercent(22, hairHeight);
     const int spread = scaleByPercent(9, hairWidth);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      tft.drawLine(hairCenterX - spread, hairCenterY - 22 + stroke, hairCenterX, hairCenterY - 22 - lift + stroke, userFaceColor);
-      tft.drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + spread, hairCenterY - 22 + stroke, userFaceColor);
-      tft.drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + 2, hairCenterY - 14 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX - spread, hairCenterY - 22 + stroke, hairCenterX, hairCenterY - 22 - lift + stroke, userFaceColor);
+      spr.drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + spread, hairCenterY - 22 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + 2, hairCenterY - 14 + stroke, userFaceColor);
     }
   } else if (companionHair == "bangs") {
     const int topY = hairCenterY - 22 - scaleByPercent(5, hairHeight);
     const int leftEdge = hairCenterX - (scaleByPercent(68, hairWidth) / 2);
     const int rightEdge = hairCenterX + (scaleByPercent(68, hairWidth) / 2);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      tft.drawLine(leftEdge, topY + stroke, rightEdge, topY + stroke, userFaceColor);
+      spr.drawLine(leftEdge, topY + stroke, rightEdge, topY + stroke, userFaceColor);
     }
     for (int x = leftX - 26; x <= rightX + 26; x += 14) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        tft.drawLine(shiftedX, topY + 2 + stroke, shiftedX + scaleByPercent(5, hairWidth), hairCenterY - 12 + stroke, userFaceColor);
+        spr.drawLine(shiftedX, topY + 2 + stroke, shiftedX + scaleByPercent(5, hairWidth), hairCenterY - 12 + stroke, userFaceColor);
       }
     }
   } else if (companionHair == "spiky") {
@@ -1518,65 +1528,65 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       const int peak = hairCenterY - 18 - scaleByPercent(16, hairHeight);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        tft.drawLine(shiftedX, hairCenterY - 18 + stroke, shiftedX + scaleByPercent(7, hairWidth), peak + stroke, userFaceColor);
-        tft.drawLine(shiftedX + scaleByPercent(7, hairWidth), peak + stroke, shiftedX + scaleByPercent(14, hairWidth), hairCenterY - 18 + stroke, userFaceColor);
+        spr.drawLine(shiftedX, hairCenterY - 18 + stroke, shiftedX + scaleByPercent(7, hairWidth), peak + stroke, userFaceColor);
+        spr.drawLine(shiftedX + scaleByPercent(7, hairWidth), peak + stroke, shiftedX + scaleByPercent(14, hairWidth), hairCenterY - 18 + stroke, userFaceColor);
       }
     }
   } else if (companionHair == "swoop") {
     const int topY = hairCenterY - 22 - scaleByPercent(11, hairHeight);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      tft.drawLine(hairCenterX - scaleByPercent(34, hairWidth), hairCenterY - 16 + stroke, hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, userFaceColor);
-      tft.drawLine(hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, hairCenterX + scaleByPercent(52, hairWidth), hairCenterY - 9 + stroke, userFaceColor);
-      tft.drawLine(hairCenterX - scaleByPercent(18, hairWidth), hairCenterY - 18 + stroke, hairCenterX + scaleByPercent(7, hairWidth), topY + 3 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX - scaleByPercent(34, hairWidth), hairCenterY - 16 + stroke, hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, userFaceColor);
+      spr.drawLine(hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, hairCenterX + scaleByPercent(52, hairWidth), hairCenterY - 9 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX - scaleByPercent(18, hairWidth), hairCenterY - 18 + stroke, hairCenterX + scaleByPercent(7, hairWidth), topY + 3 + stroke, userFaceColor);
     }
   } else if (companionHair == "bob") {
     const int topY = hairCenterY - 20 - scaleByPercent(7, hairHeight);
     const int width = scaleByPercent((rightX - leftX) + 68, hairWidth);
-    tft.drawRoundRect(hairCenterX - width / 2, topY, width, 18 + scaleByPercent(7, hairHeight), 9, userFaceColor);
+    spr.drawRoundRect(hairCenterX - width / 2, topY, width, 18 + scaleByPercent(7, hairHeight), 9, userFaceColor);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      tft.drawLine(hairCenterX - width / 2, hairCenterY - 2 + stroke, hairCenterX - width / 2 + scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
-      tft.drawLine(hairCenterX + width / 2, hairCenterY - 2 + stroke, hairCenterX + width / 2 - scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX - width / 2, hairCenterY - 2 + stroke, hairCenterX - width / 2 + scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
+      spr.drawLine(hairCenterX + width / 2, hairCenterY - 2 + stroke, hairCenterX + width / 2 - scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
     }
   } else if (companionHair == "messy") {
     for (int x = leftX - 18; x <= rightX + 22; x += 16) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       const int peak = hairCenterY - 14 - scaleByPercent(13, hairHeight) + ((x / 16) % 2 == 0 ? 0 : 5);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        tft.drawLine(shiftedX, hairCenterY - 14 + stroke, shiftedX + scaleByPercent(5, hairWidth), peak + stroke, userFaceColor);
-        tft.drawLine(shiftedX + scaleByPercent(5, hairWidth), peak + stroke, shiftedX + scaleByPercent(11, hairWidth), hairCenterY - 16 + stroke, userFaceColor);
+        spr.drawLine(shiftedX, hairCenterY - 14 + stroke, shiftedX + scaleByPercent(5, hairWidth), peak + stroke, userFaceColor);
+        spr.drawLine(shiftedX + scaleByPercent(5, hairWidth), peak + stroke, shiftedX + scaleByPercent(11, hairWidth), hairCenterY - 16 + stroke, userFaceColor);
       }
     }
   }
 
   // Headwear (scaled 2x)
   if (companionHeadwear == "bow") {
-    tft.drawTriangle(faceCenterX - 7, eyeY - 44, faceCenterX - 30, eyeY - 34, faceCenterX - 14, eyeY - 22, userFaceColor);
-    tft.drawTriangle(faceCenterX + 7, eyeY - 44, faceCenterX + 30, eyeY - 34, faceCenterX + 14, eyeY - 22, userFaceColor);
-    tft.drawCircle(faceCenterX, eyeY - 34, 4, userFaceColor);
+    spr.drawTriangle(faceCenterX - 7, eyeY - 44, faceCenterX - 30, eyeY - 34, faceCenterX - 14, eyeY - 22, userFaceColor);
+    spr.drawTriangle(faceCenterX + 7, eyeY - 44, faceCenterX + 30, eyeY - 34, faceCenterX + 14, eyeY - 22, userFaceColor);
+    spr.drawCircle(faceCenterX, eyeY - 34, 4, userFaceColor);
   } else if (companionHeadwear == "beanie") {
-    tft.drawRoundRect(faceCenterX - 44, eyeY - 52, 88, 22, 9, userFaceColor);
-    tft.drawLine(faceCenterX - 38, eyeY - 28, faceCenterX + 38, eyeY - 28, userFaceColor);
-    tft.drawCircle(faceCenterX, eyeY - 56, 5, userFaceColor);
+    spr.drawRoundRect(faceCenterX - 44, eyeY - 52, 88, 22, 9, userFaceColor);
+    spr.drawLine(faceCenterX - 38, eyeY - 28, faceCenterX + 38, eyeY - 28, userFaceColor);
+    spr.drawCircle(faceCenterX, eyeY - 56, 5, userFaceColor);
   } else if (companionHeadwear == "crown") {
-    tft.drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userFaceColor);
-    tft.drawLine(faceCenterX - 38, eyeY - 34, faceCenterX - 22, eyeY - 56, userFaceColor);
-    tft.drawLine(faceCenterX - 22, eyeY - 56, faceCenterX - 4, eyeY - 34, userFaceColor);
-    tft.drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userFaceColor);
-    tft.drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userFaceColor);
-    tft.drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userFaceColor);
+    spr.drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userFaceColor);
+    spr.drawLine(faceCenterX - 38, eyeY - 34, faceCenterX - 22, eyeY - 56, userFaceColor);
+    spr.drawLine(faceCenterX - 22, eyeY - 56, faceCenterX - 4, eyeY - 34, userFaceColor);
+    spr.drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userFaceColor);
+    spr.drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userFaceColor);
+    spr.drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userFaceColor);
   }
 
   // Glasses (scaled 2x)
   if (companionGlasses == "round") {
-    tft.drawCircle(leftX, eyeY, 22, userFaceColor);
-    tft.drawCircle(rightX, eyeY, 22, userFaceColor);
-    tft.drawLine(leftX + 22, eyeY, rightX - 22, eyeY, userFaceColor);
+    spr.drawCircle(leftX, eyeY, 22, userFaceColor);
+    spr.drawCircle(rightX, eyeY, 22, userFaceColor);
+    spr.drawLine(leftX + 22, eyeY, rightX - 22, eyeY, userFaceColor);
   } else if (companionGlasses == "square") {
-    tft.drawRoundRect(leftX - 26, eyeY - 20, 52, 40, 7, userFaceColor);
-    tft.drawRoundRect(rightX - 26, eyeY - 20, 52, 40, 7, userFaceColor);
-    tft.drawLine(leftX + 26, eyeY, rightX - 26, eyeY, userFaceColor);
+    spr.drawRoundRect(leftX - 26, eyeY - 20, 52, 40, 7, userFaceColor);
+    spr.drawRoundRect(rightX - 26, eyeY - 20, 52, 40, 7, userFaceColor);
+    spr.drawLine(leftX + 26, eyeY, rightX - 26, eyeY, userFaceColor);
   } else if (companionGlasses == "visor") {
-    tft.drawRoundRect(leftX - 34, eyeY - 22, (rightX - leftX) + 68, 38, 11, userFaceColor);
+    spr.drawRoundRect(leftX - 34, eyeY - 22, (rightX - leftX) + 68, 38, 11, userFaceColor);
   }
 
   // Mustache (scaled 2x)
@@ -1585,78 +1595,77 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     const int inner = scaleByPercent(7, mustacheWidth);
     const int rise = scaleByPercent(7, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - inner, mustacheCenterY - 2 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + 2 + stroke, mustacheCenterX - inner, mustacheCenterY + 2 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + inner, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + inner, mustacheCenterY + 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - inner, mustacheCenterY - 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + 2 + stroke, mustacheCenterX - inner, mustacheCenterY + 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + inner, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + inner, mustacheCenterY + 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + 2 + stroke, userFaceColor);
     }
   } else if (companionMustache == "curled") {
     const int wing = scaleByPercent(22, mustacheWidth);
     const int rise = scaleByPercent(4, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - 4, mustacheCenterY - 2 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + 4, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - 4, mustacheCenterY - 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + 4, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
     }
-    tft.drawCircle(mustacheCenterX - wing - 4, mustacheCenterY - rise - 2, 4, userFaceColor);
-    tft.drawCircle(mustacheCenterX + wing + 4, mustacheCenterY - rise - 2, 4, userFaceColor);
+    spr.drawCircle(mustacheCenterX - wing - 4, mustacheCenterY - rise - 2, 4, userFaceColor);
+    spr.drawCircle(mustacheCenterX + wing + 4, mustacheCenterY - rise - 2, 4, userFaceColor);
   } else if (companionMustache == "handlebar") {
     const int wing = scaleByPercent(26, mustacheWidth);
     const int curl = scaleByPercent(9, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - 4, mustacheCenterY + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + 4, mustacheCenterY + stroke, mustacheCenterX + wing, mustacheCenterY - 2 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - wing - scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + wing, mustacheCenterY - 2 + stroke, mustacheCenterX + wing + scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - 4, mustacheCenterY + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + 4, mustacheCenterY + stroke, mustacheCenterX + wing, mustacheCenterY - 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - wing - scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + wing, mustacheCenterY - 2 + stroke, mustacheCenterX + wing + scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
     }
   } else if (companionMustache == "walrus") {
     const int width = scaleByPercent(26, mustacheWidth);
     const int height = scaleByPercent(7, mustacheHeight);
-    tft.fillRoundRect(mustacheCenterX - width, mustacheCenterY - 11, width * 2, height + 4, 5, userFaceColor);
-    tft.fillRect(mustacheCenterX - scaleByPercent(4, mustacheThickness), mustacheCenterY - 5, scaleByPercent(7, mustacheThickness), height + 7, userFaceColor);
+    spr.fillRoundRect(mustacheCenterX - width, mustacheCenterY - 11, width * 2, height + 4, 5, userFaceColor);
+    spr.fillRect(mustacheCenterX - scaleByPercent(4, mustacheThickness), mustacheCenterY - 5, scaleByPercent(7, mustacheThickness), height + 7, userFaceColor);
   } else if (companionMustache == "pencil") {
     const int width = scaleByPercent(24, mustacheWidth);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      tft.drawLine(mustacheCenterX - width, mustacheCenterY - 4 + stroke, mustacheCenterX + width, mustacheCenterY - 4 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX - width + scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, mustacheCenterX + width - scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - width, mustacheCenterY - 4 + stroke, mustacheCenterX + width, mustacheCenterY - 4 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - width + scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, mustacheCenterX + width - scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, userFaceColor);
     }
   } else if (companionMustache == "imperial") {
     const int wing = scaleByPercent(22, mustacheWidth);
     const int rise = scaleByPercent(16, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - 2, mustacheCenterY - 2 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + 2, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - 4 + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - wing - scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
-      tft.drawLine(mustacheCenterX + wing, mustacheCenterY - 4 + stroke, mustacheCenterX + wing + scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - 2, mustacheCenterY - 2 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + 2, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - 4 + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - wing - scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
+      spr.drawLine(mustacheCenterX + wing, mustacheCenterY - 4 + stroke, mustacheCenterX + wing + scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
     }
   }
 
   // Piercings (scaled 2x)
   if (companionPiercing == "brow") {
-    tft.drawLine(rightX + 11, eyeY - 26, rightX + 26, eyeY - 22, userFaceColor);
-    tft.drawPixel(rightX + 14, eyeY - 24, userFaceColor);
+    spr.drawLine(rightX + 11, eyeY - 26, rightX + 26, eyeY - 22, userFaceColor);
+    spr.drawPixel(rightX + 14, eyeY - 24, userFaceColor);
   } else if (companionPiercing == "nose") {
-    tft.drawCircle(faceCenterX + 7, mouthY - 18, 4, userFaceColor);
+    spr.drawCircle(faceCenterX + 7, mouthY - 18, 4, userFaceColor);
   } else if (companionPiercing == "lip") {
-    tft.drawCircle(faceCenterX + 14, mouthY + 4, 4, userFaceColor);
+    spr.drawCircle(faceCenterX + 14, mouthY + 4, 4, userFaceColor);
   }
 }
 
 void drawZzz(int x, int y, int phase) {
   int p = phase % 64;
-  tft.setTextSize(2);
-  tft.setTextColor(userAccentColor);
+  spr.setTextSize(2);
+  spr.setTextColor(userAccentColor);
   int drift = p / 4;
-  if (p >= 8)  { tft.setCursor(x,      y + 22 - drift * 2); tft.print('z'); }
-  if (p >= 24) { tft.setCursor(x + 12, y + 10 - drift);     tft.print('z'); }
-  if (p >= 40) { tft.setCursor(x + 26, y - drift / 2);      tft.print('Z'); }
+  if (p >= 8)  { spr.setCursor(x,      y + 22 - drift * 2); spr.print('z'); }
+  if (p >= 24) { spr.setCursor(x + 12, y + 10 - drift);     spr.print('z'); }
+  if (p >= 40) { spr.setCursor(x + 26, y - drift / 2);      spr.print('Z'); }
 }
 
 // ─── Expression renderer (scaled 2× from mini, face centered at FACE_OFFSET_Y) ───
 
 void renderExpressionFrame() {
   if (!displayAvailable) return;
-  // Clear face/content area only — preserves clock strip (top 40px) and status bar
-  tft.fillRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, SCREEN_HEIGHT - 18 - FACE_OFFSET_Y, COL_BG);
+  spr.fillSprite(COL_BG);
 
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
   const int LX = 68;
@@ -1680,8 +1689,8 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, EH, ER, 0, 0);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     // Blush cheeks
-    tft.fillCircle(LX + 22, EY + 18, 7, COL_PINK);
-    tft.fillCircle(RX - 22, EY + 18, 7, COL_PINK);
+    spr.fillCircle(LX + 22, EY + 18, 7, COL_PINK);
+    spr.fillCircle(RX - 22, EY + 18, 7, COL_PINK);
     drawBigHeart(LX, EY, 7);
     drawBigHeart(RX, EY, 7);
     drawSmile(SCREEN_WIDTH / 2, MY - 4, 52);
@@ -1712,12 +1721,12 @@ void renderExpressionFrame() {
     int mouthShift = (int)(sin(t * 3.14159f * 6.0f) * 4.0f);
     drawEye(LX, EY + 4, EW, EH - 4, ER, 0, 4);
     drawEye(RX, EY + 4, EW, EH - 4, ER, 0, 4);
-    tft.fillRect(LX - EW / 2, EY + 4 - (EH - 4) / 2, EW, lidH, COL_BG);
-    tft.fillRect(RX - EW / 2, EY + 4 - (EH - 4) / 2, EW, lidH, COL_BG);
+    spr.fillRect(LX - EW / 2, EY + 4 - (EH - 4) / 2, EW, lidH, COL_BG);
+    spr.fillRect(RX - EW / 2, EY + 4 - (EH - 4) / 2, EW, lidH, COL_BG);
     drawBrow(LX - 26, EY - 30, LX + 14, EY - 11 - twitch);
     drawBrow(RX + 26, EY - 30, RX - 14, EY - 11 - twitch);
     for (int line = 0; line < 5; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 18, MY + line + mouthShift, SCREEN_WIDTH / 2 + 18, MY + line + mouthShift, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 18, MY + line + mouthShift, SCREEN_WIDTH / 2 + 18, MY + line + mouthShift, userFaceColor);
     }
   } else if (currentExpression == "sad") {
     drawEye(LX, EY + 6, EW, EH - 7, ER, 0, 7);
@@ -1742,7 +1751,7 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, eyeH, ER, 0, 0);
     drawEye(RX, EY, EW, eyeH, ER, 0, 0);
     for (int line = 0; line < 4; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
     }
     drawZzz(186, 22 + eyeYShift, expressionPhase);
   } else if (currentExpression == "thinking") {
@@ -1752,11 +1761,11 @@ void renderExpressionFrame() {
     int bubble = 4 + (int)(wave * 4.0f);
     drawEye(LX, EY, EW - 11, 22, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
-    tft.fillCircle(204, FACE_OFFSET_Y + 72 + eyeYShift, bubble, userAccentColor);
-    tft.fillCircle(216, FACE_OFFSET_Y + 52 + eyeYShift, bubble + 2, userAccentColor);
-    tft.fillCircle(224, FACE_OFFSET_Y + 30 + eyeYShift, bubble + 4, userAccentColor);
+    spr.fillCircle(204, FACE_OFFSET_Y + 72 + eyeYShift, bubble, userAccentColor);
+    spr.fillCircle(216, FACE_OFFSET_Y + 52 + eyeYShift, bubble + 2, userAccentColor);
+    spr.fillCircle(224, FACE_OFFSET_Y + 30 + eyeYShift, bubble + 4, userAccentColor);
     for (int line = 0; line < 4; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 11, MY - 4 + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 11, MY - 4 + line, userFaceColor);
     }
   } else if (currentExpression == "happy") {
     int eyeH = EH;
@@ -1784,7 +1793,7 @@ void renderExpressionFrame() {
     drawBrow(LX - 26, EY - 28 - browTwitch, LX + 18, EY - 20);
     drawBrow(RX - 14, EY - 16, RX + 26, EY - 24 + browTwitch);
     for (int line = 0; line < 5; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 22, MY + 7 + line, SCREEN_WIDTH / 2 + 22, MY - 4 + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 22, MY + 7 + line, SCREEN_WIDTH / 2 + 22, MY - 4 + line, userFaceColor);
     }
   } else if (currentExpression == "look_around") {
     float sx = sin(t * 3.14159f * 2.0f);
@@ -1794,7 +1803,7 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, EH, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
     }
   } else if (currentExpression == "kiss") {
     float r1 = fmod(t * 1.5f, 1.0f);
@@ -1802,8 +1811,8 @@ void renderExpressionFrame() {
     drawBlinkEye(LX, EY, EW, 7, ER);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     // Blush cheeks
-    tft.fillCircle(LX + 20, EY + 14, 6, COL_PINK);
-    tft.fillCircle(RX - 20, EY + 14, 6, COL_PINK);
+    spr.fillCircle(LX + 20, EY + 14, 6, COL_PINK);
+    spr.fillCircle(RX - 20, EY + 14, 6, COL_PINK);
     drawKissLips(SCREEN_WIDTH / 2, MY);
     if (r1 < 0.85f) {
       int hx = SCREEN_WIDTH / 2 - 18 + (int)(sin(r1 * 3.14159f) * 14.0f);
@@ -1817,7 +1826,7 @@ void renderExpressionFrame() {
     }
   } else if (currentExpression == "wink") {
     for (int line = 0; line < 5; line++) {
-      tft.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
+      spr.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     drawSmile(SCREEN_WIDTH / 2, MY - 4, 38);
@@ -1827,8 +1836,8 @@ void renderExpressionFrame() {
     int mouthW = 38 + (int)(wave * 7.0f);
     drawHappyArc(LX + shakeX, EY, EW);
     drawHappyArc(RX + shakeX, EY, EW);
-    tft.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2, MY - 9, mouthW, 22, 7, userFaceColor);
-    tft.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2 + 4, MY - 5, mouthW - 8, 14, 5, COL_BG);
+    spr.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2, MY - 9, mouthW, 22, 7, userFaceColor);
+    spr.fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2 + 4, MY - 5, mouthW - 8, 14, 5, COL_BG);
   } else if (currentExpression == "star_eyes") {
     float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int starR = 9 + (int)(twinkle * 4.0f);
@@ -1847,17 +1856,153 @@ void renderExpressionFrame() {
     drawSmile(SCREEN_WIDTH / 2, MY - 4 - (int)(bounce * 4.0f), 52);
   } else if (currentExpression == "tongue") {
     for (int line = 0; line < 5; line++) {
-      tft.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
+      spr.drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     for (int line = 0; line < 4; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 18, MY - 4 + line, SCREEN_WIDTH / 2, MY + 4 + line, userFaceColor);
-      tft.drawLine(SCREEN_WIDTH / 2, MY + 4 + line, SCREEN_WIDTH / 2 + 18, MY - 4 + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 18, MY - 4 + line, SCREEN_WIDTH / 2, MY + 4 + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2, MY + 4 + line, SCREEN_WIDTH / 2 + 18, MY - 4 + line, userFaceColor);
     }
     float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int tongueH = 14 + (int)(wobble * 5.0f);
-    tft.fillRoundRect(SCREEN_WIDTH / 2 - 11, MY + 5, 22, tongueH, 7, userFaceColor);
-    tft.fillCircle(SCREEN_WIDTH / 2, MY + 5 + tongueH - 5, 4, COL_BG);
+    spr.fillRoundRect(SCREEN_WIDTH / 2 - 11, MY + 5, 22, tongueH, 7, userFaceColor);
+    spr.fillCircle(SCREEN_WIDTH / 2, MY + 5 + tongueH - 5, 4, COL_BG);
+
+  } else if (currentExpression == "grateful") {
+    // Soft closed eyes (arcs) + warm smile
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    drawHappyArc(LX, EY, EW);
+    drawHappyArc(RX, EY, EW);
+    // Blush
+    spr.fillCircle(LX + 24, EY + 16, 6, COL_PINK);
+    spr.fillCircle(RX - 24, EY + 16, 6, COL_PINK);
+    drawSmile(SCREEN_WIDTH / 2, MY - 4, 48);
+    // Gentle sparkles
+    int sp = (int)(wave * 5.0f);
+    drawIconStar(30, FACE_OFFSET_Y + 30 + sp, 4);
+    drawIconStar(210, FACE_OFFSET_Y + 30 - sp, 3);
+
+  } else if (currentExpression == "crying") {
+    // Squished sad eyes, heavy tears from both sides
+    drawEye(LX, EY + 6, EW, EH - 9, ER, 0, 7);
+    drawEye(RX, EY + 6, EW, EH - 9, ER, 0, 7);
+    drawBrow(LX - 26, EY - 11, LX + 18, EY - 30);
+    drawBrow(RX + 26, EY - 11, RX - 18, EY - 30);
+    // Wobbly frown
+    float wobble = sin(t * 3.14159f * 6.0f) * 2.0f;
+    drawSadArc(SCREEN_WIDTH / 2 + (int)wobble, MY - 4, 34);
+    // Left tear stream
+    for (int j = 0; j < 3; j++) {
+      float tOff = fmod(t + j * 0.33f, 1.0f);
+      int ty = EY + 26 + (int)(tOff * 60.0f);
+      if (ty < MY + 30) drawTear(LX + EW / 2 + 3, ty, 4);
+    }
+    // Right tear stream
+    for (int j = 0; j < 3; j++) {
+      float tOff = fmod(t + j * 0.33f + 0.15f, 1.0f);
+      int ty = EY + 26 + (int)(tOff * 60.0f);
+      if (ty < MY + 30) drawTear(RX + EW / 2 + 3, ty, 4);
+    }
+
+  } else if (currentExpression == "blushing") {
+    // Averted gaze (pupils shifted), rosy cheeks
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int shift = 4 + (int)(wave * 3.0f);
+    drawEye(LX, EY, EW, EH - 4, ER, -shift, 3);
+    drawEye(RX, EY, EW, EH - 4, ER, -shift, 3);
+    // Big rosy blush circles
+    int blushR = 10 + (int)(wave * 3.0f);
+    spr.fillCircle(LX + 28, EY + 18, blushR, COL_PINK);
+    spr.fillCircle(RX - 28, EY + 18, blushR, COL_PINK);
+    // Shy small smile
+    for (int line = 0; line < 3; line++) {
+      spr.drawLine(SCREEN_WIDTH / 2 - 10, MY + line, SCREEN_WIDTH / 2 + 10, MY + line, userFaceColor);
+    }
+
+  } else if (currentExpression == "nervous") {
+    // Wide darting eyes, wobbly mouth
+    float sx = sin(t * 3.14159f * 6.0f);
+    int px = (int)(sx * 7.0f);
+    drawEye(LX, EY, EW + 4, EH + 4, ER, px, 0);
+    drawEye(RX, EY, EW + 4, EH + 4, ER, px, 0);
+    // Raised uneven brows
+    float wave = sin(t * 3.14159f * 4.0f) * 3.0f;
+    drawBrow(LX - 26, EY - 32 - (int)wave, LX + 26, EY - 30);
+    drawBrow(RX - 26, EY - 30, RX + 26, EY - 32 + (int)wave);
+    // Wobbly crooked mouth
+    int mShift = (int)(sin(t * 3.14159f * 8.0f) * 3.0f);
+    for (int line = 0; line < 3; line++) {
+      spr.drawLine(SCREEN_WIDTH / 2 - 16, MY + mShift + line,
+                   SCREEN_WIDTH / 2 + 16, MY - mShift + line, userFaceColor);
+    }
+    // Sweat drop
+    if (ph < 48) drawTear(RX + EW / 2 + 10, EY - 10, 5);
+
+  } else if (currentExpression == "proud") {
+    // Closed eyes lifted, confident grin
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    // Confident arc eyes (like happy arcs but slightly lifted)
+    drawHappyArc(LX, EY - 4, EW + 4);
+    drawHappyArc(RX, EY - 4, EW + 4);
+    // Proud wide grin
+    drawSmile(SCREEN_WIDTH / 2, MY - 6, 56);
+    // Crown/sparkle above
+    int sp = (int)(wave * 4.0f);
+    drawIconStar(SCREEN_WIDTH / 2 - 20, FACE_OFFSET_Y + 18 - sp, 5);
+    drawIconStar(SCREEN_WIDTH / 2, FACE_OFFSET_Y + 12 - sp, 7);
+    drawIconStar(SCREEN_WIDTH / 2 + 20, FACE_OFFSET_Y + 18 - sp, 5);
+
+  } else if (currentExpression == "skeptical") {
+    // One raised brow, squinting side-eye
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int browLift = 6 + (int)(wave * 4.0f);
+    // Left eye squints, right eye wide
+    drawEye(LX, EY + 4, EW - 8, EH - 12, ER - 2, 4, 4);
+    drawEye(RX, EY, EW + 4, EH + 4, ER + 2, 4, 0);
+    // Left brow flat, right brow raised
+    drawBrow(LX - 22, EY - 18, LX + 22, EY - 20);
+    drawBrow(RX - 22, EY - 32 - browLift, RX + 22, EY - 28 - browLift);
+    // Flat angled mouth
+    for (int line = 0; line < 4; line++) {
+      spr.drawLine(SCREEN_WIDTH / 2 - 16, MY + 2 + line,
+                   SCREEN_WIDTH / 2 + 16, MY - 2 + line, userFaceColor);
+    }
+
+  } else if (currentExpression == "peaceful") {
+    // Gently closed eyes, serene breathing
+    float breathe = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int lift = (int)(breathe * 3.0f);
+    // Soft closed eye arcs
+    drawHappyArc(LX, EY + 2 - lift, EW - 4);
+    drawHappyArc(RX, EY + 2 - lift, EW - 4);
+    // Gentle smile
+    for (int line = 0; line < 3; line++) {
+      spr.drawLine(SCREEN_WIDTH / 2 - 12, MY - lift + line,
+                   SCREEN_WIDTH / 2 + 12, MY - lift + line, userFaceColor);
+    }
+    // Tiny sparkles that slowly drift
+    int sp1 = (int)(t * 40.0f) % 20;
+    int sp2 = (int)(t * 30.0f + 10) % 20;
+    spr.fillCircle(40, FACE_OFFSET_Y + 40 + sp1, 2, userAccentColor);
+    spr.fillCircle(210, FACE_OFFSET_Y + 50 + sp2, 2, userAccentColor);
+    spr.fillCircle(260, FACE_OFFSET_Y + 30 + sp1, 1, userAccentColor);
+
+  } else if (currentExpression == "determined") {
+    // Focused eyes, firm set mouth
+    float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int focus = (int)(wave * 3.0f);
+    // Slightly narrowed focused eyes
+    drawEye(LX, EY + 2, EW, EH - 6, ER, 0, focus);
+    drawEye(RX, EY + 2, EW, EH - 6, ER, 0, focus);
+    // Angled determined brows
+    drawBrow(LX - 22, EY - 20, LX + 22, EY - 28);
+    drawBrow(RX - 22, EY - 28, RX + 22, EY - 20);
+    // Firm horizontal mouth
+    for (int line = 0; line < 5; line++) {
+      spr.drawLine(SCREEN_WIDTH / 2 - 20, MY + line,
+                   SCREEN_WIDTH / 2 + 20, MY + line, userFaceColor);
+    }
+
   } else {
     float drift = sin(t * 3.14159f * 2.0f);
     int px = (int)(drift * 4.0f);
@@ -1870,53 +2015,40 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, eyeH, ER, px, py);
     drawEye(RX, EY, EW, eyeH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      tft.drawLine(SCREEN_WIDTH / 2 - 13, MY + line, SCREEN_WIDTH / 2 + 13, MY + line, userFaceColor);
+      spr.drawLine(SCREEN_WIDTH / 2 - 13, MY + line, SCREEN_WIDTH / 2 + 13, MY + line, userFaceColor);
     }
   }
 
   drawCompanionAccessories(LX, RX, EY, MY);
+  spr.pushSprite(0, 0);
 }
 
 void renderIdle() {
   if (!displayAvailable) return;
+  spr.fillSprite(COL_BG);
 
-  // ── Clock/header strip (rows 0..FACE_OFFSET_Y-1) ─────────────────────────
-  // Only clear and redraw this strip when the minute changes, so the clock
-  // never flashes black on every 500 ms tick.
-  static int  s_idleLastMin  = -1;
-  static unsigned long s_idleLastCallMs = 0;
-  const  unsigned long nowMs = millis();
-  // If we haven't called renderIdle recently we're re-entering from another
-  // mode; the clock area may have been painted over — force a refresh.
-  if (nowMs - s_idleLastCallMs > 1500UL) s_idleLastMin = -1;
-  s_idleLastCallMs = nowMs;
+  // ── Clock/header strip ──
   {
     struct tm timeinfo;
     bool timeOk = getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100;
-    int  curMin = timeOk ? (int)timeinfo.tm_min : -1;
-    if (curMin != s_idleLastMin) {
-      s_idleLastMin = curMin;
-      tft.fillRect(0, 0, SCREEN_WIDTH, FACE_OFFSET_Y, COL_BG);
-      if (timeOk) {
-        char tBuf[8], dBuf[14];
-        strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
-        strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
-        tft.setTextSize(2);
-        tft.setTextColor(userAccentColor);
-        tft.setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
-        tft.print(tBuf);
-        tft.setTextSize(1);
-        tft.setTextColor(userFaceColor);
-        tft.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
-        tft.print(dBuf);
-      }
-      drawWeatherBadge(280, 15);
+    if (timeOk) {
+      char tBuf[8], dBuf[14];
+      strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
+      strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
+      spr.setTextSize(2);
+      spr.setTextColor(userAccentColor);
+      spr.setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
+      spr.print(tBuf);
+      spr.setTextSize(1);
+      spr.setTextColor(userFaceColor);
+      spr.setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
+      spr.print(dBuf);
     }
+    drawWeatherBadge(280, 15);
   }
 
-  // ── Face box: only clear the interior each tick (border stays on screen) ──
-  tft.fillRect(1, FACE_OFFSET_Y + 1, SCREEN_WIDTH - 2, 178, COL_BG);
-  tft.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
+  // ── Face box ──
+  spr.drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
 
   const int leftX = 70;
   const int rightX = 170;
@@ -1928,17 +2060,17 @@ void renderIdle() {
   if (activePetMode == "off") {
     drawEye(leftX, eyeY, 42, 26, 9, 0, 0);
     drawEye(rightX, eyeY, 42, 26, 9, 0, 0);
-    tft.drawLine(SCREEN_WIDTH / 2 - 13, mouthY, SCREEN_WIDTH / 2 + 13, mouthY, userFaceColor);
+    spr.drawLine(SCREEN_WIDTH / 2 - 13, mouthY, SCREEN_WIDTH / 2 + 13, mouthY, userFaceColor);
   } else if (activePetMode == "nap" || petPersonality == "sleepy") {
     drawBlinkEye(leftX, eyeY, 44, 7, 7);
     drawBlinkEye(rightX, eyeY, 44, 7, 7);
-    tft.drawLine(SCREEN_WIDTH / 2 - 14, mouthY, SCREEN_WIDTH / 2 + 14, mouthY, userFaceColor);
-    tft.setTextSize(2);
-    tft.setTextColor(userAccentColor);
-    tft.setCursor(190, FACE_OFFSET_Y + 44);
-    tft.print("z");
-    tft.setCursor(204, FACE_OFFSET_Y + 34);
-    tft.print("z");
+    spr.drawLine(SCREEN_WIDTH / 2 - 14, mouthY, SCREEN_WIDTH / 2 + 14, mouthY, userFaceColor);
+    spr.setTextSize(2);
+    spr.setTextColor(userAccentColor);
+    spr.setCursor(190, FACE_OFFSET_Y + 44);
+    spr.print("z");
+    spr.setCursor(204, FACE_OFFSET_Y + 34);
+    spr.print("z");
   } else if (activePetMode == "cuddle" || petPersonality == "cuddly") {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx / 2, 0);
     drawEye(rightX, eyeY, 44, 30, 9, pupilDx / 2, 0);
@@ -1948,7 +2080,7 @@ void renderIdle() {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawSmile(SCREEN_WIDTH / 2, mouthY - 4, 48);
-    tft.fillCircle(26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
+    spr.fillCircle(26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
   } else if (activePetMode == "party") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, -pupilDx * 2, 0);
@@ -1963,9 +2095,9 @@ void renderIdle() {
 
   drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
 
-  // Status bar at bottom of screen (size-1 font fits within the 18px gap)
-  tft.fillRect(0, SCREEN_HEIGHT - 18, SCREEN_WIDTH, 18, COL_BG);
+  // Status bar
   drawStatusBar();
+  spr.pushSprite(0, 0);
 }
 
 void renderCurrentMode() {
@@ -1983,6 +2115,9 @@ void renderCurrentMode() {
       break;
     case MODE_IMAGE:
       renderImage();
+      break;
+    case MODE_COLOR_IMAGE:
+      renderColorImage();
       break;
     case MODE_EXPRESSION:
       renderExpressionFrame();
@@ -2028,32 +2163,32 @@ void drawStickFigure(int cx, int cy, int sc,
                      float legLA, float legRA,
                      uint16_t color) {
   // Head
-  tft.drawCircle(cx, cy - sc * 3, sc, color);
+  spr.drawCircle(cx, cy - sc * 3, sc, color);
   // Body (neck → hips)
-  tft.drawLine(cx, cy - sc * 2, cx, cy + sc * 2, color);
+  spr.drawLine(cx, cy - sc * 2, cx, cy + sc * 2, color);
   // Left arm (armLA = angle below left-horizontal; 0=straight out, PI/4=45° down)
   int sY = cy - sc;
-  tft.drawLine(cx, sY,
+  spr.drawLine(cx, sY,
                cx - (int)(sc * 3.f * cosf(armLA)),
                sY + (int)(sc * 3.f * sinf(armLA)), color);
   // Right arm (armRA = angle below right-horizontal)
-  tft.drawLine(cx, sY,
+  spr.drawLine(cx, sY,
                cx + (int)(sc * 3.f * cosf(armRA)),
                sY + (int)(sc * 3.f * sinf(armRA)), color);
   // Left leg (legLA = spread angle from straight down)
   int hY = cy + sc * 2;
-  tft.drawLine(cx, hY,
+  spr.drawLine(cx, hY,
                cx - (int)(sc * 3.f * sinf(legLA)),
                hY + (int)(sc * 3.f * cosf(legLA)), color);
   // Right leg (legRA = spread angle from straight down)
-  tft.drawLine(cx, hY,
+  spr.drawLine(cx, hY,
                cx + (int)(sc * 3.f * sinf(legRA)),
                hY + (int)(sc * 3.f * cosf(legRA)), color);
 }
 
 void renderSceneFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
 
   float t    = (float)expressionPhase / 63.f;
   float bob  = sinf(t * 3.14159f * 2.f) * 2.f;
@@ -2063,9 +2198,9 @@ void renderSceneFrame() {
     float waveA = 0.2f + sinf(t * 3.14159f * 4.f) * 0.5f;
     drawStickFigure(220, 120 + (int)bob, 14, 0.3f, -waveA, 0.3f, 0.3f, userBodyColor);
     int hx = 160, hy = 70 - (int)(t * 18.f);
-    tft.fillCircle(hx - 4, hy - 2, 4, COL_ROSE);
-    tft.fillCircle(hx + 4, hy - 2, 4, COL_ROSE);
-    tft.fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, COL_ROSE);
+    spr.fillCircle(hx - 4, hy - 2, 4, COL_ROSE);
+    spr.fillCircle(hx + 4, hy - 2, 4, COL_ROSE);
+    spr.fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, COL_ROSE);
 
   } else if (currentScene == "bow") {
     drawStickFigure(130, 120, 14, 0.5f, 0.5f, 0.25f, 0.25f, userFaceColor);
@@ -2083,7 +2218,7 @@ void renderSceneFrame() {
     float handBob = sinf(t * 3.14159f * 2.f) * 3.f;
     drawStickFigure(100, 125 + (int)handBob, 14, 0.4f, 0.0f, 0.3f, 0.3f, userFaceColor);
     drawStickFigure(220, 125 + (int)handBob, 14, 0.0f, 0.4f, 0.3f, 0.3f, userBodyColor);
-    tft.fillCircle(160, 110, 5, COL_GOLD);
+    spr.fillCircle(160, 110, 5, COL_GOLD);
 
   } else if (currentScene == "kiss") {
     float lean = sinf(t * 3.14159f) * 8.f;
@@ -2093,24 +2228,25 @@ void renderSceneFrame() {
       for (int i = 0; i < 3; i++) {
         int hx2 = 160 + (i - 1) * 14;
         int hy2 = 76 - (int)(t * 15.f);
-        tft.fillCircle(hx2 - 3, hy2,   3, COL_ROSE);
-        tft.fillCircle(hx2 + 3, hy2,   3, COL_ROSE);
-        tft.fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, COL_ROSE);
+        spr.fillCircle(hx2 - 3, hy2,   3, COL_ROSE);
+        spr.fillCircle(hx2 + 3, hy2,   3, COL_ROSE);
+        spr.fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, COL_ROSE);
       }
     }
   } else { // shyLeanIn (default)
     float lean2 = sinf(t * 3.14159f * 1.5f) * 5.f;
     drawStickFigure(105, 125 - (int)lean2, 14, 0.6f, 0.1f, 0.3f, 0.3f, userFaceColor);
     drawStickFigure(215, 125,              14, 0.3f, 0.7f, 0.3f, 0.3f, userBodyColor);
-    tft.fillCircle(160, 95, 4, COL_PINK);
-    tft.fillCircle(155, 85, 3, COL_PINK);
-    tft.fillCircle(165, 80, 2, COL_PINK);
+    spr.fillCircle(160, 95, 4, COL_PINK);
+    spr.fillCircle(155, 85, 3, COL_PINK);
+    spr.fillCircle(165, 80, 2, COL_PINK);
   }
+  spr.pushSprite(0, 0);
 }
 
 void setScene(const String& name) {
   currentScene         = name;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   currentMode          = MODE_SCENE;
   expressionPhase      = 0;
   lastExpressionTickMs = 0;
@@ -2123,40 +2259,63 @@ static const uint16_t BURST_COLORS[] = {
 };
 
 void initFireworks() {
-  int cx = 40 + (int)random(241);
-  int cy = 20 + (int)random(181);
-  uint16_t col = BURST_COLORS[(uint8_t)random(8)];
-  gPtclCount = 16;
-  for (uint8_t i = 0; i < 16; i++) {
-    float a = i * 3.14159f * 2.f / 16.f;
-    int spd = 3 + (int)random(4);
-    gPtcl[i].x     = (int16_t)cx;
-    gPtcl[i].y     = (int16_t)cy;
-    gPtcl[i].vx    = (int8_t)((float)spd * cosf(a));
-    gPtcl[i].vy    = (int8_t)((float)spd * sinf(a));
-    gPtcl[i].life  = 30;
-    gPtcl[i].color = col;
+  // Two simultaneous bursts at random positions (upper 2/3 of screen)
+  gPtclCount = 48;
+  for (uint8_t burst = 0; burst < 2; burst++) {
+    int cx = 60 + (int)random(201);
+    int cy = 30 + (int)random(100);
+    uint16_t col = BURST_COLORS[(uint8_t)random(8)];
+    for (uint8_t i = 0; i < 24; i++) {
+      uint8_t idx = burst * 24 + i;
+      float a = (float)i * 3.14159f * 2.f / 24.f + (random(100) / 100.f) * 0.25f;
+      int spd = 2 + (int)random(5);
+      gPtcl[idx].x     = (int16_t)cx;
+      gPtcl[idx].y     = (int16_t)cy;
+      gPtcl[idx].vx    = (int8_t)((float)spd * cosf(a));
+      gPtcl[idx].vy    = (int8_t)((float)spd * sinf(a));
+      gPtcl[idx].life  = (uint8_t)(25 + random(20));
+      // Alternate between main color and lighter sparkle
+      gPtcl[idx].color = (i % 3 == 0) ? COL_GOLD : col;
+    }
   }
 }
 
 void renderFireworksFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   bool anyAlive = false;
   for (uint8_t i = 0; i < gPtclCount; i++) {
     if (gPtcl[i].life == 0) continue;
     anyAlive = true;
-    gPtcl[i].x   += gPtcl[i].vx;
-    gPtcl[i].y   += gPtcl[i].vy;
-    gPtcl[i].vy   = (int8_t)(gPtcl[i].vy + 1);  // gravity
+    gPtcl[i].x  += gPtcl[i].vx;
+    gPtcl[i].y  += gPtcl[i].vy;
+    // Gentle gravity (apply every other frame to slow descent)
+    if (gPtcl[i].life % 2 == 0) gPtcl[i].vy = (int8_t)(gPtcl[i].vy + 1);
+    // Air resistance — slow horizontal velocity over time
+    if (gPtcl[i].life % 4 == 0 && gPtcl[i].vx != 0)
+      gPtcl[i].vx = (int8_t)(gPtcl[i].vx > 0 ? gPtcl[i].vx - 1 : gPtcl[i].vx + 1);
     gPtcl[i].life--;
+    // Kill particles that go off-screen
+    if (gPtcl[i].y >= SCREEN_HEIGHT || gPtcl[i].x < -5 || gPtcl[i].x >= SCREEN_WIDTH + 5) {
+      gPtcl[i].life = 0;
+      continue;
+    }
     int16_t nx = gPtcl[i].x, ny = gPtcl[i].y;
-    if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT - 18) {
-      int r = (gPtcl[i].life > 20) ? 3 : (gPtcl[i].life > 10) ? 2 : 1;
-      tft.fillCircle(nx, ny, r, gPtcl[i].color);
+    if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT) {
+      // Size fades as life decreases
+      int r = (gPtcl[i].life > 30) ? 3 : (gPtcl[i].life > 15) ? 2 : 1;
+      spr.fillCircle(nx, ny, r, gPtcl[i].color);
+      // Sparkle trail — dim trail dot behind each particle
+      if (gPtcl[i].life > 10) {
+        int tx = nx - gPtcl[i].vx;
+        int ty = ny - gPtcl[i].vy;
+        if (tx >= 0 && tx < SCREEN_WIDTH && ty >= 0 && ty < SCREEN_HEIGHT)
+          spr.drawPixel(tx, ty, gPtcl[i].color);
+      }
     }
   }
   if (!anyAlive) initFireworks();
+  spr.pushSprite(0, 0);
 }
 
 void initHeartRain() {
@@ -2173,7 +2332,7 @@ void initHeartRain() {
 
 void renderHeartRainFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   for (uint8_t i = 0; i < gPtclCount; i++) {
     gPtcl[i].y += gPtcl[i].vy;
     if (gPtcl[i].y > SCREEN_HEIGHT - 18) {
@@ -2183,10 +2342,11 @@ void renderHeartRainFrame() {
     int16_t x = gPtcl[i].x, y = gPtcl[i].y;
     int s = gPtcl[i].life;
     uint16_t c = gPtcl[i].color;
-    tft.fillCircle(x - s, y - s / 2, s, c);
-    tft.fillCircle(x + s, y - s / 2, s, c);
-    tft.fillTriangle(x - s * 2, y - s / 2 + 1, x + s * 2, y - s / 2 + 1, x, y + s * 2, c);
+    spr.fillCircle(x - s, y - s / 2, s, c);
+    spr.fillCircle(x + s, y - s / 2, s, c);
+    spr.fillTriangle(x - s * 2, y - s / 2 + 1, x + s * 2, y - s / 2 + 1, x, y + s * 2, c);
   }
+  spr.pushSprite(0, 0);
 }
 
 void initSnowfall() {
@@ -2203,15 +2363,16 @@ void initSnowfall() {
 
 void renderSnowfallFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   for (uint8_t i = 0; i < gPtclCount; i++) {
     gPtcl[i].x += gPtcl[i].vx;
     gPtcl[i].y += gPtcl[i].vy;
     if (gPtcl[i].y >= SCREEN_HEIGHT - 18) { gPtcl[i].y = 0; gPtcl[i].x = (int16_t)random(SCREEN_WIDTH); }
     if (gPtcl[i].x < 0)             gPtcl[i].x = SCREEN_WIDTH - 1;
     if (gPtcl[i].x >= SCREEN_WIDTH) gPtcl[i].x = 0;
-    tft.fillCircle(gPtcl[i].x, gPtcl[i].y, gPtcl[i].life, gPtcl[i].color);
+    spr.fillCircle(gPtcl[i].x, gPtcl[i].y, gPtcl[i].life, gPtcl[i].color);
   }
+  spr.pushSprite(0, 0);
 }
 
 void initStarfield() {
@@ -2229,7 +2390,7 @@ void initStarfield() {
 
 void renderStarfieldFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   const int CX = SCREEN_WIDTH / 2, CY = (SCREEN_HEIGHT - 18) / 2;
   for (uint8_t i = 0; i < gPtclCount; i++) {
     float z = gPtcl[i].life / 64.f + 0.01f;
@@ -2243,15 +2404,16 @@ void renderStarfieldFrame() {
     } else {
       int r = (gPtcl[i].life < 20) ? 2 : 1;
       uint16_t c = (gPtcl[i].life < 20) ? userAccentColor : userFaceColor;
-      tft.fillCircle(sx, sy, r, c);
+      spr.fillCircle(sx, sy, r, c);
     }
   }
+  spr.pushSprite(0, 0);
 }
 
 void setParticleMode(const String& name) {
   lastParticleTickMs = 0;
   expressionPhase    = 0;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   if      (name == "fireworks")  { currentMode = MODE_FIREWORKS;  initFireworks();  }
   else if (name == "heart_rain") { currentMode = MODE_HEART_RAIN; initHeartRain(); }
   else if (name == "snowfall")   { currentMode = MODE_SNOWFALL;   initSnowfall();  }
@@ -2262,7 +2424,7 @@ void setParticleMode(const String& name) {
 
 void renderCountdownFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   long elapsed   = (long)((millis() - countdownStartMs) / 1000UL);
   long remaining = countdownSeconds - elapsed;
   if (remaining < 0) remaining = 0;
@@ -2273,28 +2435,29 @@ void renderCountdownFrame() {
   if (h > 0) snprintf(buf, sizeof(buf), "%02ld:%02ld:%02ld", h, m, s);
   else       snprintf(buf, sizeof(buf), "%02ld:%02ld", m, s);
   // Label
-  tft.setTextSize(1);
-  tft.setTextColor(userFaceColor);
-  tft.setCursor((SCREEN_WIDTH - 9 * 6) / 2, 55);
-  tft.print("COUNTDOWN");
+  spr.setTextSize(1);
+  spr.setTextColor(userFaceColor);
+  spr.setCursor((SCREEN_WIDTH - 9 * 6) / 2, 55);
+  spr.print("COUNTDOWN");
   // Large digits
-  tft.setTextSize(4);
-  tft.setTextColor(COL_GOLD);
-  tft.setCursor((SCREEN_WIDTH - (int)strlen(buf) * 24) / 2, 75);
-  tft.print(buf);
+  spr.setTextSize(4);
+  spr.setTextColor(COL_GOLD);
+  spr.setCursor((SCREEN_WIDTH - (int)strlen(buf) * 24) / 2, 75);
+  spr.print(buf);
   // Progress bar
   int barTotal = SCREEN_WIDTH - 40;
   int safeSecs = (countdownSeconds > 0) ? (int)countdownSeconds : 1;
   int barFill  = (int)((long)barTotal * remaining / safeSecs);
-  tft.fillRect(20, 148, barTotal, 8, COL_BG);
-  tft.fillRect(20, 148, barFill,  8, COL_ACCENT);
-  tft.drawRect(20, 148, barTotal, 8, userFaceColor);
+  spr.fillRect(20, 148, barTotal, 8, COL_BG);
+  spr.fillRect(20, 148, barFill,  8, COL_ACCENT);
+  spr.drawRect(20, 148, barTotal, 8, userFaceColor);
   // At zero: trigger fireworks celebration
   if (remaining == 0 && !countdownExpired) {
     countdownExpired = true;
     setParticleMode("fireworks");
     startTransientExpression("love", 4000, "Time's up!");
   }
+  spr.pushSprite(0, 0);
 }
 
 void setCountdown(long seconds) {
@@ -2337,35 +2500,35 @@ static uint16_t weatherCategoryColor(int cat) {
 
 void drawWeatherIcon(int cx, int cy, int r, int cat) {
   if (cat == 0) {  // Sun
-    tft.fillCircle(cx, cy, r, COL_GOLD);
+    spr.fillCircle(cx, cy, r, COL_GOLD);
     for (int i = 0; i < 8; i++) {
       float a = i * 3.14159f / 4.f;
-      tft.drawLine(cx + (int)((r+2)*cosf(a)), cy + (int)((r+2)*sinf(a)),
+      spr.drawLine(cx + (int)((r+2)*cosf(a)), cy + (int)((r+2)*sinf(a)),
                    cx + (int)((r+r/2)*cosf(a)), cy + (int)((r+r/2)*sinf(a)), COL_GOLD);
     }
   } else if (cat == 1) {  // Cloud
-    tft.fillCircle(cx - r/3, cy, r*2/3, userFaceColor);
-    tft.fillCircle(cx + r/3, cy, r*2/3, userFaceColor);
-    tft.fillCircle(cx, cy - r/3, r/2, userFaceColor);
-    tft.fillRect(cx - r*2/3, cy, r*4/3, r/2+1, userFaceColor);
+    spr.fillCircle(cx - r/3, cy, r*2/3, userFaceColor);
+    spr.fillCircle(cx + r/3, cy, r*2/3, userFaceColor);
+    spr.fillCircle(cx, cy - r/3, r/2, userFaceColor);
+    spr.fillRect(cx - r*2/3, cy, r*4/3, r/2+1, userFaceColor);
   } else if (cat == 2) {  // Rain
-    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_SKYBLUE);
-    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_SKYBLUE);
-    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_SKYBLUE);
+    spr.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_SKYBLUE);
+    spr.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_SKYBLUE);
+    spr.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_SKYBLUE);
     for (int d = 0; d < 3; d++)
-      tft.drawLine(cx - r/3 + d*r/3, cy + r/4, cx - r/3 + d*r/3 - 2, cy + r, COL_SKYBLUE);
+      spr.drawLine(cx - r/3 + d*r/3, cy + r/4, cx - r/3 + d*r/3 - 2, cy + r, COL_SKYBLUE);
   } else if (cat == 3) {  // Snow
-    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, userFaceColor);
-    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, userFaceColor);
-    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, userFaceColor);
+    spr.fillCircle(cx - r/4, cy - r/4, r*2/3, userFaceColor);
+    spr.fillCircle(cx + r/4, cy - r/4, r*2/3, userFaceColor);
+    spr.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, userFaceColor);
     for (int d = 0; d < 3; d++)
-      tft.fillCircle(cx - r/3 + d*r/3, cy + r/2, 2, userFaceColor);
+      spr.fillCircle(cx - r/3 + d*r/3, cy + r/2, 2, userFaceColor);
   } else {  // Storm
-    tft.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_LAVENDER);
-    tft.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_LAVENDER);
-    tft.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_LAVENDER);
-    tft.fillTriangle(cx, cy + r/4, cx - r/4, cy + 3*r/4, cx + r/8, cy + r/2, COL_GOLD);
-    tft.fillTriangle(cx + r/8, cy + r/2, cx - r/8, cy + 3*r/4, cx + r/4, cy + 3*r/4, COL_GOLD);
+    spr.fillCircle(cx - r/4, cy - r/4, r*2/3, COL_LAVENDER);
+    spr.fillCircle(cx + r/4, cy - r/4, r*2/3, COL_LAVENDER);
+    spr.fillRect(cx - r*2/3, cy - r/4, r*4/3, r/3+1, COL_LAVENDER);
+    spr.fillTriangle(cx, cy + r/4, cx - r/4, cy + 3*r/4, cx + r/8, cy + r/2, COL_GOLD);
+    spr.fillTriangle(cx + r/8, cy + r/2, cx - r/8, cy + 3*r/4, cx + r/4, cy + 3*r/4, COL_GOLD);
   }
 }
 
@@ -2376,16 +2539,17 @@ void drawWeatherBadge(int x, int y) {
 
 void renderWeatherFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   if (weatherCode < 0) {
-    tft.setTextSize(2);
-    tft.setTextColor(userFaceColor);
-    tft.setCursor(40, 95);
-    tft.print("No weather data");
-    tft.setTextSize(1);
-    tft.setTextColor(COL_ACCENT);
-    tft.setCursor(55, 122);
-    tft.print("Send set_location first");
+    spr.setTextSize(2);
+    spr.setTextColor(userFaceColor);
+    spr.setCursor(40, 95);
+    spr.print("No weather data");
+    spr.setTextSize(1);
+    spr.setTextColor(COL_ACCENT);
+    spr.setCursor(55, 122);
+    spr.print("Send set_location first");
+    spr.pushSprite(0, 0);
     return;
   }
   int cat = weatherCodeCategory(weatherCode);
@@ -2394,15 +2558,16 @@ void renderWeatherFrame() {
   int tWhole = weatherTempTenths / 10;
   int tFrac  = abs(weatherTempTenths) % 10;
   snprintf(tempBuf, sizeof(tempBuf), "%d.%d C", tWhole, tFrac);
-  tft.setTextSize(3);
-  tft.setTextColor(weatherCategoryColor(cat));
-  tft.setCursor((SCREEN_WIDTH - (int)strlen(tempBuf) * 18) / 2, 115);
-  tft.print(tempBuf);
+  spr.setTextSize(3);
+  spr.setTextColor(weatherCategoryColor(cat));
+  spr.setCursor((SCREEN_WIDTH - (int)strlen(tempBuf) * 18) / 2, 115);
+  spr.print(tempBuf);
   const char* labels[] = { "Clear", "Cloudy", "Rain", "Snow", "Storm" };
-  tft.setTextSize(2);
-  tft.setTextColor(userFaceColor);
-  tft.setCursor((SCREEN_WIDTH - (int)strlen(labels[cat]) * 12) / 2, 158);
-  tft.print(labels[cat]);
+  spr.setTextSize(2);
+  spr.setTextColor(userFaceColor);
+  spr.setCursor((SCREEN_WIDTH - (int)strlen(labels[cat]) * 12) / 2, 158);
+  spr.print(labels[cat]);
+  spr.pushSprite(0, 0);
 }
 
 void fetchWeather() {
@@ -2451,13 +2616,13 @@ void drawStatusBar() {
   if (!displayAvailable) return;
   bool wifiOk  = (WiFi.status() == WL_CONNECTED);
   bool relayOk = (lastRelaySuccessMs > 0 && millis() - lastRelaySuccessMs < 120000UL);
-  tft.setTextSize(1);
+  spr.setTextSize(1);
   // WiFi dot
-  tft.fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 5,
-                 wifiOk ? ST77XX_GREEN : COL_ROSE);
+  spr.fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 5,
+                 wifiOk ? TFT_GREEN : COL_ROSE);
   // Relay dot
-  tft.fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 5,
-                 relayOk ? ST77XX_GREEN : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
+  spr.fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 5,
+                 relayOk ? TFT_GREEN : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
 }
 
 void checkTimeGreetings() {
@@ -2526,41 +2691,42 @@ void detectEmojiReaction(const String& text) {
 
 void renderSleepFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   const float t = (float)(expressionPhase % 64) / 63.f;
   // Gentle pulsing moon
   const int MCX = 125, MCY = 90;
   float pulse = 0.8f + sinf(t * 3.14159f * 2.f) * 0.2f;
   int mr = (int)(32.f * pulse);
-  tft.fillCircle(MCX, MCY, mr, COL_GOLD);
-  tft.fillCircle(MCX + mr / 3, MCY - mr / 4, mr - 4, COL_BG);  // crescent shadow
+  spr.fillCircle(MCX, MCY, mr, COL_GOLD);
+  spr.fillCircle(MCX + mr / 3, MCY - mr / 4, mr - 4, COL_BG);  // crescent shadow
   // Stars
   static const uint16_t STAR_X[] = { 18, 52, 230, 290, 16, 270, 195, 60 };
   static const uint8_t  STAR_Y[] = { 14, 36,  18,  42, 62,  72,  50, 72 };
   for (int i = 0; i < 8; i++) {
     float phase = t * 3.14159f * 2.f + i * 0.78f;
     uint16_t c = (sinf(phase) > 0.f) ? COL_GOLD : userAccentColor;
-    tft.fillCircle(STAR_X[i], STAR_Y[i], 2, c);
+    spr.fillCircle(STAR_X[i], STAR_Y[i], 2, c);
   }
   // Zzz floating up
   int zDrift = (int)(t * 40.f);
-  tft.setTextSize(2);
-  tft.setTextColor(COL_LAVENDER);
-  tft.setCursor(190, 120 - zDrift);
-  tft.print("z");
-  tft.setTextSize(3);
-  tft.setCursor(208, 95 - zDrift);
-  tft.print("Z");
+  spr.setTextSize(2);
+  spr.setTextColor(COL_LAVENDER);
+  spr.setCursor(190, 120 - zDrift);
+  spr.print("z");
+  spr.setTextSize(3);
+  spr.setCursor(208, 95 - zDrift);
+  spr.print("Z");
   // Calm message
-  tft.setTextSize(1);
-  tft.setTextColor(userFaceColor);
-  tft.setCursor((SCREEN_WIDTH - 10*6) / 2, 162);
-  tft.print("Sweet dreams");
+  spr.setTextSize(1);
+  spr.setTextColor(userFaceColor);
+  spr.setCursor((SCREEN_WIDTH - 10*6) / 2, 162);
+  spr.print("Sweet dreams");
   drawStatusBar();
+  spr.pushSprite(0, 0);
 }
 
 void setSleepMode() {
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   currentMode     = MODE_SLEEP;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
@@ -2589,16 +2755,16 @@ void drawFlowerRose(int cx, int cy, int scale, int phase) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff;
     int px = cx + (int)(outerDist * cosf(a));
     int py = cy + (int)(outerDist * sinf(a));
-    tft.fillCircle(px, py, outerR, COL_ROSE);
+    spr.fillCircle(px, py, outerR, COL_ROSE);
   }
   for (int i = 0; i < 5; i++) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff + 0.314f;
     int px = cx + (int)(midDist * cosf(a));
     int py = cy + (int)(midDist * sinf(a));
-    tft.fillCircle(px, py, midR, COL_PINK);
+    spr.fillCircle(px, py, midR, COL_PINK);
   }
-  tft.fillCircle(cx, cy, centerR + 2, COL_GOLD);
-  tft.fillCircle(cx, cy, centerR - 1, COL_BG);
+  spr.fillCircle(cx, cy, centerR + 2, COL_GOLD);
+  spr.fillCircle(cx, cy, centerR - 1, COL_BG);
 }
 
 void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
@@ -2620,10 +2786,10 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
       float perp_a = a + 3.14159f / 2.f;
       int dx = (int)(w * cosf(perp_a));
       int dy = (int)(w * sinf(perp_a));
-      tft.drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, COL_GOLD);
+      spr.drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, COL_GOLD);
     }
   }
-  tft.fillCircle(cx, cy, centerR, userFaceColor);
+  spr.fillCircle(cx, cy, centerR, userFaceColor);
   int numSeeds = 21 + (int)(t * 11.f);
   for (int i = 0; i < numSeeds; i++) {
     float angle = i * 2.399f + t * 0.5f;
@@ -2631,7 +2797,7 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
     int sx = cx + (int)(r * cosf(angle));
     int sy = cy + (int)(r * sinf(angle));
     if (sx >= 0 && sx < SCREEN_WIDTH && sy >= 0 && sy < SCREEN_HEIGHT) {
-      tft.fillCircle(sx, sy, 2, COL_BG);
+      spr.fillCircle(sx, sy, 2, COL_BG);
     }
   }
 }
@@ -2655,25 +2821,25 @@ void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
     float side_a = a + 3.14159f / 2.f;
     int sx = (int)(bractW * cosf(side_a));
     int sy = (int)(bractW * sinf(side_a));
-    tft.fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, COL_PEACH);
+    spr.fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, COL_PEACH);
   }
-  tft.fillCircle(cx, cy, centerR, userFaceColor);
-  tft.fillCircle(cx, cy, centerR - 5, COL_BG);
-  tft.fillCircle(cx, cy, centerR - 11, userFaceColor);
-  tft.fillCircle(cx, cy, 4, COL_BG);
+  spr.fillCircle(cx, cy, centerR, userFaceColor);
+  spr.fillCircle(cx, cy, centerR - 5, COL_BG);
+  spr.fillCircle(cx, cy, centerR - 11, userFaceColor);
+  spr.fillCircle(cx, cy, 4, COL_BG);
 }
 
 void renderFlowerFrame() {
   if (!displayAvailable) return;
-  tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 18, COL_BG);
+  spr.fillSprite(COL_BG);
   int cx = 120, cy = 100;
   // Stem
-  tft.drawLine(cx,     cy + 42, cx,     SCREEN_HEIGHT - 10, userFaceColor);
-  tft.drawLine(cx + 1, cy + 42, cx + 1, SCREEN_HEIGHT - 10, userFaceColor);
-  tft.drawLine(cx + 2, cy + 42, cx + 2, SCREEN_HEIGHT - 10, userFaceColor);
+  spr.drawLine(cx,     cy + 42, cx,     SCREEN_HEIGHT - 10, userFaceColor);
+  spr.drawLine(cx + 1, cy + 42, cx + 1, SCREEN_HEIGHT - 10, userFaceColor);
+  spr.drawLine(cx + 2, cy + 42, cx + 2, SCREEN_HEIGHT - 10, userFaceColor);
   // Leaf
   for (int i = 0; i < 14; i++) {
-    tft.drawLine(cx + 2, cy + 80 + i, cx + 2 + 14 - i, cy + 80 + i, userFaceColor);
+    spr.drawLine(cx + 2, cy + 80 + i, cx + 2 + 14 - i, cy + 80 + i, userFaceColor);
   }
 
   if (currentFlower == "sunflower") {
@@ -2683,11 +2849,12 @@ void renderFlowerFrame() {
   } else {
     drawFlowerRose(cx, cy, 8, expressionPhase);
   }
+  spr.pushSprite(0, 0);
 }
 
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType) {
   if (!displayAvailable) return;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
 
   const int flowerCX = 60;
   const int flowerCY = 100;
@@ -2701,7 +2868,7 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
   }
 
   // Vertical divider
-  tft.drawLine(125, 6, 125, SCREEN_HEIGHT - 6, userFaceColor);
+  spr.drawLine(125, 6, 125, SCREEN_HEIGHT - 6, userFaceColor);
 
   // Text on the right side
   const int safeFontSize = 2;
@@ -2730,16 +2897,17 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
     remaining.trim();
   }
 
-  tft.setTextSize(safeFontSize);
-  tft.setTextColor(userFaceColor);
-  tft.setTextWrap(false);
+  spr.setTextSize(safeFontSize);
+  spr.setTextColor(userFaceColor);
+  spr.setTextWrap(false);
   int totalH = lineCount * lineHeight;
   int startY = 8 + (SCREEN_HEIGHT - 16 - totalH) / 2;
   if (startY < 8) startY = 8;
   for (int i = 0; i < lineCount; i++) {
-    tft.setCursor(textLeft, startY + i * lineHeight);
-    tft.print(lines[i]);
+    spr.setCursor(textLeft, startY + i * lineHeight);
+    spr.print(lines[i]);
   }
+  spr.pushSprite(0, 0);
 }
 
 // ─── Preferences and state (identical to mini) ───
@@ -2953,11 +3121,11 @@ void handleCommandJson(const String& body) {
     static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
     int rot = extractJsonIntField(body, "rotation", 0) & 3;
     tft.setRotation(1);  // reset geometry to 320×240
-    { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.sendCommand(0x36, &m, 1); }
+    { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.writecommand(0x36); tft.writedata(m); }
     preferences.begin("desk-cfg", false);
     preferences.putInt("display_rot", rot);
     preferences.end();
-    tft.fillScreen(COL_BG);
+    spr.fillSprite(COL_BG);
     renderCurrentMode();
     statusText = String("MADCTL slot ") + String(rot);
     publishStatus();
@@ -2979,7 +3147,7 @@ void handleCommandJson(const String& body) {
     preferences.putUShort("col_accent", userAccentColor);
     preferences.putUShort("col_body",   userBodyColor);
     preferences.end();
-    tft.fillScreen(COL_BG);
+    spr.fillSprite(COL_BG);
     renderCurrentMode();
     statusText = "Colors updated";
     publishStatus();
@@ -3023,6 +3191,39 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "begin_color_image") {
+    if (!colorImageBuffer) {
+      colorImageBuffer = (uint16_t*)ps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+    }
+    if (!colorImageBuffer) {
+      statusText = "PSRAM alloc failed";
+      publishStatus();
+      return;
+    }
+    memset(colorImageBuffer, 0, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+    expectedColorBytes = extractJsonIntField(body, "total", 0);
+    receivedColorBytes = 0;
+    colorImageTransferActive = (expectedColorBytes == (size_t)(SCREEN_WIDTH * SCREEN_HEIGHT * 2));
+    statusText = colorImageTransferActive ? "Receiving color image" : "Bad color image size";
+    publishStatus();
+    return;
+  }
+
+  if (type == "commit_color_image") {
+    if (colorImageTransferActive && receivedColorBytes == expectedColorBytes) {
+      colorImageTransferActive = false;
+      currentMode = MODE_COLOR_IMAGE;
+      statusText = "Color image ready";
+      renderCurrentMode();
+      publishStatus();
+    } else {
+      statusText = "Color image incomplete";
+      publishStatus();
+    }
+    colorImageTransferActive = false;
+    return;
+  }
+
   if (type == "set_image") {
     const String encoded = extractJsonStringField(body, "data");
     if (decodeBase64IntoImage(encoded)) {
@@ -3038,7 +3239,7 @@ void handleCommandJson(const String& body) {
 
 void setIdleStatus(const String& value) {
   statusText = value;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   currentMode = MODE_IDLE;
   transientActive = false;
   activeCareAction = "";
@@ -3102,7 +3303,7 @@ void setExpression(const String& expression) {
   currentExpression = expression;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   currentMode = MODE_EXPRESSION;
   statusText = "Expression active";
   renderCurrentMode();
@@ -3120,7 +3321,7 @@ void setFlower(const String& flowerType) {
   currentFlower = flowerType;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
-  tft.fillScreen(COL_BG);
+  spr.fillSprite(COL_BG);
   currentMode = MODE_FLOWER;
   statusText = "Flower animation";
   renderCurrentMode();
@@ -3270,12 +3471,22 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
 class ImageCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* characteristic) override {
-    if (!imageTransferActive) return;
     const auto value = characteristic->getValue();
-    const size_t remaining = sizeof(imageBuffer) - receivedImageBytes;
-    const size_t chunkSize = bleValueLength(value) < remaining ? bleValueLength(value) : remaining;
-    memcpy(imageBuffer + receivedImageBytes, bleValueData(value), chunkSize);
-    receivedImageBytes += chunkSize;
+    const size_t len = bleValueLength(value);
+    const uint8_t* data = bleValueData(value);
+    // Route to mono or color image buffer depending on active transfer
+    if (imageTransferActive) {
+      const size_t remaining = sizeof(imageBuffer) - receivedImageBytes;
+      const size_t chunkSize = len < remaining ? len : remaining;
+      memcpy(imageBuffer + receivedImageBytes, data, chunkSize);
+      receivedImageBytes += chunkSize;
+    } else if (colorImageTransferActive && colorImageBuffer) {
+      const size_t totalBytes = SCREEN_WIDTH * SCREEN_HEIGHT * 2;
+      const size_t remaining = totalBytes - receivedColorBytes;
+      const size_t chunkSize = len < remaining ? len : remaining;
+      memcpy(((uint8_t*)colorImageBuffer) + receivedColorBytes, data, chunkSize);
+      receivedColorBytes += chunkSize;
+    }
   }
 };
 
@@ -3348,23 +3559,12 @@ void setupDisplay() {
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
 
-  // Start hardware SPI with the board's wired TFT pins before creating display
-  Serial.printf("[TFT] SPI.begin(SCK=%d MISO=%d MOSI=%d CS=%d)\n", TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
-  SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
-  SPI.setFrequency(40000000);  // 40 MHz — safe for ST7789V
-
-  // Use 3-pin hardware SPI constructor (CS, DC, RST) — SPI bus already configured above
-  Serial.println("[TFT] Creating ST7789 display object (hardware SPI)...");
-  pTft = new Adafruit_ST7789(&SPI, TFT_CS, TFT_DC, TFT_RST);
-  Serial.println("[TFT] Calling tft.init(240, 320)...");
-  tft.init(240, 320);
-  tft.setSPISpeed(40000000);  // lock in 40 MHz after init
+  // TFT_eSPI handles SPI setup internally via User_Setup.h defines
+  Serial.println("[TFT] Calling tft.init()...");
+  tft.init();
   Serial.println("[TFT] tft.init() done.");
-  // Adafruit's setRotation() sends wrong MADCTL values for this Freenove panel.
-  // Use setRotation(1) only to set the internal 320×240 geometry, then override
-  // MADCTL via raw SPI.  Four landscape variants the user can cycle through:
-  //   0 → 0x28 (MV|RGB)            1 → 0x68 (MX|MV|RGB)
-  //   2 → 0xA8 (MY|MV|RGB)         3 → 0xE8 (MX|MY|MV|RGB)
+
+  // Set landscape rotation then override MADCTL for Freenove panel
   static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
   tft.setRotation(1);  // sets internal W=320 H=240
   preferences.begin("desk-cfg", true);
@@ -3375,11 +3575,32 @@ void setupDisplay() {
   userBodyColor   = preferences.getUShort("col_body",   COL_ROSE);
   preferences.end();
   displayRot = displayRot & 3;
-  { uint8_t m = LANDSCAPE_MADCTL[displayRot]; tft.sendCommand(0x36, &m, 1); }
+  tft.writecommand(0x36);
+  tft.writedata(LANDSCAPE_MADCTL[displayRot]);
   Serial.printf("[TFT] MADCTL override: slot %d → 0x%02X\n", displayRot, LANDSCAPE_MADCTL[displayRot]);
-  tft.fillScreen(COL_BG);
+
+  // Create PSRAM-backed sprite for flicker-free double-buffered rendering
+  spr.setColorDepth(16);
+  void* sprBuf = ps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+  if (sprBuf) {
+    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+    spr.fillSprite(COL_BG);
+    spr.pushSprite(0, 0);
+    Serial.printf("[TFT] Sprite %dx%d created in PSRAM (%u bytes)\n",
+                  SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+    free(sprBuf);  // createSprite allocates its own; this was just a test
+    spr.deleteSprite();
+    spr.setColorDepth(16);
+    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+  } else {
+    // Fallback: use regular heap (still works, just less PSRAM headroom)
+    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+    Serial.println("[TFT] WARNING: PSRAM alloc failed, sprite in heap.");
+  }
+  spr.fillSprite(COL_BG);
+  spr.pushSprite(0, 0);
   displayAvailable = true;
-  Serial.println("[TFT] Screen cleared.");
+  Serial.println("[TFT] Screen cleared via sprite.");
 
   // Initialize FT6336U capacitive touch via I2C (bare register access, no library)
   Serial.printf("[TFT] Starting I2C for touch (SDA=%d SCL=%d)...\n", TOUCH_SDA, TOUCH_SCL);
@@ -3391,7 +3612,8 @@ void setupDisplay() {
     Serial.println("[TFT] WARNING: FT6336U not found at 0x38! Touch disabled.");
   }
 
-  Serial.printf("[TFT] ST7789 240x320 initialized. Free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[TFT] ST7789 initialized with sprite buffer. Free heap: %u  PSRAM: %u\n",
+                ESP.getFreeHeap(), ESP.getFreePsram());
 }
 
 // ─── Touch handling (FT6336U capacitive, replaces physical buttons) ───
@@ -3470,8 +3692,8 @@ void handleTouch() {
           // Single tap: sparkle at touch point + pet
           lastTapReleaseMs = now;
           if (displayAvailable) {
-            tft.fillCircle(touchStartX, touchStartY, 7, COL_GOLD);
-            tft.fillCircle(touchStartX, touchStartY, 3, COL_BG);
+            spr.fillCircle(touchStartX, touchStartY, 7, COL_GOLD);
+            spr.fillCircle(touchStartX, touchStartY, 3, COL_BG);
           }
           delay(100);
           bondLevel    = clampLevel(bondLevel + 2);
@@ -3520,7 +3742,7 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastDecorTickMs >= 125) {
+  if (millis() - lastDecorTickMs >= 50) {
     lastDecorTickMs = millis();
     idleOrbit = (idleOrbit + 1) % 16;
     if (currentMode == MODE_IDLE) {
@@ -3544,7 +3766,7 @@ void loop() {
 
   if (currentMode == MODE_EXPRESSION) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 30) {
+    if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderExpressionFrame();
@@ -3553,7 +3775,7 @@ void loop() {
 
   if (currentMode == MODE_FLOWER) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 35) {
+    if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderFlowerFrame();
@@ -3562,7 +3784,7 @@ void loop() {
 
   if (currentMode == MODE_SCENE) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 30) {
+    if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderSceneFrame();
@@ -3572,7 +3794,7 @@ void loop() {
   if (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
       currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD) {
     const unsigned long now = millis();
-    if (now - lastParticleTickMs >= 30) {
+    if (now - lastParticleTickMs >= 16) {
       lastParticleTickMs = now;
       renderCurrentMode();
     }
@@ -3586,10 +3808,10 @@ void loop() {
     }
   }
 
-  // Sleep mode tick (same 35ms as flower)
+  // Sleep mode tick
   if (currentMode == MODE_SLEEP) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 35) {
+    if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderSleepFrame();

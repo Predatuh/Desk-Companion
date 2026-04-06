@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -33,6 +35,41 @@ class NoteCardPreview extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Renders the note card to RGB565 bytes (320×240, big-endian).
+  static Future<Uint8List> renderToRgb565({
+    required String text,
+    required int fontSize,
+    int border = 0,
+    List<String> icons = const [],
+    String? flowerAccent,
+  }) async {
+    final painter = _NoteCardPainter(
+      text: text.trim().isEmpty ? 'Your note here' : text.trim(),
+      fontSize: fontSize,
+      border: border,
+      icons: icons,
+      flowerAccent: flowerAccent,
+    );
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 320, 240));
+    painter.paint(canvas, const Size(320, 240));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(320, 240);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) throw StateError('Failed to render note card image');
+    final rgba = byteData.buffer.asUint8List();
+    final rgb565 = Uint8List(320 * 240 * 2);
+    for (var i = 0; i < 320 * 240; i++) {
+      final r = rgba[i * 4];
+      final g = rgba[i * 4 + 1];
+      final b = rgba[i * 4 + 2];
+      final pixel = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+      rgb565[i * 2] = pixel >> 8;
+      rgb565[i * 2 + 1] = pixel & 0xFF;
+    }
+    return rgb565;
   }
 }
 
@@ -178,8 +215,15 @@ class _NoteCardPainter extends CustomPainter {
           }
         }
       }
-      width += charWidth;
-      index += 1;
+      // Handle surrogate pairs (emoji outside BMP)
+      final codeUnit = line.codeUnitAt(index);
+      if (codeUnit >= 0xD800 && codeUnit <= 0xDBFF && index + 1 < line.length) {
+        width += charWidth;
+        index += 2;
+      } else {
+        width += charWidth;
+        index += 1;
+      }
     }
     return width;
   }
@@ -227,9 +271,17 @@ class _NoteCardPainter extends CustomPainter {
         }
       }
 
-      _drawGlyph(canvas, line[index], Offset(cursorX, startY), safeFontSize);
-      cursorX += charWidth;
-      index += 1;
+      // Handle surrogate pairs (emoji outside BMP)
+      final codeUnit = line.codeUnitAt(index);
+      if (codeUnit >= 0xD800 && codeUnit <= 0xDBFF && index + 1 < line.length) {
+        _drawGlyph(canvas, line.substring(index, index + 2), Offset(cursorX, startY), safeFontSize);
+        cursorX += charWidth;
+        index += 2;
+      } else {
+        _drawGlyph(canvas, line[index], Offset(cursorX, startY), safeFontSize);
+        cursorX += charWidth;
+        index += 1;
+      }
     }
   }
 
@@ -246,7 +298,7 @@ class _NoteCardPainter extends CustomPainter {
         ),
       ),
       textDirection: TextDirection.ltr,
-    )..layout(minWidth: 0, maxWidth: 6.0 * safeFontSize);
+    )..layout(minWidth: 0, maxWidth: 320);
     painter.paint(canvas, origin.translate(0, -1));
   }
 

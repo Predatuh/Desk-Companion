@@ -98,6 +98,14 @@ enum DeskExpression {
   starEyes,
   excited,
   tongue,
+  grateful,
+  crying,
+  blushing,
+  nervous,
+  proud,
+  skeptical,
+  peaceful,
+  determined,
 }
 
 extension DeskExpressionLabel on DeskExpression {
@@ -119,6 +127,14 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.starEyes => 'Star eyes',
         DeskExpression.excited => 'Excited',
         DeskExpression.tongue => 'Tongue out',
+        DeskExpression.grateful => 'Grateful',
+        DeskExpression.crying => 'Crying',
+        DeskExpression.blushing => 'Blushing',
+        DeskExpression.nervous => 'Nervous',
+        DeskExpression.proud => 'Proud',
+        DeskExpression.skeptical => 'Skeptical',
+        DeskExpression.peaceful => 'Peaceful',
+        DeskExpression.determined => 'Determined',
       };
 
   String get command => switch (this) {
@@ -139,6 +155,14 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.starEyes => 'star_eyes',
         DeskExpression.excited => 'excited',
         DeskExpression.tongue => 'tongue',
+        DeskExpression.grateful => 'grateful',
+        DeskExpression.crying => 'crying',
+        DeskExpression.blushing => 'blushing',
+        DeskExpression.nervous => 'nervous',
+        DeskExpression.proud => 'proud',
+        DeskExpression.skeptical => 'skeptical',
+        DeskExpression.peaceful => 'peaceful',
+        DeskExpression.determined => 'determined',
       };
 
   String get subtitle => switch (this) {
@@ -159,6 +183,14 @@ extension DeskExpressionLabel on DeskExpression {
         DeskExpression.starEyes => 'Star-shaped pupils shimmer with amazement.',
         DeskExpression.excited => 'Wide bouncing eyes, can\'t stop smiling.',
         DeskExpression.tongue => 'One wink and a cheeky tongue poke.',
+        DeskExpression.grateful => 'Soft closed eyes with a warm smile.',
+        DeskExpression.crying => 'Twin streams of tears with quivering mouth.',
+        DeskExpression.blushing => 'Rosy cheeks, shy averted gaze.',
+        DeskExpression.nervous => 'Wide darting eyes and a wobbly mouth.',
+        DeskExpression.proud => 'Closed eyes lifted high, confident grin.',
+        DeskExpression.skeptical => 'One raised brow, squinting side-eye.',
+        DeskExpression.peaceful => 'Gently closed eyes, serene slow breathing.',
+        DeskExpression.determined => 'Focused eyes and a firm set mouth.',
       };
 }
 
@@ -975,60 +1007,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionCard(
-                  title: 'Colors',
-                  subtitle:
-                      'Customise eye, face, accent and body colors on the display.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ColorRow(
-                        label: 'Eyes',
-                        color: _eyeColor,
-                        onChanged: (c) => setState(() => _eyeColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Face / outline',
-                        color: _faceColor,
-                        onChanged: (c) => setState(() => _faceColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Accent',
-                        color: _accentColor,
-                        onChanged: (c) => setState(() => _accentColor = c),
-                      ),
-                      const SizedBox(height: 8),
-                      _ColorRow(
-                        label: 'Body',
-                        color: _bodyColor,
-                        onChanged: (c) => setState(() => _bodyColor = c),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller.sendColors(
-                                      eyeColor: _colorToRgb565(_eyeColor),
-                                      faceColor: _colorToRgb565(_faceColor),
-                                      accentColor: _colorToRgb565(_accentColor),
-                                      bodyColor: _colorToRgb565(_bodyColor),
-                                    ),
-                                    success: 'Colors applied!',
-                                  ),
-                          icon: const Icon(Icons.palette_outlined),
-                          label: const Text('Apply colors'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
                   title: 'Timezone',
                   subtitle:
                       'UTC offset for the on-screen clock. Requires Wi-Fi to be connected.',
@@ -1191,6 +1169,60 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   ),
                           icon: const Icon(Icons.people_outline),
                           label: Text('Start ${_selectedDeskScene.label}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Colors',
+                  subtitle:
+                      'Customise eye, face, accent and body colors on the display.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ColorRow(
+                        label: 'Eyes',
+                        color: _eyeColor,
+                        onChanged: (c) => setState(() => _eyeColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Face / outline',
+                        color: _faceColor,
+                        onChanged: (c) => setState(() => _faceColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Accent',
+                        color: _accentColor,
+                        onChanged: (c) => setState(() => _accentColor = c),
+                      ),
+                      const SizedBox(height: 8),
+                      _ColorRow(
+                        label: 'Body',
+                        color: _bodyColor,
+                        onChanged: (c) => setState(() => _bodyColor = c),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller.sendColors(
+                                      eyeColor: _colorToRgb565(_eyeColor),
+                                      faceColor: _colorToRgb565(_faceColor),
+                                      accentColor: _colorToRgb565(_accentColor),
+                                      bodyColor: _colorToRgb565(_bodyColor),
+                                    ),
+                                    success: 'Colors applied!',
+                                  ),
+                          icon: const Icon(Icons.palette_outlined),
+                          label: const Text('Apply colors'),
                         ),
                       ),
                     ],
@@ -1783,14 +1815,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     }
 
     try {
-      final payload = DisplayBitmapCodec.encodeImage(
+      final payload = DisplayBitmapCodec.encodeColorImage(
         sourceBytes: bytes,
         name: file.name,
-        invert: _invertImage,
       );
       setState(() {
         _selectedImage = payload;
-        _drawBitmap = Uint8List.fromList(payload.bitmap);
       });
     } on FormatException catch (error) {
       _showMessage(error.message);
@@ -2898,22 +2928,46 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  static final _emojiPattern = RegExp(
+    r'[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{2300}-\u{23FF}]'
+    r'|[\u{200D}]|[\u{FE0F}]|[\u{2B50}]|[\u{2B55}]',
+    unicode: true,
+  );
+
   Future<void> _sendNote(DeskCompanionController controller) async {
     final text = _noteController.text.characters
         .take(kMaxNoteCharacters)
         .toString()
         .trim();
     if (text.isEmpty) return;
-    await _perform(
-      () => controller.sendNote(
-        text,
-        fontSize: _noteFontSize.round(),
-        border: _noteBorderStyle,
-        icons: _noteIcons.join(','),
-        flowerAccent: _noteFlowerAccent ?? '',
-      ),
-      success: 'Note delivered.',
-    );
+
+    if (_emojiPattern.hasMatch(text)) {
+      // Emoji detected — render note as color image and send via BLE
+      await _perform(
+        () async {
+          final rgb565 = await NoteCardPreview.renderToRgb565(
+            text: text,
+            fontSize: _noteFontSize.round(),
+            border: _noteBorderStyle,
+            icons: List.unmodifiable(_noteIcons),
+            flowerAccent: _noteFlowerAccent,
+          );
+          await controller.sendNoteAsImage(rgb565);
+        },
+        success: 'Note delivered as image.',
+      );
+    } else {
+      await _perform(
+        () => controller.sendNote(
+          text,
+          fontSize: _noteFontSize.round(),
+          border: _noteBorderStyle,
+          icons: _noteIcons.join(','),
+          flowerAccent: _noteFlowerAccent ?? '',
+        ),
+        success: 'Note delivered.',
+      );
+    }
   }
 
   Future<void> _sendBanner(DeskCompanionController controller) async {
