@@ -4,8 +4,9 @@
 // All logic (BLE, Wi-Fi, relay, pet, commands) is identical to the Mini OLED.
 // Display calls adapted: SPI TFT with TFT_eSPI sprite double-buffer for flicker-free rendering.
 
-// TFT_eSPI pin config must be defined BEFORE including the library header.
-// See User_Setup.h in the TFT_eSPI library folder for pin/driver settings.
+// TFT_eSPI pin config — load our setup before the library reads its default.
+#define USER_SETUP_LOADED
+#include "User_Setup.h"
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <BLE2902.h>
