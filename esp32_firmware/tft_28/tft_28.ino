@@ -3582,21 +3582,13 @@ void setupDisplay() {
 
   // Create PSRAM-backed sprite for flicker-free double-buffered rendering
   spr.setColorDepth(16);
-  void* sprBuf = ps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
-  if (sprBuf) {
-    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
-    spr.fillSprite(COL_BG);
-    spr.pushSprite(0, 0);
-    Serial.printf("[TFT] Sprite %dx%d created in PSRAM (%u bytes)\n",
-                  SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
-    free(sprBuf);  // createSprite allocates its own; this was just a test
-    spr.deleteSprite();
-    spr.setColorDepth(16);
-    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+  spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+  if (spr.getPointer() == nullptr) {
+    Serial.println("[TFT] ERROR: Sprite allocation failed! Display will be direct-mode.");
   } else {
-    // Fallback: use regular heap (still works, just less PSRAM headroom)
-    spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
-    Serial.println("[TFT] WARNING: PSRAM alloc failed, sprite in heap.");
+    Serial.printf("[TFT] Sprite %dx%d created (%u bytes). PSRAM free: %u\n",
+                  SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * SCREEN_HEIGHT * 2,
+                  ESP.getFreePsram());
   }
   spr.fillSprite(COL_BG);
   spr.pushSprite(0, 0);
