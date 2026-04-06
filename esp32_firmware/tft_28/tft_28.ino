@@ -2,25 +2,11 @@
 // Adapted from mini.ino for the ST7789 240×320 IPS TFT with FT6336U capacitive touch.
 // Target board: Freenove ESP32-S3 Display (FNK0104) — all-in-one CYD.
 // All logic (BLE, Wi-Fi, relay, pet, commands) is identical to the Mini OLED.
-// Display calls adapted: SPI TFT with TFT_eSPI sprite double-buffer for flicker-free rendering.
+// Display: Adafruit_ST7789 + GFXcanvas16 PSRAM framebuffer for flicker-free rendering.
 
-// TFT_eSPI pin config — define everything inline so there's zero ambiguity.
-#define USER_SETUP_LOADED
-#define USER_SETUP_ID           99
-#define ST7789_DRIVER
-#define TFT_WIDTH               240
-#define TFT_HEIGHT              320
-#define TFT_CS                  10
-#define TFT_DC                  46
-#define TFT_RST                 -1
-#define TFT_MOSI                11
-#define TFT_SCLK                12
-#define TFT_MISO                13
-#define USE_FSPI_PORT
-#define SPI_FREQUENCY           40000000
-#define SPI_READ_FREQUENCY      20000000
-#define SMOOTH_FONT
-#include <TFT_eSPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <SPI.h>
 #include <Wire.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
@@ -37,8 +23,12 @@
 #include <time.h>
 
 // ─── TFT SPI pin configuration (Freenove FNK0104 Touch variant) ───
-// Pin definitions are in User_Setup.h for TFT_eSPI.
-// Backlight pin is managed manually:
+#define TFT_CS    10
+#define TFT_DC    46
+#define TFT_MOSI  11
+#define TFT_SCK   12
+#define TFT_MISO  13
+#define TFT_RST   -1   // no dedicated reset
 #define TFT_BL    45   // backlight, active HIGH
 
 // ─── FT6336U capacitive touch I2C pins ───
@@ -50,10 +40,10 @@
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 240
 
-// Color palette (TFT_eSPI constants)
-#define COL_BG       TFT_BLACK
-#define COL_FG       TFT_WHITE
-#define COL_ACCENT   TFT_CYAN
+// Color palette (Adafruit_GFX ST77XX constants)
+#define COL_BG       ST77XX_BLACK
+#define COL_FG       ST77XX_WHITE
+#define COL_ACCENT   ST77XX_CYAN
 // Extended RGB565 color palette
 #define COL_ROSE     0xFB56  // Hot pink / rose  (255, 106, 176)
 #define COL_GOLD     0xFFE0  // Yellow-gold      (255, 224,   0)
@@ -97,10 +87,11 @@ static const char* COMMAND_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f002";
 static const char* STATUS_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003";
 static const char* IMAGE_UUID = "63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004";
 
-TFT_eSPI tft = TFT_eSPI();
-TFT_eSprite spr = TFT_eSprite(&tft);
-// gfx points to spr when sprite is available, else falls back to tft (direct draw).
-TFT_eSPI* gfx = &tft;
+Adafruit_ST7789* pTft = nullptr;
+// GFXcanvas16 framebuffer — all drawing goes here, then pushed to display in one SPI burst.
+GFXcanvas16* canvas = nullptr;
+// gfx points to canvas when available, else to tft directly.
+Adafruit_GFX* gfx = nullptr;
 bool spriteReady = false;
 Preferences preferences;
 bool displayAvailable = false;
@@ -142,7 +133,15 @@ TouchPoint ft6336u_getPoint() {
   return pt;
 }
 
-// tft is now a global TFT_eSPI object; spr is the sprite double-buffer.
+// Convenience: pTft is the hardware display, canvas is the offscreen buffer.
+// gfx-> draws to canvas. pushCanvas() blits canvas to display in one SPI burst.
+#define tft (*pTft)
+
+inline void pushCanvas() {
+  if (spriteReady && canvas && pTft) {
+    pTft->drawRGBBitmap(0, 0, canvas->getBuffer(), SCREEN_WIDTH, SCREEN_HEIGHT);
+  }
+}
 
 BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
@@ -1384,7 +1383,7 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
   }
 
   if (hasIcons) drawNoteIcons(icons, 14, 8);
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void renderBannerFrame() {
@@ -1395,25 +1394,25 @@ void renderBannerFrame() {
   gfx->setTextColor(COL_PINK);
   gfx->setCursor(bannerOffset, SCREEN_HEIGHT / 2 - 16);
   gfx->print(currentBanner);
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void renderImage() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
   gfx->drawBitmap(0, 0, imageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT, userFaceColor);
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void renderColorImage() {
   if (!displayAvailable || !colorImageBuffer) return;
-  if (spriteReady) {
-    // Push RGB565 pixel data directly into the sprite buffer, then to screen
-    memcpy(spr.getPointer(), colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
-    spr.pushSprite(0, 0);
+  if (spriteReady && canvas) {
+    // Push RGB565 pixel data directly into the canvas buffer, then to screen
+    memcpy(canvas->getBuffer(), colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+    pushCanvas();
   } else {
-    // Direct push to display without sprite
-    tft.pushImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, colorImageBuffer);
+    // Direct push to display without canvas
+    tft.drawRGBBitmap(0, 0, colorImageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT);
   }
 }
 
@@ -2042,7 +2041,7 @@ void renderExpressionFrame() {
   }
 
   drawCompanionAccessories(LX, RX, EY, MY);
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void renderIdle() {
@@ -2119,7 +2118,7 @@ void renderIdle() {
 
   // Status bar
   drawStatusBar();
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void renderCurrentMode() {
@@ -2263,7 +2262,7 @@ void renderSceneFrame() {
     gfx->fillCircle(155, 85, 3, COL_PINK);
     gfx->fillCircle(165, 80, 2, COL_PINK);
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void setScene(const String& name) {
@@ -2337,7 +2336,7 @@ void renderFireworksFrame() {
     }
   }
   if (!anyAlive) initFireworks();
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void initHeartRain() {
@@ -2368,7 +2367,7 @@ void renderHeartRainFrame() {
     gfx->fillCircle(x + s, y - s / 2, s, c);
     gfx->fillTriangle(x - s * 2, y - s / 2 + 1, x + s * 2, y - s / 2 + 1, x, y + s * 2, c);
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void initSnowfall() {
@@ -2394,7 +2393,7 @@ void renderSnowfallFrame() {
     if (gPtcl[i].x >= SCREEN_WIDTH) gPtcl[i].x = 0;
     gfx->fillCircle(gPtcl[i].x, gPtcl[i].y, gPtcl[i].life, gPtcl[i].color);
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void initStarfield() {
@@ -2429,7 +2428,7 @@ void renderStarfieldFrame() {
       gfx->fillCircle(sx, sy, r, c);
     }
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void setParticleMode(const String& name) {
@@ -2479,7 +2478,7 @@ void renderCountdownFrame() {
     setParticleMode("fireworks");
     startTransientExpression("love", 4000, "Time's up!");
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void setCountdown(long seconds) {
@@ -2571,7 +2570,7 @@ void renderWeatherFrame() {
     gfx->setTextColor(COL_ACCENT);
     gfx->setCursor(55, 122);
     gfx->print("Send set_location first");
-    if (spriteReady) spr.pushSprite(0, 0);
+    pushCanvas();
     return;
   }
   int cat = weatherCodeCategory(weatherCode);
@@ -2589,7 +2588,7 @@ void renderWeatherFrame() {
   gfx->setTextColor(userFaceColor);
   gfx->setCursor((SCREEN_WIDTH - (int)strlen(labels[cat]) * 12) / 2, 158);
   gfx->print(labels[cat]);
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void fetchWeather() {
@@ -2641,10 +2640,10 @@ void drawStatusBar() {
   gfx->setTextSize(1);
   // WiFi dot
   gfx->fillCircle(SCREEN_WIDTH - 28, STATUS_BAR_Y + 3, 5,
-                 wifiOk ? TFT_GREEN : COL_ROSE);
+                 wifiOk ? 0x07E0 : COL_ROSE);
   // Relay dot
   gfx->fillCircle(SCREEN_WIDTH - 18, STATUS_BAR_Y + 3, 5,
-                 relayOk ? TFT_GREEN : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
+                 relayOk ? 0x07E0 : (!relayUrl.isEmpty() ? COL_ROSE : COL_FG));
 }
 
 void checkTimeGreetings() {
@@ -2744,7 +2743,7 @@ void renderSleepFrame() {
   gfx->setCursor((SCREEN_WIDTH - 10*6) / 2, 162);
   gfx->print("Sweet dreams");
   drawStatusBar();
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void setSleepMode() {
@@ -2871,7 +2870,7 @@ void renderFlowerFrame() {
   } else {
     drawFlowerRose(cx, cy, 8, expressionPhase);
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType) {
@@ -2929,7 +2928,7 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
     gfx->setCursor(textLeft, startY + i * lineHeight);
     gfx->print(lines[i]);
   }
-  if (spriteReady) spr.pushSprite(0, 0);
+  pushCanvas();
 }
 
 // ─── Preferences and state (identical to mini) ───
@@ -3143,7 +3142,7 @@ void handleCommandJson(const String& body) {
     static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
     int rot = extractJsonIntField(body, "rotation", 0) & 3;
     tft.setRotation(1);  // reset geometry to 320×240
-    { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.writecommand(0x36); tft.writedata(m); }
+    { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.sendCommand(0x36, &m, 1); }
     preferences.begin("desk-cfg", false);
     preferences.putInt("display_rot", rot);
     preferences.end();
@@ -3581,15 +3580,19 @@ void setupDisplay() {
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
 
-  // TFT_eSPI handles SPI setup internally via inline defines above
-  Serial.println("[TFT] Calling tft.init()...");
-  tft.init();
+  // Initialize SPI bus and Adafruit_ST7789 display
+  Serial.println("[TFT] Initializing SPI + ST7789...");
+  SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
+  SPI.setFrequency(40000000);
+  pTft = new Adafruit_ST7789(&SPI, TFT_CS, TFT_DC, TFT_RST);
+  tft.init(240, 320);
+  tft.setSPISpeed(40000000);
   tft.setRotation(1);  // landscape 320×240
   Serial.println("[TFT] tft.init() done.");
 
   // ── Direct-to-screen test: proves SPI is working ──
-  tft.fillScreen(TFT_BLUE);
-  tft.setTextColor(TFT_WHITE, TFT_BLUE);
+  tft.fillScreen(ST77XX_BLUE);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLUE);
   tft.setTextSize(2);
   tft.setCursor(60, 100);
   tft.print("Desk Companion");
@@ -3607,28 +3610,27 @@ void setupDisplay() {
   userBodyColor   = preferences.getUShort("col_body",   COL_ROSE);
   preferences.end();
   displayRot = displayRot & 3;
-  tft.writecommand(0x36);
-  tft.writedata(LANDSCAPE_MADCTL[displayRot]);
+  { uint8_t m = LANDSCAPE_MADCTL[displayRot]; tft.sendCommand(0x36, &m, 1); }
   Serial.printf("[TFT] MADCTL override: slot %d → 0x%02X\n", displayRot, LANDSCAPE_MADCTL[displayRot]);
 
-  // Create sprite for flicker-free double-buffered rendering
-  Serial.printf("[TFT] Heap before sprite: %u  PSRAM: %u  Largest block: %u\n",
+  // Create GFXcanvas16 framebuffer for flicker-free double-buffered rendering
+  Serial.printf("[TFT] Heap before canvas: %u  PSRAM: %u  Largest block: %u\n",
                 ESP.getFreeHeap(), ESP.getFreePsram(),
                 heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-  spr.setColorDepth(16);
-  spr.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
-  if (spr.getPointer() != nullptr) {
+  canvas = new GFXcanvas16(SCREEN_WIDTH, SCREEN_HEIGHT);
+  if (canvas && canvas->getBuffer()) {
     spriteReady = true;
-    gfx = &spr;
-    spr.fillSprite(COL_BG);
-    spr.pushSprite(0, 0);
-    Serial.printf("[TFT] Sprite %dx%d ready. Heap now: %u  PSRAM: %u\n",
+    gfx = canvas;
+    canvas->fillScreen(COL_BG);
+    pushCanvas();
+    Serial.printf("[TFT] Canvas %dx%d ready. Heap now: %u  PSRAM: %u\n",
                   SCREEN_WIDTH, SCREEN_HEIGHT, ESP.getFreeHeap(), ESP.getFreePsram());
   } else {
+    if (canvas) { delete canvas; canvas = nullptr; }
     spriteReady = false;
-    gfx = &tft;  // draw directly to screen (may flicker, but works)
+    gfx = pTft;  // draw directly to screen (may flicker, but works)
     tft.fillScreen(COL_BG);
-    Serial.println("[TFT] WARNING: Sprite alloc failed. Using direct drawing (may flicker).");
+    Serial.println("[TFT] WARNING: Canvas alloc failed. Using direct drawing (may flicker).");
   }
   displayAvailable = true;
   Serial.println("[TFT] Display ready.");
@@ -3643,7 +3645,7 @@ void setupDisplay() {
     Serial.println("[TFT] WARNING: FT6336U not found at 0x38! Touch disabled.");
   }
 
-  Serial.printf("[TFT] ST7789 initialized with sprite buffer. Free heap: %u  PSRAM: %u\n",
+  Serial.printf("[TFT] ST7789 initialized with canvas buffer. Free heap: %u  PSRAM: %u\n",
                 ESP.getFreeHeap(), ESP.getFreePsram());
 }
 
