@@ -1922,8 +1922,8 @@ void renderIdle() {
   const int rightX = 170;
   const int eyeY = FACE_OFFSET_Y + 60 + clampAppearanceOffset(companionEyeOffsetY) * 2;
   const int mouthY = FACE_OFFSET_Y + 110 + clampAppearanceOffset(companionMouthOffsetY) * 2;
-  const int pupilOffsets[4] = {-4, 0, 4, 0};
-  const int pupilDx = pupilOffsets[idleOrbit % 4];
+  const float orbitAngle = idleOrbit * (2.0f * PI / 16.0f);
+  const int pupilDx = (int)(sinf(orbitAngle) * 4.0f);
 
   if (activePetMode == "off") {
     drawEye(leftX, eyeY, 42, 26, 9, 0, 0);
@@ -1948,13 +1948,13 @@ void renderIdle() {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawSmile(SCREEN_WIDTH / 2, mouthY - 4, 48);
-    tft.fillCircle(26 + (idleOrbit % 4) * 4, FACE_OFFSET_Y + 130 - (idleOrbit % 2) * 4, 4, userAccentColor);
+    tft.fillCircle(26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
   } else if (activePetMode == "party") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, -pupilDx * 2, 0);
     drawSmile(SCREEN_WIDTH / 2, mouthY - 4, 52);
-    drawIconStar(30, FACE_OFFSET_Y + 26 + (idleOrbit % 2) * 4, 5);
-    drawIconStar(210, FACE_OFFSET_Y + 30 + ((idleOrbit + 1) % 2) * 4, 5);
+    drawIconStar(30, FACE_OFFSET_Y + 28 + (int)(sinf(orbitAngle) * 3.0f), 5);
+    drawIconStar(210, FACE_OFFSET_Y + 32 + (int)(cosf(orbitAngle) * 3.0f), 5);
   } else {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx * 2, 2);
     drawEye(rightX, eyeY, 44, 30, 9, -pupilDx, -2);
@@ -3520,9 +3520,9 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastDecorTickMs >= 500) {
+  if (millis() - lastDecorTickMs >= 125) {
     lastDecorTickMs = millis();
-    idleOrbit = (idleOrbit + 1) % 4;
+    idleOrbit = (idleOrbit + 1) % 16;
     if (currentMode == MODE_IDLE) {
       renderIdle();
     }

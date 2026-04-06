@@ -24,11 +24,11 @@ class NoteCardBitmapRenderer {
 
     final noteText = text.trim().isEmpty ? 'Your note here' : text.trim();
     const left = 10;
-    const top = 8;
-    const width = 108;
-    const height = 48;
-    final textTopInset = topStickerCount > 0 ? 14 : 0;
-    final textBottomInset = bottomStickerCount > 0 ? 14 : 0;
+    const top = 15;
+    const width = 300;
+    const height = 210;
+    final textTopInset = topStickerCount > 0 ? 37 : 0;
+    final textBottomInset = bottomStickerCount > 0 ? 37 : 0;
     final contentTop = top + textTopInset;
     final contentHeight = height - textTopInset - textBottomInset;
 
@@ -53,7 +53,7 @@ class NoteCardBitmapRenderer {
     if (overlayImage != null) {
       // Hard-key composite: any overlay pixel with alpha > 20 becomes
       // pure white in the base image. This prevents antialiased thin
-      // text from being killed by the OLED threshold.
+      // text from being killed by the display threshold.
       for (var y = 0; y < overlayImage.height && y < baseImage.height; y++) {
         for (var x = 0; x < overlayImage.width && x < baseImage.width; x++) {
           final p = overlayImage.getPixel(x, y);
@@ -90,11 +90,11 @@ class NoteCardBitmapRenderer {
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
       maxLines: switch (fontSize) {
-        >= 5 => 1,
-        4 => 1,
-        3 => 2,
-        2 => 3,
-        _ => 4,
+        >= 5 => 3,
+        4 => 6,
+        3 => 10,
+        2 => 14,
+        _ => 18,
       },
       strutStyle: StrutStyle(
         forceStrutHeight: true,

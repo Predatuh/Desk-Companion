@@ -12,6 +12,7 @@ class DisplayDrawingPad extends StatefulWidget {
     this.showGrid = true,
     this.enabled = true,
     this.showOutline = false,
+    this.pixelColor = Colors.white,
   });
 
   final Uint8List bitmap;
@@ -19,6 +20,7 @@ class DisplayDrawingPad extends StatefulWidget {
   final bool showGrid;
   final bool enabled;
   final bool showOutline;
+  final Color pixelColor;
 
   @override
   State<DisplayDrawingPad> createState() => _DisplayDrawingPadState();
@@ -122,6 +124,7 @@ class _DisplayDrawingPadState extends State<DisplayDrawingPad> {
                       bitmap: widget.bitmap,
                       showGrid: widget.showGrid,
                       showOutline: widget.showOutline,
+                      pixelColor: widget.pixelColor,
                     ),
                   ),
                 ),
@@ -159,11 +162,13 @@ class _DisplayDrawingPadPainter extends CustomPainter {
     required this.bitmap,
     required this.showGrid,
     required this.showOutline,
+    required this.pixelColor,
   });
 
   final Uint8List bitmap;
   final bool showGrid;
   final bool showOutline;
+  final Color pixelColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -175,7 +180,7 @@ class _DisplayDrawingPadPainter extends CustomPainter {
 
     final pixelWidth = size.width / 320;
     final pixelHeight = size.height / 240;
-    final pixelPaint = Paint()..color = Colors.white;
+    final pixelPaint = Paint()..color = pixelColor;
 
     for (var y = 0; y < 240; y++) {
       for (var x = 0; x < 320; x++) {
@@ -227,6 +232,7 @@ class _DisplayDrawingPadPainter extends CustomPainter {
   bool shouldRepaint(covariant _DisplayDrawingPadPainter oldDelegate) {
     return oldDelegate.bitmap != bitmap ||
         oldDelegate.showGrid != showGrid ||
-        oldDelegate.showOutline != showOutline;
+        oldDelegate.showOutline != showOutline ||
+        oldDelegate.pixelColor != pixelColor;
   }
 }

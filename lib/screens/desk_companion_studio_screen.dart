@@ -349,19 +349,21 @@ extension DeskPiercingStyleExt on DeskPiercingStyle {
       };
 }
 
-enum _StudioWorkspace { studio, send, setup }
+enum _StudioWorkspace { companion, media, draw, settings }
 
 extension _StudioWorkspaceExt on _StudioWorkspace {
   String get label => switch (this) {
-        _StudioWorkspace.studio => 'Studio',
-        _StudioWorkspace.send => 'Send',
-        _StudioWorkspace.setup => 'Setup',
+        _StudioWorkspace.companion => 'Companion',
+        _StudioWorkspace.media => 'Media',
+        _StudioWorkspace.draw => 'Draw',
+        _StudioWorkspace.settings => 'Settings',
       };
 
   IconData get icon => switch (this) {
-        _StudioWorkspace.studio => Icons.auto_awesome,
-        _StudioWorkspace.send => Icons.send_rounded,
-        _StudioWorkspace.setup => Icons.settings_input_component,
+        _StudioWorkspace.companion => Icons.auto_awesome,
+        _StudioWorkspace.media => Icons.perm_media_outlined,
+        _StudioWorkspace.draw => Icons.brush_outlined,
+        _StudioWorkspace.settings => Icons.settings,
       };
 }
 
@@ -425,7 +427,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   bool _eraserMode = false;
   double _bannerSpeed = 35;
   double _brushSize = 2;
-  _StudioWorkspace _activeWorkspace = _StudioWorkspace.studio;
+  Color _drawColor = Colors.white;
+  _StudioWorkspace _activeWorkspace = _StudioWorkspace.companion;
   DeskExpression _selectedExpression = DeskExpression.happy;
   CompanionScene _selectedScene = CompanionScene.none;
   DeskPersonality _selectedPersonality = DeskPersonality.curious;
@@ -682,7 +685,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 const SizedBox(height: 18),
                 _buildWorkspaceSwitcher(context),
                 const SizedBox(height: 18),
-                if (_activeWorkspace == _StudioWorkspace.setup) ...[
+                if (_activeWorkspace == _StudioWorkspace.settings) ...[
                 _SectionCard(
                   title: 'Device link',
                   subtitle: controller.statusMessage,
@@ -1145,7 +1148,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 16),
                 ],
-                if (_activeWorkspace == _StudioWorkspace.studio) ...[
+                if (_activeWorkspace == _StudioWorkspace.companion) ...[
                 _buildStyleStudioSection(
                   context,
                   controller,
@@ -1153,15 +1156,49 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   currentPetMode,
                 ),
                 const SizedBox(height: 16),
-                _buildExpressionStudioSection(
-                  context,
-                  controller,
-                  currentPersonality,
-                  currentPetMode,
+                _SectionCard(
+                  title: 'Scenes',
+                  subtitle: 'Two-figure stick animations — wave, hug, kiss, and more.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskScene.values
+                            .map(
+                              (scene) => ChoiceChip(
+                                label: Text(scene.label),
+                                selected: _selectedDeskScene == scene,
+                                onSelected: (_) =>
+                                    setState(() => _selectedDeskScene = scene),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.busy ||
+                                  !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller
+                                        .sendScene(_selectedDeskScene.command),
+                                    success:
+                                        '${_selectedDeskScene.label} scene started!',
+                                  ),
+                          icon: const Icon(Icons.people_outline),
+                          label: Text('Start ${_selectedDeskScene.label}'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 ],
-                if (_activeWorkspace == _StudioWorkspace.send) ...[
+                if (_activeWorkspace == _StudioWorkspace.media) ...[
                 _buildStickyNoteSection(context, controller),
                 const SizedBox(height: 16),
                 _SectionCard(
@@ -1237,127 +1274,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           icon: const Icon(Icons.local_florist_outlined),
                           label: Text('Send ${_selectedFlower.label}'),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Draw live',
-                  subtitle: _drawModeEnabled
-                      ? 'Draw mode is on. Page scrolling is locked until you turn it off.'
-                      : 'Turn on Draw mode before sketching so the page does not scroll while you draw.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DisplayDrawingPad(
-                        bitmap: _drawBitmap,
-                        showGrid: _showGrid,
-                        enabled: _drawModeEnabled,
-                        onPixel: _paintPixel,
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ActionChip(
-                            label: const Text('Fullscreen'),
-                            avatar: const Icon(Icons.open_in_full, size: 18),
-                            onPressed: () => _openFullscreenDrawEditor(),
-                          ),
-                          FilterChip(
-                            label: const Text('Draw mode'),
-                            selected: _drawModeEnabled,
-                            onSelected: (_) => setState(
-                                () => _drawModeEnabled = !_drawModeEnabled),
-                          ),
-                          FilterChip(
-                            label: const Text('Pen'),
-                            selected: !_eraserMode,
-                            onSelected: (_) =>
-                                setState(() => _eraserMode = false),
-                          ),
-                          FilterChip(
-                            label: const Text('Eraser'),
-                            selected: _eraserMode,
-                            onSelected: (_) =>
-                                setState(() => _eraserMode = true),
-                          ),
-                          FilterChip(
-                            label: const Text('Grid'),
-                            selected: _showGrid,
-                            onSelected: (_) =>
-                                setState(() => _showGrid = !_showGrid),
-                          ),
-                          FilterChip(
-                            label: const Text('Live push'),
-                            selected: _liveDraw,
-                            onSelected: (_) =>
-                                setState(() => _liveDraw = !_liveDraw),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Brush size: ${_brushSize.round()} px',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      Slider(
-                        min: 1,
-                        max: 5,
-                        divisions: 4,
-                        value: _brushSize,
-                        onChanged: (value) =>
-                            setState(() => _brushSize = value),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy
-                                  ? null
-                                  : () {
-                                      setState(() => _drawBitmap = Uint8List(
-                                          DisplayBitmapCodec.byteLength));
-                                      _queueLiveDraw();
-                                    },
-                              icon: const Icon(Icons.layers_clear_outlined),
-                              label: const Text('Clear canvas'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _fillCanvas,
-                              icon: const Icon(Icons.texture_outlined),
-                              label: const Text('Fill canvas'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  controller.busy ? null : _loadImageIntoCanvas,
-                              icon: const Icon(Icons.move_down_outlined),
-                              label: const Text('Use picked image'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.canControlDevice
-                                  ? null
-                                  : () => _sendCanvas(controller),
-                              icon: const Icon(Icons.draw_outlined),
-                              label: const Text('Push drawing'),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -1445,47 +1361,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Scenes',
-                  subtitle: 'Two-figure stick animations — wave, hug, kiss, and more.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskScene.values
-                            .map(
-                              (scene) => ChoiceChip(
-                                label: Text(scene.label),
-                                selected: _selectedDeskScene == scene,
-                                onSelected: (_) =>
-                                    setState(() => _selectedDeskScene = scene),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller
-                                        .sendScene(_selectedDeskScene.command),
-                                    success:
-                                        '${_selectedDeskScene.label} scene started!',
-                                  ),
-                          icon: const Icon(Icons.people_outline),
-                          label: Text('Start ${_selectedDeskScene.label}'),
-                        ),
                       ),
                     ],
                   ),
@@ -1623,6 +1498,260 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           icon: const Icon(Icons.timer_outlined),
                           label: const Text('Start countdown'),
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+                ],
+                if (_activeWorkspace == _StudioWorkspace.draw) ...[
+                _SectionCard(
+                  title: 'Draw',
+                  subtitle: _drawModeEnabled
+                      ? 'Draw mode is on. Page scrolling is locked until you turn it off.'
+                      : 'Turn on Draw mode before sketching so the page does not scroll while you draw.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DisplayDrawingPad(
+                        bitmap: _drawBitmap,
+                        showGrid: _showGrid,
+                        enabled: _drawModeEnabled,
+                        pixelColor: _drawColor,
+                        onPixel: _paintPixel,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          ActionChip(
+                            label: const Text('Fullscreen'),
+                            avatar: const Icon(Icons.open_in_full, size: 18),
+                            onPressed: () => _openFullscreenDrawEditor(),
+                          ),
+                          FilterChip(
+                            label: const Text('Draw mode'),
+                            selected: _drawModeEnabled,
+                            onSelected: (_) => setState(
+                                () => _drawModeEnabled = !_drawModeEnabled),
+                          ),
+                          FilterChip(
+                            label: const Text('Pen'),
+                            selected: !_eraserMode,
+                            onSelected: (_) =>
+                                setState(() => _eraserMode = false),
+                          ),
+                          FilterChip(
+                            label: const Text('Eraser'),
+                            selected: _eraserMode,
+                            onSelected: (_) =>
+                                setState(() => _eraserMode = true),
+                          ),
+                          FilterChip(
+                            label: const Text('Grid'),
+                            selected: _showGrid,
+                            onSelected: (_) =>
+                                setState(() => _showGrid = !_showGrid),
+                          ),
+                          FilterChip(
+                            label: const Text('Live push'),
+                            selected: _liveDraw,
+                            onSelected: (_) =>
+                                setState(() => _liveDraw = !_liveDraw),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Brush size: ${_brushSize.round()} px',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      Slider(
+                        min: 1,
+                        max: 5,
+                        divisions: 4,
+                        value: _brushSize,
+                        onChanged: (value) =>
+                            setState(() => _brushSize = value),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Draw color (preview only — device receives 1-bit)',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Colors.white,
+                          const Color(0xFF00BFFF),
+                          const Color(0xFFFF69B4),
+                          const Color(0xFF00FF7F),
+                          const Color(0xFFFFD700),
+                          const Color(0xFFFF4500),
+                          const Color(0xFF8A2BE2),
+                          const Color(0xFFFF0000),
+                          const Color(0xFF00FFFF),
+                          const Color(0xFFFF1493),
+                          const Color(0xFF7CFC00),
+                          const Color(0xFFFF8C00),
+                        ].map((preset) {
+                          final selected = preset == _drawColor;
+                          return GestureDetector(
+                            onTap: () => setState(() => _drawColor = preset),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: preset,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selected
+                                      ? Colors.white
+                                      : Colors.white24,
+                                  width: selected ? 2.5 : 1,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy
+                                  ? null
+                                  : () {
+                                      setState(() => _drawBitmap = Uint8List(
+                                          DisplayBitmapCodec.byteLength));
+                                      _queueLiveDraw();
+                                    },
+                              icon: const Icon(Icons.layers_clear_outlined),
+                              label: const Text('Clear canvas'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy ? null : _fillCanvas,
+                              icon: const Icon(Icons.texture_outlined),
+                              label: const Text('Fill canvas'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  controller.busy ? null : _loadImageIntoCanvas,
+                              icon: const Icon(Icons.move_down_outlined),
+                              label: const Text('Use picked image'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: controller.busy || !controller.canControlDevice
+                                  ? null
+                                  : () => _sendCanvas(controller),
+                              icon: const Icon(Icons.draw_outlined),
+                              label: const Text('Push drawing'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Image',
+                  subtitle:
+                      'Any image is resized to 320×240 and converted to a 1-bit bitmap.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_selectedImage != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: CompanionTheme.ink,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.memory(
+                                  _selectedImage!.previewPng,
+                                  height: 96,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _selectedImage!.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(color: Colors.white),
+                              ),
+                              Text(
+                                '${_selectedImage!.byteLength} bytes ready for display',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Text(
+                          'No image selected yet.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      const SizedBox(height: 10),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Invert image while converting'),
+                        value: _invertImage,
+                        onChanged: (value) =>
+                            setState(() => _invertImage = value),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: controller.busy ? null : _pickImage,
+                              icon: const Icon(Icons.image_outlined),
+                              label: const Text('Pick image'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  controller.busy ||
+                                          _selectedImage == null ||
+                                          !controller.canControlDevice
+                                      ? null
+                                      : () => _sendImage(controller),
+                              icon: const Icon(Icons.send_outlined),
+                              label: const Text('Send image'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1940,6 +2069,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           liveDraw: _liveDraw,
           eraserMode: _eraserMode,
           brushSize: _brushSize,
+          pixelColor: _drawColor,
         ),
         fullscreenDialog: true,
       ),
@@ -1955,6 +2085,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _liveDraw = result.liveDraw;
       _eraserMode = result.eraserMode;
       _brushSize = result.brushSize;
+      _drawColor = result.pixelColor;
       _drawModeEnabled = true;
     });
   }
@@ -2118,7 +2249,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               label: Text(workspace.label),
               selected: _activeWorkspace == workspace,
               onSelected: (_) {
-                if (workspace != _StudioWorkspace.studio) {
+                if (workspace != _StudioWorkspace.companion) {
                   _stopLiveScenePlayback();
                 }
                 setState(() => _activeWorkspace = workspace);
@@ -2447,29 +2578,21 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
-                      if (_selectedVisualModel == CompanionVisualModel.stickFigure) ...[
-                        const SizedBox(height: 10),
-                        _buildStudioDropdown(
-                          context,
-                          label: 'Expression / mood',
-                          value: _selectedExpression,
-                          values: DeskExpression.values,
-                          labelBuilder: (value) => value.label,
-                          enabled: !controller.busy,
-                          onChanged: (value) => setState(() {
-                            _selectedExpression = value;
-                            if (_appearancePreviewReferencePose) {
-                              _appearancePreviewReferencePose = false;
-                            }
-                          }),
-                        ),
-                      ] else if (_selectedVisualModel == CompanionVisualModel.robot) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Robot currently follows scene timing only, so mood controls stay hidden until the robot motion language is expanded.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+                      const SizedBox(height: 10),
+                      _buildStudioDropdown(
+                        context,
+                        label: 'Expression',
+                        value: _selectedExpression,
+                        values: DeskExpression.values,
+                        labelBuilder: (value) => value.label,
+                        enabled: !controller.busy,
+                        onChanged: (value) => setState(() {
+                          _selectedExpression = value;
+                          if (_appearancePreviewReferencePose) {
+                            _appearancePreviewReferencePose = false;
+                          }
+                        }),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         detailSummary,
@@ -2634,6 +2757,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             ],
           ),
           const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _sendExpression(controller),
+              icon: const Icon(Icons.face_retouching_natural),
+              label: Text('Show ${_selectedExpression.label}'),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             usesNativeClassicSend
                 ? 'Classic appearance sends as a native device command.'
@@ -2641,128 +2775,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     ? 'The app is now streaming the full scene animation over BLE instead of flattening it to a still frame.'
                     : 'App-first models can still be sent over Wi-Fi or relay, but only as a single snapshot because live scene streaming requires BLE.',
             style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExpressionStudioSection(
-    BuildContext context,
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) {
-    return _SectionCard(
-      title: 'Expression studio',
-      subtitle:
-          'Live expression preview is back in Studio, with a dedicated editor for browsing moods before you send them.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: CompanionTheme.panel,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: CompanionTheme.blush),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Live preview',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: CompanionTheme.ink,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: CompanionFacePreview(
-                      visualModel: CompanionVisualModel.classic,
-                      scene: CompanionScene.none,
-                      personality: currentPersonality.command,
-                      petMode: currentPetMode.command,
-                      referencePose: false,
-                      showScreenBoundary: true,
-                      expression: _selectedExpression.command,
-                      hair: _selectedHairStyle.command,
-                      ears: _selectedEarsStyle.command,
-                      mustache: _selectedMustacheStyle.command,
-                      glasses: _selectedGlassesStyle.command,
-                      headwear: _selectedHeadwearStyle.command,
-                      piercing: _selectedPiercingStyle.command,
-                      hairSize: _selectedHairSize.round(),
-                      mustacheSize: _selectedMustacheSize.round(),
-                      hairWidth: _selectedHairWidth.round(),
-                      hairHeight: _selectedHairHeight.round(),
-                      hairThickness: _selectedHairThickness.round(),
-                      hairOffsetX: _selectedHairOffsetX.round(),
-                      hairOffsetY: _selectedHairOffsetY.round(),
-                      eyeOffsetY: _selectedEyeOffsetY.round(),
-                      mouthOffsetY: _selectedMouthOffsetY.round(),
-                      mustacheWidth: _selectedMustacheWidth.round(),
-                      mustacheHeight: _selectedMustacheHeight.round(),
-                      mustacheThickness: _selectedMustacheThickness.round(),
-                      mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                      mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _selectedExpression.subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Expression sends still use the device-native renderer. Scene mood in Style Studio stays separate from this native expression editor.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildStudioDropdown(
-            context,
-            label: 'Expression',
-            value: _selectedExpression,
-            values: DeskExpression.values,
-            labelBuilder: (value) => value.label,
-            enabled: !controller.busy,
-            onChanged: (value) => setState(() => _selectedExpression = value),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: controller.busy
-                      ? null
-                      : () => _openExpressionEditor(
-                            currentPersonality,
-                            currentPetMode,
-                          ),
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Open expression studio'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _sendExpression(controller),
-                  icon: const Icon(Icons.face_retouching_natural),
-                  label: Text('Show ${_selectedExpression.label}'),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -3150,91 +3162,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     await controller.sendLiveBitmap(payload.bitmap);
   }
 
-  Future<void> _openExpressionEditor(
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) async {
-    final controller = context.read<DeskCompanionController>();
-    final result = await Navigator.of(context).push<_AppearanceEditorResult>(
-      MaterialPageRoute(
-        builder: (_) => _FullscreenAppearanceEditor(
-          editorTitle: 'Expression studio',
-            initialSection: _selectedVisualModel == CompanionVisualModel.classic
-              ? _AppearanceEditorSection.face
-              : _selectedVisualModel == CompanionVisualModel.stickFigure
-                ? _AppearanceEditorSection.motion
-                : _AppearanceEditorSection.scene,
-          personality: currentPersonality,
-          petMode: currentPetMode,
-          initialVisualModel: _selectedVisualModel,
-          initialScene: _selectedScene,
-          initialReferencePose: _appearancePreviewReferencePose,
-          selectedExpression: _selectedExpression,
-          hairStyle: _selectedHairStyle,
-          earsStyle: _selectedEarsStyle,
-          mustacheStyle: _selectedMustacheStyle,
-          glassesStyle: _selectedGlassesStyle,
-          headwearStyle: _selectedHeadwearStyle,
-          piercingStyle: _selectedPiercingStyle,
-          hairSize: _selectedHairSize,
-          hairWidth: _selectedHairWidth,
-          hairHeight: _selectedHairHeight,
-          hairThickness: _selectedHairThickness,
-          hairOffsetX: _selectedHairOffsetX,
-          hairOffsetY: _selectedHairOffsetY,
-          eyeOffsetY: _selectedEyeOffsetY,
-          mouthOffsetY: _selectedMouthOffsetY,
-          mustacheSize: _selectedMustacheSize,
-          mustacheWidth: _selectedMustacheWidth,
-          mustacheHeight: _selectedMustacheHeight,
-          mustacheThickness: _selectedMustacheThickness,
-          mustacheOffsetX: _selectedMustacheOffsetX,
-          mustacheOffsetY: _selectedMustacheOffsetY,
-          stickFigureScale: _stickFigureScale,
-          stickFigureSpacing: _stickFigureSpacing,
-          stickFigureEnergy: _stickFigureEnergy,
-        ),
-        fullscreenDialog: true,
-      ),
-    );
-
-    if (!mounted || result == null) {
-      return;
-    }
-
-    setState(() {
-      _appearanceDraftDirty = true;
-      _selectedVisualModel = result.visualModel;
-      _selectedScene = result.scene;
-      _appearancePreviewReferencePose = result.previewReferencePose;
-      _selectedExpression = result.expression;
-      _selectedHairStyle = result.hairStyle;
-      _selectedEarsStyle = result.earsStyle;
-      _selectedMustacheStyle = result.mustacheStyle;
-      _selectedGlassesStyle = result.glassesStyle;
-      _selectedHeadwearStyle = result.headwearStyle;
-      _selectedPiercingStyle = result.piercingStyle;
-      _selectedHairSize = result.hairSize;
-      _selectedHairWidth = result.hairWidth;
-      _selectedHairHeight = result.hairHeight;
-      _selectedHairThickness = result.hairThickness;
-      _selectedHairOffsetX = result.hairOffsetX;
-      _selectedHairOffsetY = result.hairOffsetY;
-      _selectedEyeOffsetY = result.eyeOffsetY;
-      _selectedMouthOffsetY = result.mouthOffsetY;
-      _selectedMustacheSize = result.mustacheSize;
-      _selectedMustacheWidth = result.mustacheWidth;
-      _selectedMustacheHeight = result.mustacheHeight;
-      _selectedMustacheThickness = result.mustacheThickness;
-      _selectedMustacheOffsetX = result.mustacheOffsetX;
-      _selectedMustacheOffsetY = result.mustacheOffsetY;
-      _stickFigureScale = result.stickFigureScale;
-      _stickFigureSpacing = result.stickFigureSpacing;
-      _stickFigureEnergy = result.stickFigureEnergy;
-    });
-    _persistStudioPreviewState(controller);
-  }
-
   Future<void> _sendStudioPreviewSnapshot(
     DeskCompanionController controller,
     DeskPersonality currentPersonality,
@@ -3309,9 +3236,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   static int _colorToRgb565(Color c) {
-    final r = (c.red * 31 / 255).round();
-    final g = (c.green * 63 / 255).round();
-    final b = (c.blue * 31 / 255).round();
+    final r = (c.r * 31).round();
+    final g = (c.g * 63).round();
+    final b = (c.b * 31).round();
     return (r << 11) | (g << 5) | b;
   }
 
@@ -3533,7 +3460,7 @@ class _ColorRow extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: _presets.map((preset) {
-              final selected = preset.value == color.value;
+              final selected = preset == color;
               return GestureDetector(
                 onTap: () => onChanged(preset),
                 child: Container(
@@ -3649,6 +3576,7 @@ class _FullscreenDrawResult {
     required this.liveDraw,
     required this.eraserMode,
     required this.brushSize,
+    required this.pixelColor,
   });
 
   final Uint8List bitmap;
@@ -3656,6 +3584,7 @@ class _FullscreenDrawResult {
   final bool liveDraw;
   final bool eraserMode;
   final double brushSize;
+  final Color pixelColor;
 }
 
 class _FullscreenDrawEditor extends StatefulWidget {
@@ -3665,6 +3594,7 @@ class _FullscreenDrawEditor extends StatefulWidget {
     required this.liveDraw,
     required this.eraserMode,
     required this.brushSize,
+    required this.pixelColor,
   });
 
   final Uint8List bitmap;
@@ -3672,6 +3602,7 @@ class _FullscreenDrawEditor extends StatefulWidget {
   final bool liveDraw;
   final bool eraserMode;
   final double brushSize;
+  final Color pixelColor;
 
   @override
   State<_FullscreenDrawEditor> createState() => _FullscreenDrawEditorState();
@@ -3683,6 +3614,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
   late bool _liveDraw;
   late bool _eraserMode;
   late double _brushSize;
+  late Color _pixelColor;
   bool _controlsVisible = false;
   Timer? _liveSyncTimer;
 
@@ -3694,6 +3626,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
     _liveDraw = widget.liveDraw;
     _eraserMode = widget.eraserMode;
     _brushSize = widget.brushSize;
+    _pixelColor = widget.pixelColor;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
@@ -3729,6 +3662,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
                   bitmap: _bitmap,
                   showGrid: _showGrid,
                   enabled: true,
+                  pixelColor: _pixelColor,
                   onPixel: _paintPixel,
                 ),
               ),
@@ -3924,6 +3858,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
         liveDraw: _liveDraw,
         eraserMode: _eraserMode,
         brushSize: _brushSize,
+        pixelColor: _pixelColor,
       ),
     );
   }

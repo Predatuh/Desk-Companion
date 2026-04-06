@@ -319,10 +319,12 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
             ),
         };
 
-        return AspectRatio(
-          aspectRatio: 2,
-          child: CustomPaint(
-            painter: painter,
+        return RepaintBoundary(
+          child: AspectRatio(
+            aspectRatio: 2,
+            child: CustomPaint(
+              painter: painter,
+            ),
           ),
         );
       },
@@ -367,20 +369,21 @@ class _StickFigurePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
-      ..isAntiAlias = false;
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
     final fill = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final mask = Paint()
       ..color = Colors.black.withValues(alpha: 0.78)
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final boundary = Paint()
       ..color = const Color(0xFF9B9B9B)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -617,11 +620,12 @@ class _StickFigurePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = currentScaleStrokeWidth(scale, away)
       ..strokeCap = StrokeCap.round
-      ..isAntiAlias = false;
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
     final sceneFill = Paint()
       ..color = Colors.white.withValues(alpha: visibility)
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final holdHalfGap = (spacing * 0.62).clamp(30.0, 40.0);
     final meetingLeft = 160.0 - holdHalfGap;
     final meetingRight = 160.0 + holdHalfGap;
@@ -963,20 +967,22 @@ class _RobotPainter extends CustomPainter {
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..isAntiAlias = false;
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
     final fill = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final mask = Paint()
       ..color = Colors.black.withValues(alpha: 0.78)
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final boundary = Paint()
       ..color = const Color(0xFF9B9B9B)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -986,7 +992,9 @@ class _RobotPainter extends CustomPainter {
       stroke,
     );
 
-    final pulse = (math.sin(animationProgress * math.pi * 2) + 1) / 2;
+    // Smooth easing for organic motion
+    final eased = Curves.easeInOutSine.transform(animationProgress);
+    final pulse = (math.sin(eased * math.pi * 2) + 1) / 2;
     if (scene.isDuo) {
       _drawRobot(canvas, stroke, fill, centerX: 120, pulse: pulse, facingRight: true, scene: scene);
       _drawRobot(canvas, stroke, fill, centerX: 200, pulse: 1 - pulse, facingRight: false, scene: scene);
@@ -1018,7 +1026,8 @@ class _RobotPainter extends CustomPainter {
     required CompanionScene scene,
   }) {
     final direction = facingRight ? 1.0 : -1.0;
-    final hover = math.sin(animationProgress * math.pi * 2 + (facingRight ? 0 : math.pi / 3)) * 4.2;
+    final eased = Curves.easeInOutSine.transform(animationProgress);
+    final hover = math.sin(eased * math.pi * 2 + (facingRight ? 0 : math.pi / 3)) * 4.2;
     final head = Rect.fromCenter(center: Offset(centerX, 68 + hover), width: 48, height: 39);
     final torso = Rect.fromCenter(center: Offset(centerX, 116 + hover * 0.5), width: 36, height: 42);
     final antennaTop = Offset(centerX, head.top - 15 - pulse * 4.5);
@@ -1127,15 +1136,17 @@ class _CompanionFacePainter extends CustomPainter {
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..isAntiAlias = false;
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
     final fill = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final cut = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -1797,12 +1808,12 @@ class _CompanionFacePainter extends CustomPainter {
     final mask = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.fill
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
     final boundary = Paint()
       ..color = const Color(0xFFFFB6A6)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..isAntiAlias = false;
+      ..isAntiAlias = true;
 
     canvas.drawRect(
       Rect.fromLTWH(0, 0, 320, _visibleScreenRect.top),
