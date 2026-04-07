@@ -791,6 +791,22 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendDrawColor(int rgb565) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_draw_color', 'color': rgb565},
+        mode: _mode,
+        bleLabel: 'Draw color sent over BLE.',
+        relayLabel: 'Draw color queued through relay.',
+      );
+    });
+  }
+
+  Future<void> fireRocket({int column = -1}) async {
+    if (!isBleConnected) return;
+    await _sendBleCommand({'type': 'fire_rocket', 'column': column});
+  }
+
   Future<void> setTimezone(int offsetSeconds) async {
     await _runBusy(() async {
       await _sendCommand(

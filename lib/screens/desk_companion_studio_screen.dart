@@ -1542,6 +1542,66 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           label: Text('Send ${_selectedParticle.label}'),
                         ),
                       ),
+                      if (_selectedParticle == DeskParticle.fireworks) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text('Manual launcher', style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap a column to fire a rocket from that position. Rapid-fire as many as you want!',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: List.generate(8, (i) {
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                                child: GestureDetector(
+                                  onTap: !controller.canControlDevice
+                                      ? null
+                                      : () => controller.fireRocket(column: i),
+                                  child: Container(
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.bottomCenter,
+                                        end: Alignment.topCenter,
+                                        colors: [
+                                          const Color(0xFFFF6B35),
+                                          const Color(0xFFFFD700).withValues(alpha: 0.3),
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.white24),
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.rocket_launch,
+                                        size: 20,
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: !controller.canControlDevice
+                                ? null
+                                : () => controller.fireRocket(),
+                            icon: const Icon(Icons.rocket_launch),
+                            label: const Text('Fire random'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1774,7 +1834,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         ].map((preset) {
                           final selected = preset == _drawColor;
                           return GestureDetector(
-                            onTap: () => setState(() => _drawColor = preset),
+                            onTap: () {
+                              setState(() => _drawColor = preset);
+                              _sendDrawColorToDevice(preset);
+                            },
                             child: Container(
                               width: 28,
                               height: 28,
@@ -2048,6 +2111,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             _drawBitmap,
           );
     });
+  }
+
+  void _sendDrawColorToDevice(Color c) {
+    final r = (c.r * 255).round();
+    final g = (c.g * 255).round();
+    final b = (c.b * 255).round();
+    final rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    final controller = context.read<DeskCompanionController>();
+    if (controller.canControlDevice && !controller.busy) {
+      controller.sendDrawColor(rgb565);
+    }
   }
 
   Future<void> _scanWifiNetworks(DeskCompanionController controller) async {

@@ -3525,6 +3525,42 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "set_draw_color") {
+    int c = extractJsonIntField(body, "color", 0xFFFF);
+    userFaceColor = (uint16_t)c;
+    if (currentMode == MODE_IMAGE) renderCurrentMode();
+    return;
+  }
+
+  if (type == "fire_rocket") {
+    int col = extractJsonIntField(body, "column", -1);
+    // Switch to fireworks mode if not already
+    if (currentMode != MODE_FIREWORKS) {
+      currentMode = MODE_FIREWORKS;
+      gPtclCount = 48;
+      for (uint8_t i = 0; i < 48; i++) gPtcl[i].life = 0;
+    }
+    // Find a free particle slot for a new rocket
+    for (uint8_t i = 0; i < 48; i++) {
+      if (gPtcl[i].life > 0) continue;
+      int16_t xPos;
+      if (col >= 0 && col <= 7) {
+        xPos = (int16_t)(20 + col * 40);
+      } else {
+        xPos = (int16_t)(60 + random(200));
+      }
+      gPtcl[i].x     = xPos;
+      gPtcl[i].y     = (int16_t)(SCREEN_HEIGHT - 5);
+      gPtcl[i].vx    = (int8_t)(random(3) - 1);
+      gPtcl[i].vy    = (int8_t)(-6 - random(3));
+      gPtcl[i].life  = 200;
+      gPtcl[i].color = COL_GOLD;
+      fwRocketCount++;
+      break;
+    }
+    return;
+  }
+
   if (type == "set_timezone") {
     ntpUtcOffsetSeconds = extractJsonIntField(body, "offsetSeconds", 0);
     if (WiFi.status() == WL_CONNECTED) syncNtp();
@@ -3648,6 +3684,13 @@ void handleCommandJson(const String& body) {
   if (type == "commit_color_image") {
     if (colorImageTransferActive && receivedColorBytes == expectedColorBytes) {
       colorImageTransferActive = false;
+      // Byte-swap from big-endian (Flutter) to little-endian (ESP32 native)
+      const size_t pixelCount = SCREEN_WIDTH * SCREEN_HEIGHT;
+      for (size_t i = 0; i < pixelCount; i++) {
+        uint8_t hi = ((uint8_t*)colorImageBuffer)[i * 2];
+        uint8_t lo = ((uint8_t*)colorImageBuffer)[i * 2 + 1];
+        colorImageBuffer[i] = (uint16_t)(lo << 8) | hi;
+      }
       currentMode = MODE_COLOR_IMAGE;
       statusText = "Color image ready";
       renderCurrentMode();
@@ -4276,8 +4319,14 @@ void loop() {
     }
   }
 
-  // Weather auto-fetch every 10 min when WiFi+location set
-  if (WiFi.status() == WL_CONNECTED &&
+  // Skip blocking network calls during particle/animation modes to avoid stutter
+  const bool inParticleMode = (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
+                               currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD ||
+                               currentMode == MODE_ANIMATED_NOTE || currentMode == MODE_COUNTDOWN);
+
+  // Weather auto-fetch every 10 min when WiFi+location set (skip during particle modes)
+  if (!inParticleMode &&
+      WiFi.status() == WL_CONNECTED &&
       (weatherLat != 0.f || weatherLon != 0.f) &&
       (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= 600000UL)) {
     fetchWeather();
@@ -4356,7 +4405,8 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
+  // Skip relay network calls during particle/animation modes to avoid stutter
+  if (!inParticleMode && (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000))) {
     pushRelayStatus();
   }
 
@@ -4381,7 +4431,9 @@ void loop() {
     }
   }
 
-  pollRelay();
+  if (!inParticleMode) {
+    pollRelay();
+  }
 
   handleTouch();
 
