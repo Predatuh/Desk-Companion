@@ -714,6 +714,28 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendFireworkShape(String shape) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_firework_shape', 'shape': shape},
+        mode: 'firework_shape',
+        bleLabel: 'Firework shape sent over BLE.',
+        relayLabel: 'Firework shape queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendNoteAnimation(String animation) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_note_animation', 'animation': animation},
+        mode: 'note_animation',
+        bleLabel: 'Note animation sent over BLE.',
+        relayLabel: 'Note animation queued through relay.',
+      );
+    });
+  }
+
   Future<void> sendGoodnight() async {
     await _runBusy(() async {
       await _sendCommand(

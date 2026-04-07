@@ -164,6 +164,7 @@ enum DisplayMode {
   MODE_COUNTDOWN,
   MODE_WEATHER,
   MODE_SLEEP,
+  MODE_ANIMATED_NOTE,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -287,6 +288,12 @@ struct Ptcl { int16_t x, y; int8_t vx, vy; uint8_t life; uint16_t color; };
 Ptcl gPtcl[48];
 uint8_t  gPtclCount        = 0;
 unsigned long lastParticleTickMs = 0;
+// Firework shape: 0=circle, 1=heart, 2=star
+uint8_t fireworkShape = 0;
+// Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers
+uint8_t noteAnimType = 0;
+Ptcl noteOvPtcl[24];
+uint8_t noteOvCount = 0;
 // Countdown
 long     countdownSeconds  = 0;
 unsigned long countdownStartMs  = 0;
@@ -2170,6 +2177,9 @@ void renderCurrentMode() {
     case MODE_SLEEP:
       renderSleepFrame();
       break;
+    case MODE_ANIMATED_NOTE:
+      renderAnimatedNoteFrame();
+      break;
     case MODE_IDLE:
     default:
       renderIdle();
@@ -2325,7 +2335,7 @@ void renderFireworksFrame() {
     if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT) {
       // Size fades as life decreases
       int r = (gPtcl[i].life > 30) ? 3 : (gPtcl[i].life > 15) ? 2 : 1;
-      gfx->fillCircle(nx, ny, r, gPtcl[i].color);
+      drawFireworkParticle(nx, ny, r, gPtcl[i].color);
       // Sparkle trail — dim trail dot behind each particle
       if (gPtcl[i].life > 10) {
         int tx = nx - gPtcl[i].vx;
@@ -2426,6 +2436,172 @@ void renderStarfieldFrame() {
       int r = (gPtcl[i].life < 20) ? 2 : 1;
       uint16_t c = (gPtcl[i].life < 20) ? userAccentColor : userFaceColor;
       gfx->fillCircle(sx, sy, r, c);
+    }
+  }
+  pushCanvas();
+}
+
+      uint16_t c = (gPtcl[i].life < 20) ? userAccentColor : userFaceColor;
+      gfx->fillCircle(sx, sy, r, c);
+    }
+  }
+  pushCanvas();
+}
+
+// ─── Firework shape helpers ───
+
+void drawSmallHeart(int16_t cx, int16_t cy, int s, uint16_t c) {
+  if (s < 1) s = 1;
+  gfx->fillCircle(cx - s, cy - s / 2, s, c);
+  gfx->fillCircle(cx + s, cy - s / 2, s, c);
+  gfx->fillTriangle(cx - s * 2, cy - s / 2 + 1, cx + s * 2, cy - s / 2 + 1, cx, cy + s * 2, c);
+}
+
+void drawSmallStar(int16_t cx, int16_t cy, int s, uint16_t c) {
+  if (s < 1) s = 1;
+  // 5-pointed star: vertical line + two diagonal cross lines
+  gfx->drawLine(cx, cy - s * 2, cx, cy + s * 2, c);
+  gfx->drawLine(cx - s * 2, cy - s, cx + s * 2, cy + s, c);
+  gfx->drawLine(cx - s * 2, cy + s, cx + s * 2, cy - s, c);
+  gfx->fillCircle(cx, cy, s > 1 ? s - 1 : 1, c);
+}
+
+void drawFireworkParticle(int16_t x, int16_t y, int r, uint16_t c) {
+  switch (fireworkShape) {
+    case 1: drawSmallHeart(x, y, r, c); break;
+    case 2: drawSmallStar(x, y, r, c);  break;
+    default: gfx->fillCircle(x, y, r, c); break;
+  }
+}
+
+// ─── Animated note overlay ───
+
+void initNoteOverlayWater() {
+  noteOvCount = 20;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)random(SCREEN_WIDTH + 40);
+    noteOvPtcl[i].y     = (int16_t)(SCREEN_HEIGHT - 50 + random(50));
+    noteOvPtcl[i].vx    = (int8_t)(-2 - random(3));
+    noteOvPtcl[i].vy    = 0;
+    noteOvPtcl[i].life  = (uint8_t)(1 + random(3));
+    noteOvPtcl[i].color = (i % 3 == 0) ? COL_SKYBLUE : (i % 3 == 1) ? COL_MINT : COL_ACCENT;
+  }
+}
+
+void initNoteOverlayStars() {
+  noteOvCount = 12;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)(SCREEN_WIDTH + random(80));
+    noteOvPtcl[i].y     = (int16_t)random(SCREEN_HEIGHT / 2);
+    noteOvPtcl[i].vx    = (int8_t)(-4 - random(4));
+    noteOvPtcl[i].vy    = (int8_t)(2 + random(2));
+    noteOvPtcl[i].life  = (uint8_t)(30 + random(40));
+    noteOvPtcl[i].color = (i % 3 == 0) ? COL_GOLD : (i % 3 == 1) ? COL_PEACH : userFaceColor;
+  }
+}
+
+void initNoteOverlayFlowers() {
+  noteOvCount = 8;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)(20 + random(SCREEN_WIDTH - 40));
+    noteOvPtcl[i].y     = (int16_t)(SCREEN_HEIGHT + random(30));
+    noteOvPtcl[i].vx    = 0;
+    noteOvPtcl[i].vy    = (int8_t)(-1);
+    noteOvPtcl[i].life  = (uint8_t)(40 + random(40));
+    noteOvPtcl[i].color = (i % 4 == 0) ? COL_ROSE : (i % 4 == 1) ? COL_PINK : (i % 4 == 2) ? COL_LAVENDER : COL_PEACH;
+  }
+}
+
+void initNoteOverlay() {
+  switch (noteAnimType) {
+    case 1: initNoteOverlayWater();   break;
+    case 2: initNoteOverlayStars();   break;
+    case 3: initNoteOverlayFlowers(); break;
+    default: noteOvCount = 0;         break;
+  }
+}
+
+void drawFlowerShape(int16_t cx, int16_t cy, int s, uint16_t c) {
+  // Simple 4-petal flower
+  gfx->fillCircle(cx, cy - s, s, c);
+  gfx->fillCircle(cx, cy + s, s, c);
+  gfx->fillCircle(cx - s, cy, s, c);
+  gfx->fillCircle(cx + s, cy, s, c);
+  gfx->fillCircle(cx, cy, s > 1 ? s - 1 : 1, COL_GOLD);
+}
+
+void renderAnimatedNoteFrame() {
+  if (!displayAvailable || !colorImageBuffer) return;
+  // Redraw the note image as background
+  if (spriteReady && canvas) {
+    memcpy(canvas->getBuffer(), colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+  } else {
+    tft.drawRGBBitmap(0, 0, colorImageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT);
+    return;
+  }
+  // Overlay animated particles
+  static uint8_t phase = 0;
+  phase++;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    if (noteAnimType == 1) {
+      // Flowing water: drift left with sine wave
+      noteOvPtcl[i].x += noteOvPtcl[i].vx;
+      int16_t waveY = noteOvPtcl[i].y + (int16_t)(sinf((phase + i * 8) * 0.15f) * 4);
+      if (noteOvPtcl[i].x < -10) {
+        noteOvPtcl[i].x = SCREEN_WIDTH + random(20);
+        noteOvPtcl[i].y = SCREEN_HEIGHT - 50 + random(50);
+      }
+      int r = noteOvPtcl[i].life;
+      if (noteOvPtcl[i].x >= 0 && noteOvPtcl[i].x < SCREEN_WIDTH && waveY >= 0 && waveY < SCREEN_HEIGHT)
+        canvas->fillCircle(noteOvPtcl[i].x, waveY, r, noteOvPtcl[i].color);
+    } else if (noteAnimType == 2) {
+      // Shooting stars: streak from upper-right to lower-left
+      noteOvPtcl[i].x += noteOvPtcl[i].vx;
+      noteOvPtcl[i].y += noteOvPtcl[i].vy;
+      noteOvPtcl[i].life--;
+      if (noteOvPtcl[i].life == 0 || noteOvPtcl[i].x < -10 || noteOvPtcl[i].y > SCREEN_HEIGHT) {
+        noteOvPtcl[i].x    = (int16_t)(SCREEN_WIDTH + random(80));
+        noteOvPtcl[i].y    = (int16_t)random(SCREEN_HEIGHT / 2);
+        noteOvPtcl[i].vx   = (int8_t)(-4 - random(4));
+        noteOvPtcl[i].vy   = (int8_t)(2 + random(2));
+        noteOvPtcl[i].life = (uint8_t)(30 + random(40));
+        noteOvPtcl[i].color = (random(3) == 0) ? COL_GOLD : (random(2) == 0) ? COL_PEACH : userFaceColor;
+      }
+      int16_t sx = noteOvPtcl[i].x, sy = noteOvPtcl[i].y;
+      if (sx >= 0 && sx < SCREEN_WIDTH && sy >= 0 && sy < SCREEN_HEIGHT) {
+        canvas->drawPixel(sx, sy, noteOvPtcl[i].color);
+        // Trail
+        int16_t tx = sx - noteOvPtcl[i].vx;
+        int16_t ty = sy - noteOvPtcl[i].vy;
+        if (tx >= 0 && tx < SCREEN_WIDTH && ty >= 0 && ty < SCREEN_HEIGHT)
+          canvas->drawPixel(tx, ty, noteOvPtcl[i].color);
+        int16_t t2x = tx - noteOvPtcl[i].vx;
+        int16_t t2y = ty - noteOvPtcl[i].vy;
+        if (t2x >= 0 && t2x < SCREEN_WIDTH && t2y >= 0 && t2y < SCREEN_HEIGHT)
+          canvas->drawPixel(t2x, t2y, noteOvPtcl[i].color);
+      }
+    } else if (noteAnimType == 3) {
+      // Growing flowers: rise from bottom, stop, bloom
+      if (noteOvPtcl[i].life > 20) {
+        noteOvPtcl[i].y += noteOvPtcl[i].vy;
+        noteOvPtcl[i].life--;
+      } else if (noteOvPtcl[i].life > 0) {
+        noteOvPtcl[i].life--;
+      } else {
+        // Reset: new flower
+        noteOvPtcl[i].x    = (int16_t)(20 + random(SCREEN_WIDTH - 40));
+        noteOvPtcl[i].y    = (int16_t)(SCREEN_HEIGHT + random(30));
+        noteOvPtcl[i].vy   = (int8_t)(-1);
+        noteOvPtcl[i].life = (uint8_t)(40 + random(40));
+      }
+      int16_t fy = noteOvPtcl[i].y;
+      if (fy >= 0 && fy < SCREEN_HEIGHT) {
+        int s = (noteOvPtcl[i].life <= 20) ? 3 : 2;
+        // Stem
+        canvas->drawLine(noteOvPtcl[i].x, fy + s * 2, noteOvPtcl[i].x, SCREEN_HEIGHT, COL_MINT);
+        // Flower head
+        drawFlowerShape(noteOvPtcl[i].x, fy, s, noteOvPtcl[i].color);
+      }
     }
   }
   pushCanvas();
@@ -3102,6 +3278,34 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_particle") {
     setParticleMode(extractJsonStringField(body, "particle", "fireworks"));
+    return;
+  }
+
+  if (type == "set_firework_shape") {
+    String shape = extractJsonStringField(body, "shape", "circle");
+    if      (shape == "heart") fireworkShape = 1;
+    else if (shape == "star")  fireworkShape = 2;
+    else                       fireworkShape = 0;
+    return;
+  }
+
+  if (type == "set_note_animation") {
+    String anim = extractJsonStringField(body, "animation", "none");
+    if      (anim == "flowing_water")    noteAnimType = 1;
+    else if (anim == "shooting_stars")   noteAnimType = 2;
+    else if (anim == "growing_flowers")  noteAnimType = 3;
+    else                                 noteAnimType = 0;
+    // If we have a color image loaded, switch to animated note mode
+    if (noteAnimType > 0 && colorImageBuffer) {
+      currentMode = MODE_ANIMATED_NOTE;
+      lastParticleTickMs = 0;
+      initNoteOverlay();
+      renderCurrentMode();
+    } else if (noteAnimType == 0 && currentMode == MODE_ANIMATED_NOTE) {
+      currentMode = MODE_COLOR_IMAGE;
+      renderCurrentMode();
+    }
+    publishStatus();
     return;
   }
 
@@ -3831,7 +4035,8 @@ void loop() {
   }
 
   if (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
-      currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD) {
+      currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD ||
+      currentMode == MODE_ANIMATED_NOTE) {
     const unsigned long now = millis();
     if (now - lastParticleTickMs >= 16) {
       lastParticleTickMs = now;

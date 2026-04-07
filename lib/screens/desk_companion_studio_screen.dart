@@ -80,6 +80,40 @@ extension DeskParticleExt on DeskParticle {
       };
 }
 
+enum DeskFireworkShape { circle, heart, star }
+
+extension DeskFireworkShapeExt on DeskFireworkShape {
+  String get label => switch (this) {
+        DeskFireworkShape.circle => 'Circle',
+        DeskFireworkShape.heart => 'Heart',
+        DeskFireworkShape.star => 'Star',
+      };
+
+  String get command => switch (this) {
+        DeskFireworkShape.circle => 'circle',
+        DeskFireworkShape.heart => 'heart',
+        DeskFireworkShape.star => 'star',
+      };
+}
+
+enum DeskNoteAnimation { none, flowingWater, shootingStars, growingFlowers }
+
+extension DeskNoteAnimationExt on DeskNoteAnimation {
+  String get label => switch (this) {
+        DeskNoteAnimation.none => 'None',
+        DeskNoteAnimation.flowingWater => 'Flowing water',
+        DeskNoteAnimation.shootingStars => 'Shooting stars',
+        DeskNoteAnimation.growingFlowers => 'Growing flowers',
+      };
+
+  String get command => switch (this) {
+        DeskNoteAnimation.none => 'none',
+        DeskNoteAnimation.flowingWater => 'flowing_water',
+        DeskNoteAnimation.shootingStars => 'shooting_stars',
+        DeskNoteAnimation.growingFlowers => 'growing_flowers',
+      };
+}
+
 enum DeskExpression {
   happy,
   smile,
@@ -253,7 +287,7 @@ extension DeskPetModeExt on DeskPetMode {
       };
 }
 
-enum DeskHairStyle { none, tuft, bangs, spiky, swoop, bob, messy }
+enum DeskHairStyle { none, tuft, bangs, spiky, swoop, bob, messy, ponytail, curly, pigtails, mohawk }
 
 extension DeskHairStyleExt on DeskHairStyle {
   String get label => switch (this) {
@@ -264,6 +298,10 @@ extension DeskHairStyleExt on DeskHairStyle {
         DeskHairStyle.swoop => 'Swoop',
         DeskHairStyle.bob => 'Bob',
         DeskHairStyle.messy => 'Messy',
+        DeskHairStyle.ponytail => 'Ponytail',
+        DeskHairStyle.curly => 'Curly',
+        DeskHairStyle.pigtails => 'Pigtails',
+        DeskHairStyle.mohawk => 'Mohawk',
       };
 
   String get command => switch (this) {
@@ -274,6 +312,10 @@ extension DeskHairStyleExt on DeskHairStyle {
         DeskHairStyle.swoop => 'swoop',
         DeskHairStyle.bob => 'bob',
         DeskHairStyle.messy => 'messy',
+        DeskHairStyle.ponytail => 'ponytail',
+        DeskHairStyle.curly => 'curly',
+        DeskHairStyle.pigtails => 'pigtails',
+        DeskHairStyle.mohawk => 'mohawk',
       };
 }
 
@@ -303,6 +345,8 @@ enum DeskMustacheStyle {
   walrus,
   pencil,
   imperial,
+  goatee,
+  soulPatch,
 }
 
 extension DeskMustacheStyleExt on DeskMustacheStyle {
@@ -314,6 +358,8 @@ extension DeskMustacheStyleExt on DeskMustacheStyle {
         DeskMustacheStyle.walrus => 'Walrus',
         DeskMustacheStyle.pencil => 'Pencil',
         DeskMustacheStyle.imperial => 'Imperial',
+        DeskMustacheStyle.goatee => 'Goatee',
+        DeskMustacheStyle.soulPatch => 'Soul patch',
       };
 
   String get command => switch (this) {
@@ -324,6 +370,8 @@ extension DeskMustacheStyleExt on DeskMustacheStyle {
         DeskMustacheStyle.walrus => 'walrus',
         DeskMustacheStyle.pencil => 'pencil',
         DeskMustacheStyle.imperial => 'imperial',
+        DeskMustacheStyle.goatee => 'goatee',
+        DeskMustacheStyle.soulPatch => 'soul_patch',
       };
 }
 
@@ -345,7 +393,7 @@ extension DeskGlassesStyleExt on DeskGlassesStyle {
       };
 }
 
-enum DeskHeadwearStyle { none, bow, beanie, crown }
+enum DeskHeadwearStyle { none, bow, beanie, crown, topHat, halo, flowerCrown, beret }
 
 extension DeskHeadwearStyleExt on DeskHeadwearStyle {
   String get label => switch (this) {
@@ -353,6 +401,10 @@ extension DeskHeadwearStyleExt on DeskHeadwearStyle {
         DeskHeadwearStyle.bow => 'Bow',
         DeskHeadwearStyle.beanie => 'Beanie',
         DeskHeadwearStyle.crown => 'Crown',
+        DeskHeadwearStyle.topHat => 'Top hat',
+        DeskHeadwearStyle.halo => 'Halo',
+        DeskHeadwearStyle.flowerCrown => 'Flower crown',
+        DeskHeadwearStyle.beret => 'Beret',
       };
 
   String get command => switch (this) {
@@ -360,6 +412,10 @@ extension DeskHeadwearStyleExt on DeskHeadwearStyle {
         DeskHeadwearStyle.bow => 'bow',
         DeskHeadwearStyle.beanie => 'beanie',
         DeskHeadwearStyle.crown => 'crown',
+        DeskHeadwearStyle.topHat => 'top_hat',
+        DeskHeadwearStyle.halo => 'halo',
+        DeskHeadwearStyle.flowerCrown => 'flower_crown',
+        DeskHeadwearStyle.beret => 'beret',
       };
 }
 
@@ -434,11 +490,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   int _noteBorderStyle = 0;
   final List<String> _noteIcons = [];
   String? _noteFlowerAccent;
+  Color _noteTextColor = Colors.white;
   bool _obscurePassword = true;
 
   DeskFlower _selectedFlower = DeskFlower.rose;
   DeskScene _selectedDeskScene = DeskScene.wave;
   DeskParticle _selectedParticle = DeskParticle.fireworks;
+  DeskFireworkShape _selectedFireworkShape = DeskFireworkShape.circle;
+  DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
   int _countdownHours = 0;
   int _countdownMinutes = 5;
   double _timezoneOffsetHours = 0;
@@ -706,7 +765,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
+          child: Column(
+            children: [
+              if (_activeWorkspace == _StudioWorkspace.companion)
+                _buildStickyPreview(context, controller, currentPersonality, currentPetMode),
+              Expanded(
+                child: SingleChildScrollView(
             physics: _drawModeEnabled
                 ? const NeverScrollableScrollPhysics()
                 : const BouncingScrollPhysics(),
@@ -1366,6 +1430,27 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             )
                             .toList(growable: false),
                       ),
+                      if (_selectedParticle == DeskParticle.fireworks) ...[
+                        const SizedBox(height: 8),
+                        const Text('Firework shape',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.white70)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: DeskFireworkShape.values
+                              .map(
+                                (s) => ChoiceChip(
+                                  label: Text(s.label),
+                                  selected: _selectedFireworkShape == s,
+                                  onSelected: (_) =>
+                                      setState(() => _selectedFireworkShape = s),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -1374,8 +1459,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                   !controller.canControlDevice
                               ? null
                               : () => _perform(
-                                    () => controller.sendParticle(
-                                        _selectedParticle.command),
+                                    () async {
+                                      if (_selectedParticle == DeskParticle.fireworks) {
+                                        await controller.sendFireworkShape(
+                                            _selectedFireworkShape.command);
+                                      }
+                                      await controller.sendParticle(
+                                          _selectedParticle.command);
+                                    },
                                     success:
                                         '${_selectedParticle.label} started!',
                                   ),
@@ -1743,6 +1834,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ],
               ],
             ),
+          ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2175,6 +2269,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           borderStyle: _noteBorderStyle,
           icons: List.unmodifiable(_noteIcons),
           flowerAccent: _noteFlowerAccent,
+          textColor: _noteTextColor,
         ),
         fullscreenDialog: true,
       ),
@@ -2192,6 +2287,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         ..clear()
         ..addAll(result.icons);
       _noteFlowerAccent = result.flowerAccent;
+      _noteTextColor = result.textColor;
     });
   }
 
@@ -2342,6 +2438,100 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  Widget _buildStickyPreview(
+    BuildContext context,
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+  ) {
+    final previewPersonality = _appearancePreviewReferencePose
+        ? _selectedPersonality.command
+        : currentPersonality.command;
+    final previewPetMode = _appearancePreviewReferencePose
+        ? _selectedPetMode.command
+        : currentPetMode.command;
+    final previewExpression =
+        _appearancePreviewReferencePose ? null : _selectedExpression.command;
+    final previewMode = _appearancePreviewReferencePose ? 'Reference pose' : 'Live mood';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: CompanionTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: CompanionTheme.blush),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_selectedVisualModel.label} • ${_selectedScene.label} • $previewMode',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const _ChipLabel(label: 'Pinned'),
+              ],
+            ),
+            const SizedBox(height: 6),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: CompanionTheme.ink,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: CompanionFacePreview(
+                  visualModel: _selectedVisualModel,
+                  scene: _selectedScene,
+                  personality: previewPersonality,
+                  petMode: previewPetMode,
+                  referencePose: _appearancePreviewReferencePose,
+                  showScreenBoundary: true,
+                  expression: previewExpression,
+                  hair: _selectedHairStyle.command,
+                  ears: _selectedEarsStyle.command,
+                  mustache: _selectedMustacheStyle.command,
+                  glasses: _selectedGlassesStyle.command,
+                  headwear: _selectedHeadwearStyle.command,
+                  piercing: _selectedPiercingStyle.command,
+                  hairSize: _selectedHairSize.round(),
+                  mustacheSize: _selectedMustacheSize.round(),
+                  hairWidth: _selectedHairWidth.round(),
+                  hairHeight: _selectedHairHeight.round(),
+                  hairThickness: _selectedHairThickness.round(),
+                  hairOffsetX: _selectedHairOffsetX.round(),
+                  hairOffsetY: _selectedHairOffsetY.round(),
+                  eyeOffsetY: _selectedEyeOffsetY.round(),
+                  mouthOffsetY: _selectedMouthOffsetY.round(),
+                  mustacheWidth: _selectedMustacheWidth.round(),
+                  mustacheHeight: _selectedMustacheHeight.round(),
+                  mustacheThickness: _selectedMustacheThickness.round(),
+                  mustacheOffsetX: _selectedMustacheOffsetX.round(),
+                  mustacheOffsetY: _selectedMustacheOffsetY.round(),
+                  stickFigureScale: _stickFigureScale.round(),
+                  stickFigureSpacing: _stickFigureSpacing.round(),
+                  stickFigureEnergy: _stickFigureEnergy.round(),
+                  eyeColor: _eyeColor,
+                  faceColor: _faceColor,
+                  accentColor: _accentColor,
+                  bodyColor: _bodyColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStyleStudioSection(
     BuildContext context,
     DeskCompanionController controller,
@@ -2353,22 +2543,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final supportsLiveBleScene = !usesNativeClassicSend && controller.isBleConnected;
     final streamsLiveBleScene =
       supportsLiveBleScene && !_appearancePreviewReferencePose;
-    final previewPersonality = _appearancePreviewReferencePose
-        ? _selectedPersonality.command
-        : currentPersonality.command;
-    final previewPetMode = _appearancePreviewReferencePose
-        ? _selectedPetMode.command
-        : currentPetMode.command;
-    final previewExpression =
-        _appearancePreviewReferencePose ? null : _selectedExpression.command;
-    final previewMode = _appearancePreviewReferencePose ? 'Reference pose' : 'Live mood';
-    final guideLabel = usesNativeClassicSend
-        ? 'Classic native send is ready.'
-      : streamsLiveBleScene
-            ? 'BLE is connected, so this scene can stream live to the display.'
-        : supportsLiveBleScene
-          ? 'Reference pose stays on a still frame so BLE is not wasted on identical redraws.'
-            : 'Without BLE, non-classic scenes fall back to a still bitmap snapshot.';
     final detailSummary = switch (_selectedVisualModel) {
       CompanionVisualModel.classic =>
         'Hair ${_selectedHairStyle.label}, ears ${_selectedEarsStyle.label}, mustache ${_selectedMustacheStyle.label}, glasses ${_selectedGlassesStyle.label}.',
@@ -2396,71 +2570,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Live preview', style: Theme.of(context).textTheme.titleSmall),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${_selectedVisualModel.label} • ${_selectedScene.label} • $previewMode',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: CompanionTheme.ink,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: CompanionFacePreview(
-                      visualModel: _selectedVisualModel,
-                      scene: _selectedScene,
-                      personality: previewPersonality,
-                      petMode: previewPetMode,
-                      referencePose: _appearancePreviewReferencePose,
-                      showScreenBoundary: true,
-                      expression: previewExpression,
-                      hair: _selectedHairStyle.command,
-                      ears: _selectedEarsStyle.command,
-                      mustache: _selectedMustacheStyle.command,
-                      glasses: _selectedGlassesStyle.command,
-                      headwear: _selectedHeadwearStyle.command,
-                      piercing: _selectedPiercingStyle.command,
-                      hairSize: _selectedHairSize.round(),
-                      mustacheSize: _selectedMustacheSize.round(),
-                      hairWidth: _selectedHairWidth.round(),
-                      hairHeight: _selectedHairHeight.round(),
-                      hairThickness: _selectedHairThickness.round(),
-                      hairOffsetX: _selectedHairOffsetX.round(),
-                      hairOffsetY: _selectedHairOffsetY.round(),
-                      eyeOffsetY: _selectedEyeOffsetY.round(),
-                      mouthOffsetY: _selectedMouthOffsetY.round(),
-                      mustacheWidth: _selectedMustacheWidth.round(),
-                      mustacheHeight: _selectedMustacheHeight.round(),
-                      mustacheThickness: _selectedMustacheThickness.round(),
-                      mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                      mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                      stickFigureScale: _stickFigureScale.round(),
-                      stickFigureSpacing: _stickFigureSpacing.round(),
-                      stickFigureEnergy: _stickFigureEnergy.round(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Guide frame marks the real display area. $guideLabel',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
                 Text('Preset packs', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -2897,6 +3006,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             border: _noteBorderStyle,
                             icons: List.unmodifiable(_noteIcons),
                             flowerAccent: _noteFlowerAccent,
+                            textColor: _noteTextColor,
                           ),
                         ),
                       ),
@@ -2912,6 +3022,24 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Note animation overlay',
+              style: TextStyle(fontSize: 12, color: Colors.white70)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: DeskNoteAnimation.values
+                .map(
+                  (a) => ChoiceChip(
+                    label: Text(a.label),
+                    selected: _selectedNoteAnimation == a,
+                    onSelected: (_) =>
+                        setState(() => _selectedNoteAnimation = a),
+                  ),
+                )
+                .toList(growable: false),
           ),
           const SizedBox(height: 12),
           Column(
@@ -2969,33 +3097,25 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         .trim();
     if (text.isEmpty) return;
 
-    if (_emojiPattern.hasMatch(text)) {
-      // Emoji detected — render note as color image and send via BLE
-      await _perform(
-        () async {
-          final rgb565 = await NoteCardPreview.renderToRgb565(
-            text: text,
-            fontSize: _noteFontSize.round(),
-            border: _noteBorderStyle,
-            icons: List.unmodifiable(_noteIcons),
-            flowerAccent: _noteFlowerAccent,
-          );
-          await controller.sendNoteAsImage(rgb565);
-        },
-        success: 'Note delivered as image.',
-      );
-    } else {
-      await _perform(
-        () => controller.sendNote(
-          text,
+    // Always render as image — guarantees exact WYSIWYG with the preview,
+    // correct emoji rendering, and proper font sizing on device.
+    await _perform(
+      () async {
+        final rgb565 = await NoteCardPreview.renderToRgb565(
+          text: text,
           fontSize: _noteFontSize.round(),
           border: _noteBorderStyle,
-          icons: _noteIcons.join(','),
-          flowerAccent: _noteFlowerAccent ?? '',
-        ),
-        success: 'Note delivered.',
-      );
-    }
+          icons: List.unmodifiable(_noteIcons),
+          flowerAccent: _noteFlowerAccent,
+          textColor: _noteTextColor,
+        );
+        await controller.sendNoteAsImage(rgb565);
+        if (_selectedNoteAnimation != DeskNoteAnimation.none) {
+          await controller.sendNoteAnimation(_selectedNoteAnimation.command);
+        }
+      },
+      success: 'Note delivered.',
+    );
   }
 
   Future<void> _sendBanner(DeskCompanionController controller) async {
@@ -4160,6 +4280,7 @@ class _NoteEditorResult {
     required this.borderStyle,
     required this.icons,
     required this.flowerAccent,
+    required this.textColor,
   });
 
   final String text;
@@ -4167,6 +4288,7 @@ class _NoteEditorResult {
   final int borderStyle;
   final List<String> icons;
   final String? flowerAccent;
+  final Color textColor;
 }
 
 class _FullscreenAppearanceEditor extends StatefulWidget {
@@ -4947,6 +5069,7 @@ class _FullscreenNoteEditor extends StatefulWidget {
     required this.borderStyle,
     required this.icons,
     required this.flowerAccent,
+    required this.textColor,
   });
 
   final String text;
@@ -4954,6 +5077,7 @@ class _FullscreenNoteEditor extends StatefulWidget {
   final int borderStyle;
   final List<String> icons;
   final String? flowerAccent;
+  final Color textColor;
 
   @override
   State<_FullscreenNoteEditor> createState() => _FullscreenNoteEditorState();
@@ -4965,6 +5089,7 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
   late int _borderStyle;
   late List<String> _icons;
   String? _flowerAccent;
+  late Color _textColor;
 
   @override
   void initState() {
@@ -4975,6 +5100,7 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
     _borderStyle = widget.borderStyle;
     _icons = List<String>.from(widget.icons);
     _flowerAccent = widget.flowerAccent;
+    _textColor = widget.textColor;
   }
 
   @override
@@ -5038,11 +5164,43 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
                             Text('Font size: ${_fontSize.round()}x', style: Theme.of(context).textTheme.bodyMedium),
                             Slider(
                               min: 1,
-                              max: 4,
-                              divisions: 3,
+                              max: 10,
+                              divisions: 9,
                               value: _fontSize,
                               onChanged: (value) => setState(() => _fontSize = value),
                             ),
+                            Text('Text color', style: Theme.of(context).textTheme.bodyMedium),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                Colors.white,
+                                const Color(0xFFFF69B4),
+                                const Color(0xFF00BFFF),
+                                const Color(0xFFFFD700),
+                                const Color(0xFF7CFC00),
+                                const Color(0xFFFF6347),
+                                const Color(0xFFE6E6FA),
+                                const Color(0xFFFFDAB9),
+                                const Color(0xFF00CED1),
+                              ].map((c) => GestureDetector(
+                                onTap: () => setState(() => _textColor = c),
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: c,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _textColor == c ? CompanionTheme.coral : Colors.transparent,
+                                      width: 3,
+                                    ),
+                                  ),
+                                ),
+                              )).toList(growable: false),
+                            ),
+                            const SizedBox(height: 12),
                             Text('Border', style: Theme.of(context).textTheme.bodyMedium),
                             const SizedBox(height: 6),
                             Wrap(
@@ -5183,6 +5341,7 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
                       border: _borderStyle,
                       icons: _icons,
                       flowerAccent: _flowerAccent,
+                      textColor: _textColor,
                     ),
                   ),
                 ),
@@ -5209,6 +5368,7 @@ class _FullscreenNoteEditorState extends State<_FullscreenNoteEditor> {
         borderStyle: _borderStyle,
         icons: List.unmodifiable(_icons),
         flowerAccent: _flowerAccent,
+        textColor: _textColor,
       ),
     );
   }

@@ -12,6 +12,7 @@ class NoteCardPreview extends StatelessWidget {
     this.border = 0,
     this.icons = const [],
     this.flowerAccent,
+    this.textColor = Colors.white,
   });
 
   final String text;
@@ -19,6 +20,7 @@ class NoteCardPreview extends StatelessWidget {
   final int border;
   final List<String> icons;
   final String? flowerAccent;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,7 @@ class NoteCardPreview extends StatelessWidget {
           border: border,
           icons: icons,
           flowerAccent: flowerAccent,
+          textColor: textColor,
         ),
       ),
     );
@@ -44,6 +47,7 @@ class NoteCardPreview extends StatelessWidget {
     int border = 0,
     List<String> icons = const [],
     String? flowerAccent,
+    Color textColor = Colors.white,
   }) async {
     final painter = _NoteCardPainter(
       text: text.trim().isEmpty ? 'Your note here' : text.trim(),
@@ -51,6 +55,7 @@ class NoteCardPreview extends StatelessWidget {
       border: border,
       icons: icons,
       flowerAccent: flowerAccent,
+      textColor: textColor,
     );
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 320, 240));
@@ -80,6 +85,7 @@ class _NoteCardPainter extends CustomPainter {
     required this.border,
     required this.icons,
     required this.flowerAccent,
+    required this.textColor,
   });
 
   final String text;
@@ -87,6 +93,7 @@ class _NoteCardPainter extends CustomPainter {
   final int border;
   final List<String> icons;
   final String? flowerAccent;
+  final Color textColor;
 
   static const Size _canvasSize = Size(320, 240);
 
@@ -112,7 +119,7 @@ class _NoteCardPainter extends CustomPainter {
 
   void _drawStandardCard(Canvas canvas) {
     _drawBorder(canvas, border);
-    final safeFontSize = fontSize.clamp(1, 4);
+    final safeFontSize = fontSize.clamp(1, 10);
     final hasIcons = icons.isNotEmpty;
     final topPad = hasIcons ? 52 : 15;
     final horizontalPadding = border > 0 ? 20 : 10;
@@ -290,7 +297,7 @@ class _NoteCardPainter extends CustomPainter {
       text: TextSpan(
         text: character,
         style: TextStyle(
-          color: Colors.white,
+          color: textColor,
           fontSize: (7.3 * safeFontSize),
           fontFamily: 'Courier',
           height: 1,
@@ -525,6 +532,7 @@ class _NoteCardPainter extends CustomPainter {
         fontSize != oldDelegate.fontSize ||
         border != oldDelegate.border ||
         flowerAccent != oldDelegate.flowerAccent ||
+        textColor != oldDelegate.textColor ||
         icons.join(',') != oldDelegate.icons.join(',');
   }
 }

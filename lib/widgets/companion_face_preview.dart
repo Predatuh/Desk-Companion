@@ -41,6 +41,10 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   int stickFigureEnergy = 55,
   double? animationProgress,
   String name = 'studio_scene',
+  Color? eyeColor,
+  Color? faceColor,
+  Color? accentColor,
+  Color? bodyColor,
 }) async {
   final progress = referencePose
       ? 0.0
@@ -72,6 +76,10 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
         mustacheThickness: mustacheThickness,
         mustacheOffsetX: mustacheOffsetX,
         mustacheOffsetY: mustacheOffsetY,
+        eyeColor: eyeColor,
+        faceColor: faceColor,
+        accentColor: accentColor,
+        bodyColor: bodyColor,
       ),
     CompanionVisualModel.stickFigure => _StickFigurePainter(
         scene: scene,
@@ -84,12 +92,20 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
         stickFigureSpacing: stickFigureSpacing,
         stickFigureEnergy: stickFigureEnergy,
         animationProgress: progress,
+        eyeColor: eyeColor,
+        faceColor: faceColor,
+        accentColor: accentColor,
+        bodyColor: bodyColor,
       ),
     CompanionVisualModel.robot => _RobotPainter(
         scene: scene,
         showScreenBoundary: false,
         expression: expression,
         animationProgress: progress,
+        eyeColor: eyeColor,
+        faceColor: faceColor,
+        accentColor: accentColor,
+        bodyColor: bodyColor,
       ),
   };
 
@@ -179,6 +195,10 @@ class CompanionFacePreview extends StatefulWidget {
     this.stickFigureScale = 100,
     this.stickFigureSpacing = 100,
     this.stickFigureEnergy = 55,
+    this.eyeColor,
+    this.faceColor,
+    this.accentColor,
+    this.bodyColor,
   });
 
   final CompanionVisualModel visualModel;
@@ -211,6 +231,10 @@ class CompanionFacePreview extends StatefulWidget {
   final int stickFigureScale;
   final int stickFigureSpacing;
   final int stickFigureEnergy;
+  final Color? eyeColor;
+  final Color? faceColor;
+  final Color? accentColor;
+  final Color? bodyColor;
 
   @override
   State<CompanionFacePreview> createState() => _CompanionFacePreviewState();
@@ -298,6 +322,10 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               mustacheThickness: widget.mustacheThickness,
               mustacheOffsetX: widget.mustacheOffsetX,
               mustacheOffsetY: widget.mustacheOffsetY,
+              eyeColor: widget.eyeColor,
+              faceColor: widget.faceColor,
+              accentColor: widget.accentColor,
+              bodyColor: widget.bodyColor,
             ),
           CompanionVisualModel.stickFigure => _StickFigurePainter(
               scene: widget.scene,
@@ -310,12 +338,20 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               stickFigureSpacing: widget.stickFigureSpacing,
               stickFigureEnergy: widget.stickFigureEnergy,
               animationProgress: animationProgress,
+              eyeColor: widget.eyeColor,
+              faceColor: widget.faceColor,
+              accentColor: widget.accentColor,
+              bodyColor: widget.bodyColor,
             ),
           CompanionVisualModel.robot => _RobotPainter(
               scene: widget.scene,
               showScreenBoundary: widget.showScreenBoundary,
               expression: widget.expression,
               animationProgress: animationProgress,
+              eyeColor: widget.eyeColor,
+              faceColor: widget.faceColor,
+              accentColor: widget.accentColor,
+              bodyColor: widget.bodyColor,
             ),
         };
 
@@ -344,6 +380,10 @@ class _StickFigurePainter extends CustomPainter {
     required this.stickFigureSpacing,
     required this.stickFigureEnergy,
     required this.animationProgress,
+    this.eyeColor,
+    this.faceColor,
+    this.accentColor,
+    this.bodyColor,
   });
 
   final CompanionScene scene;
@@ -356,6 +396,10 @@ class _StickFigurePainter extends CustomPainter {
   final int stickFigureSpacing;
   final int stickFigureEnergy;
   final double animationProgress;
+  final Color? eyeColor;
+  final Color? faceColor;
+  final Color? accentColor;
+  final Color? bodyColor;
 
   static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
@@ -364,15 +408,17 @@ class _StickFigurePainter extends CustomPainter {
     canvas.save();
     canvas.scale(size.width / 320, size.height / 240);
 
+    final resolvedFaceColor = faceColor ?? Colors.white;
+
     final stroke = Paint()
-      ..color = Colors.white
+      ..color = resolvedFaceColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
     final fill = Paint()
-      ..color = Colors.white
+      ..color = resolvedFaceColor
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final mask = Paint()
@@ -949,12 +995,20 @@ class _RobotPainter extends CustomPainter {
     required this.showScreenBoundary,
     required this.expression,
     required this.animationProgress,
+    this.eyeColor,
+    this.faceColor,
+    this.accentColor,
+    this.bodyColor,
   });
 
   final CompanionScene scene;
   final bool showScreenBoundary;
   final String? expression;
   final double animationProgress;
+  final Color? eyeColor;
+  final Color? faceColor;
+  final Color? accentColor;
+  final Color? bodyColor;
 
   static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
@@ -963,15 +1017,17 @@ class _RobotPainter extends CustomPainter {
     canvas.save();
     canvas.scale(size.width / 320, size.height / 240);
 
+    final resolvedFaceColor = faceColor ?? Colors.white;
+
     final stroke = Paint()
-      ..color = Colors.white
+      ..color = resolvedFaceColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
     final fill = Paint()
-      ..color = Colors.white
+      ..color = resolvedFaceColor
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final mask = Paint()
@@ -1097,6 +1153,10 @@ class _CompanionFacePainter extends CustomPainter {
     required this.mustacheThickness,
     required this.mustacheOffsetX,
     required this.mustacheOffsetY,
+    this.eyeColor,
+    this.faceColor,
+    this.accentColor,
+    this.bodyColor,
   });
 
   final String personality;
@@ -1124,6 +1184,12 @@ class _CompanionFacePainter extends CustomPainter {
   final int mustacheThickness;
   final int mustacheOffsetX;
   final int mustacheOffsetY;
+  final Color? eyeColor;
+  final Color? faceColor;
+  final Color? accentColor;
+  final Color? bodyColor;
+
+  Color get _resolvedAccentColor => accentColor ?? const Color(0xFF00BFFF);
 
   static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
@@ -1132,15 +1198,18 @@ class _CompanionFacePainter extends CustomPainter {
     canvas.save();
     canvas.scale(size.width / 320, size.height / 240);
 
+    final resolvedFaceColor = faceColor ?? Colors.white;
+    final resolvedEyeColor = eyeColor ?? Colors.white;
+
     final stroke = Paint()
-      ..color = Colors.white
+      ..color = resolvedFaceColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
     final fill = Paint()
-      ..color = Colors.white
+      ..color = resolvedEyeColor
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final cut = Paint()
@@ -1525,6 +1594,50 @@ class _CompanionFacePainter extends CustomPainter {
           );
         }
       }
+    } else if (hair == 'ponytail') {
+      final topY = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final leftEdge = hairCenterX - _scaleValue(45, scaledHairWidth);
+      final rightEdge = hairCenterX + _scaleValue(45, scaledHairWidth);
+      for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
+        canvas.drawLine(Offset(leftEdge, topY + strokeIndex), Offset(rightEdge, topY + strokeIndex), stroke);
+      }
+      // Ponytail tail going right and down
+      for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
+        canvas.drawLine(Offset(rightEdge, topY + strokeIndex), Offset(rightEdge + _scaleValue(20, scaledHairWidth), topY + 10 + strokeIndex), stroke);
+        canvas.drawLine(Offset(rightEdge + _scaleValue(20, scaledHairWidth), topY + 10 + strokeIndex), Offset(rightEdge + _scaleValue(15, scaledHairWidth), topY + 35 + strokeIndex), stroke);
+      }
+      // Band
+      canvas.drawCircle(Offset(rightEdge, topY + 2), 3, stroke);
+    } else if (hair == 'curly') {
+      for (double angle = 0; angle < 5; angle++) {
+        final offsetAngle = angle * 1.1;
+        final cx = hairCenterX - _scaleValue(30, scaledHairWidth) + angle * _scaleValue(15, scaledHairWidth);
+        final cy = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round())) + (angle.toInt().isOdd ? 3.0 : 0.0);
+        canvas.drawCircle(Offset(cx, cy), _scaleValue(8, scaledHairHeight) + offsetAngle, stroke);
+      }
+    } else if (hair == 'pigtails') {
+      final topY = hairCenterY - 20;
+      final leftPigX = hairCenterX - _scaleValue(55, scaledHairWidth);
+      final rightPigX = hairCenterX + _scaleValue(55, scaledHairWidth);
+      // bands
+      canvas.drawCircle(Offset(leftPigX + 10, topY - 6), 4, stroke);
+      canvas.drawCircle(Offset(rightPigX - 10, topY - 6), 4, stroke);
+      // pigtails hanging down
+      for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
+        canvas.drawLine(Offset(leftPigX + 10, topY - 2 + strokeIndex), Offset(leftPigX, topY + _scaleValue(25, scaledHairHeight) + strokeIndex), stroke);
+        canvas.drawLine(Offset(rightPigX - 10, topY - 2 + strokeIndex), Offset(rightPigX, topY + _scaleValue(25, scaledHairHeight) + strokeIndex), stroke);
+      }
+    } else if (hair == 'mohawk') {
+      final height = _scaleValue(28, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      for (double x = hairCenterX - _scaleValue(15, scaledHairWidth); x <= hairCenterX + _scaleValue(15, scaledHairWidth); x += 8) {
+        for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
+          canvas.drawLine(
+            Offset(x, hairCenterY - 18 + strokeIndex),
+            Offset(x + 2, hairCenterY - 18 - height + strokeIndex),
+            stroke,
+          );
+        }
+      }
     }
 
     if (headwear == 'bow') {
@@ -1548,6 +1661,30 @@ class _CompanionFacePainter extends CustomPainter {
         ..lineTo(faceCenterX + 50, eyeY - 52);
       canvas.drawPath(crown, stroke);
       canvas.drawLine(Offset(faceCenterX - 50, eyeY - 34), Offset(faceCenterX + 50, eyeY - 34), stroke);
+    } else if (headwear == 'top_hat') {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(faceCenterX - 30, eyeY - 80, 60, 48), const Radius.circular(4)),
+        stroke,
+      );
+      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 32), Offset(faceCenterX + 50, eyeY - 32), stroke);
+    } else if (headwear == 'halo') {
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(faceCenterX, eyeY - 52), width: 80, height: 16),
+        stroke,
+      );
+    } else if (headwear == 'flower_crown') {
+      for (var i = 0; i < 5; i++) {
+        final fx = faceCenterX - 40 + i * 20.0;
+        final fy = eyeY - 38 + (i.isOdd ? 4.0 : 0.0);
+        canvas.drawCircle(Offset(fx, fy), 6, stroke);
+        canvas.drawCircle(Offset(fx, fy), 2, fill);
+      }
+    } else if (headwear == 'beret') {
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(faceCenterX - 10, eyeY - 42), width: 90, height: 28),
+        stroke,
+      );
+      canvas.drawCircle(Offset(faceCenterX - 10, eyeY - 56), 4, fill);
     }
 
     if (glasses == 'round') {
@@ -1626,6 +1763,25 @@ class _CompanionFacePainter extends CustomPainter {
         canvas.drawLine(Offset(mustacheCenterX - wing, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX - wing - flare, mustacheCenterY - rise + strokeIndex), stroke);
         canvas.drawLine(Offset(mustacheCenterX + wing, mustacheCenterY - 4 + strokeIndex), Offset(mustacheCenterX + wing + flare, mustacheCenterY - rise + strokeIndex), stroke);
       }
+    } else if (mustache == 'goatee') {
+      final gWidth = _scaleValue(14, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final gHeight = _scaleValue(20, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      final path = Path()
+        ..moveTo(mustacheCenterX - gWidth, mustacheCenterY + 2)
+        ..quadraticBezierTo(mustacheCenterX, mustacheCenterY + gHeight + 6, mustacheCenterX + gWidth, mustacheCenterY + 2);
+      for (var strokeIndex = 0; strokeIndex < mustacheStroke; strokeIndex++) {
+        canvas.drawPath(path.shift(Offset(0, strokeIndex.toDouble())), stroke);
+      }
+    } else if (mustache == 'soul_patch') {
+      final pWidth = _scaleValue(6, _clampPercent((scaledMustache * scaledMustacheWidth / 100).round()));
+      final pHeight = _scaleValue(10, _clampPercent((scaledMustache * scaledMustacheHeight / 100).round()));
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset(mustacheCenterX, mustacheCenterY + 6), width: pWidth.toDouble(), height: pHeight.toDouble()),
+          const Radius.circular(3),
+        ),
+        stroke,
+      );
     }
 
     if (piercing == 'brow') {
@@ -1797,8 +1953,8 @@ class _CompanionFacePainter extends CustomPainter {
       case 'grateful':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
-        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 6, Paint()..color = const Color(0xFFFF69B4));
-        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 6, Paint()..color = const Color(0xFFFF69B4));
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 6, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 6, Paint()..color = _resolvedAccentColor);
         _drawSmile(canvas, stroke, 160, mouthY - 4, 48);
         break;
       case 'crying':
@@ -1813,8 +1969,8 @@ class _CompanionFacePainter extends CustomPainter {
       case 'blushing':
         _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
         _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
-        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), 10, Paint()..color = const Color(0xFFFF69B4));
-        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), 10, Paint()..color = const Color(0xFFFF69B4));
+        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), 10, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), 10, Paint()..color = _resolvedAccentColor);
         for (var line = 0; line < 3; line++) {
           canvas.drawLine(Offset(150, mouthY + line), Offset(170, mouthY + line), stroke);
         }
@@ -1927,6 +2083,10 @@ class _CompanionFacePainter extends CustomPainter {
         mustacheHeight != oldDelegate.mustacheHeight ||
         mustacheThickness != oldDelegate.mustacheThickness ||
         mustacheOffsetX != oldDelegate.mustacheOffsetX ||
-        mustacheOffsetY != oldDelegate.mustacheOffsetY;
+        mustacheOffsetY != oldDelegate.mustacheOffsetY ||
+        eyeColor != oldDelegate.eyeColor ||
+        faceColor != oldDelegate.faceColor ||
+        accentColor != oldDelegate.accentColor ||
+        bodyColor != oldDelegate.bodyColor;
   }
 }
