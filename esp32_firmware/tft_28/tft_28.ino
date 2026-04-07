@@ -297,6 +297,15 @@ uint8_t fireworkPalette = 0;
 uint8_t fireworkSize = 1;
 // When true, fireworks only launch via manual fire_rocket commands (no auto-relaunch)
 bool fwManualOnly = false;
+// Firework size params: {particleCount, speedMin, speedMax, heartScale, lifeBase}
+struct FwSizeParams { uint8_t count; uint8_t spdMin; uint8_t spdMax; float heartScale; uint8_t lifeBase; };
+static const FwSizeParams FW_SIZES[] = {
+  {10, 1, 3, 0.25f, 18},  // 0 = small
+  {22, 2, 5, 0.4f,  25},  // 1 = medium (original)
+  {30, 3, 6, 0.55f, 30},  // 2 = large
+  {38, 4, 8, 0.7f,  35},  // 3 = xl
+  {46, 5, 10, 0.85f, 40}, // 4 = xxl
+};
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
@@ -2420,16 +2429,6 @@ void initFireworkRocket() {
     gPtcl[i].life = 0;
   }
 }
-
-// Firework size params: {particleCount, speedMin, speedMax, heartScale, lifeBase}
-struct FwSizeParams { uint8_t count; uint8_t spdMin; uint8_t spdMax; float heartScale; uint8_t lifeBase; };
-static const FwSizeParams FW_SIZES[] = {
-  {10, 1, 3, 0.25f, 18},  // 0 = small
-  {22, 2, 5, 0.4f,  25},  // 1 = medium (original)
-  {30, 3, 6, 0.55f, 30},  // 2 = large
-  {38, 4, 8, 0.7f,  35},  // 3 = xl
-  {46, 5, 10, 0.85f, 40}, // 4 = xxl
-};
 
 FwSizeParams getFireworkSizeParams() {
   uint8_t sz = fireworkSize;
