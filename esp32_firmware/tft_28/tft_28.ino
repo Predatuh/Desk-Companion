@@ -3689,7 +3689,7 @@ void handleCommandJson(const String& body) {
       for (size_t i = 0; i < pixelCount; i++) {
         uint8_t hi = ((uint8_t*)colorImageBuffer)[i * 2];
         uint8_t lo = ((uint8_t*)colorImageBuffer)[i * 2 + 1];
-        colorImageBuffer[i] = (uint16_t)(lo << 8) | hi;
+        colorImageBuffer[i] = (uint16_t)(hi << 8) | lo;
       }
       currentMode = MODE_COLOR_IMAGE;
       statusText = "Color image ready";

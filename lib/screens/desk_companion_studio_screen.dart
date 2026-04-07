@@ -1602,6 +1602,20 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: controller.busy || !controller.canControlDevice
+                              ? null
+                              : () => _perform(
+                                    () => controller.clearDisplay(),
+                                    success: 'Particles stopped.',
+                                  ),
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          label: const Text('Stop particles'),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2045,9 +2059,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final nextColor = Uint8List.fromList(_drawColorData);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
     // Convert current draw color to RGB565
-    final r = _drawColor.r.round();
-    final g = _drawColor.g.round();
-    final b = _drawColor.b.round();
+    final r = (_drawColor.r * 255).round();
+    final g = (_drawColor.g * 255).round();
+    final b = (_drawColor.b * 255).round();
     final rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
     final hi = (rgb565 >> 8) & 0xFF;
     final lo = rgb565 & 0xFF;
@@ -2887,9 +2901,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
                       const SizedBox(height: 10),
                       Center(
-                        child: SizedBox(
-                          height: 100,
-                          child: CompanionFacePreview(
+                        child: ClipRect(
+                          child: SizedBox(
+                            height: 100,
+                            child: Transform.scale(
+                              scale: _companionScale / 100.0,
+                              child: CompanionFacePreview(
                             visualModel: _selectedVisualModel,
                             scene: _selectedScene,
                             personality: _selectedPersonality.command,
@@ -2924,6 +2941,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             faceColor: _faceColor,
                             accentColor: _accentColor,
                             bodyColor: _bodyColor,
+                          ),
+                            ),
                           ),
                         ),
                       ),
@@ -3457,6 +3476,26 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (_selectedVisualModel.isDeviceSupported &&
         _selectedScene == CompanionScene.none) {
       await _sendCompanionStyle(controller);
+      return;
+    }
+
+    // Stick-figure scenes run natively on the firmware at 60fps — send the
+    // set_scene command instead of streaming monochrome bitmaps over BLE.
+    if (_selectedVisualModel == CompanionVisualModel.stickFigure &&
+        _selectedScene != CompanionScene.none) {
+      // Send colors first so the firmware can use them
+      await _perform(
+        () async {
+          await controller.sendColors(
+            eyeColor: _colorToRgb565(_eyeColor),
+            faceColor: _colorToRgb565(_faceColor),
+            accentColor: _colorToRgb565(_accentColor),
+            bodyColor: _colorToRgb565(_bodyColor),
+          );
+          await controller.sendScene(_selectedScene.command);
+        },
+        success: '${_selectedScene.label} scene started on device.',
+      );
       return;
     }
 
@@ -4389,9 +4428,9 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
     final next = Uint8List.fromList(_bitmap);
     final nextColor = Uint8List.fromList(_colorData);
     final radius = (_brushSize.round() - 1).clamp(0, 4);
-    final r = _pixelColor.r.round();
-    final g = _pixelColor.g.round();
-    final b = _pixelColor.b.round();
+    final r = (_pixelColor.r * 255).round();
+    final g = (_pixelColor.g * 255).round();
+    final b = (_pixelColor.b * 255).round();
     final rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
     final hi = (rgb565 >> 8) & 0xFF;
     final lo = rgb565 & 0xFF;
