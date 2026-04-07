@@ -747,13 +747,46 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> startCountdown(int seconds) async {
+  Future<void> startCountdown(int seconds, {int endAction = 0}) async {
     await _runBusy(() async {
       await _sendCommand(
-        {'type': 'set_countdown', 'seconds': seconds},
+        {'type': 'set_countdown', 'seconds': seconds, 'endAction': endAction},
         mode: 'countdown',
         bleLabel: 'Countdown started over BLE.',
         relayLabel: 'Countdown queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendExpressionSpeed(int speed) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_expression_speed', 'speed': speed},
+        mode: 'expression_speed',
+        bleLabel: 'Expression speed sent over BLE.',
+        relayLabel: 'Expression speed queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendFireworkPalette(String palette) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_firework_palette', 'palette': palette},
+        mode: 'firework_palette',
+        bleLabel: 'Firework palette sent over BLE.',
+        relayLabel: 'Firework palette queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendCompanionScale(int scale) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_companion_scale', 'scale': scale},
+        mode: 'companion_scale',
+        bleLabel: 'Companion scale sent over BLE.',
+        relayLabel: 'Companion scale queued through relay.',
       );
     });
   }

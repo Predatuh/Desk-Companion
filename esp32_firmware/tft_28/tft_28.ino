@@ -290,10 +290,18 @@ uint8_t  gPtclCount        = 0;
 unsigned long lastParticleTickMs = 0;
 // Firework shape: 0=circle, 1=heart, 2=star
 uint8_t fireworkShape = 0;
-// Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers
+// Firework color palette: 0=rainbow, 1=warm, 2=cool, 3=mono
+uint8_t fireworkPalette = 0;
+// Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
 uint8_t noteOvCount = 0;
+// Countdown end action: 0=fireworks, 1=heart_rain, 2=snowfall, 3=starfield
+uint8_t countdownEndAction = 0;
+// Expression speed multiplier (1=slow, 2=normal, 4=fast, 8=super fast)
+uint8_t expressionSpeedMul = 2;
+// Companion scale: 50-200 percent
+uint8_t companionScale = 100;
 // Countdown
 long     countdownSeconds  = 0;
 unsigned long countdownStartMs  = 0;
@@ -1698,16 +1706,21 @@ void renderExpressionFrame() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
 
+  // Companion scale (50-200%) applied to face size
+  const float cScale = companionScale / 100.0f;
+
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
-  const int LX = 68;
-  const int RX = 172;
+  const int baseLX = 68, baseRX = 172;
+  const int CX = SCREEN_WIDTH / 2;
+  const int LX = CX + (int)((baseLX - CX) * cScale);
+  const int RX = CX + (int)((baseRX - CX) * cScale);
   const int eyeYShift = clampAppearanceOffset(companionEyeOffsetY) * 2;
   const int mouthYShift = clampAppearanceOffset(companionMouthOffsetY) * 2;
-  const int EY = FACE_OFFSET_Y + 45 + eyeYShift;
-  const int MY = FACE_OFFSET_Y + 100 + mouthYShift;
-  const int EW = 52;
-  const int EH = 40;
-  const int ER = 13;
+  const int EY = FACE_OFFSET_Y + (int)(45 * cScale) + eyeYShift;
+  const int MY = FACE_OFFSET_Y + (int)(100 * cScale) + mouthYShift;
+  const int EW = (int)(52 * cScale);
+  const int EH = (int)(40 * cScale);
+  const int ER = (int)(13 * cScale);
 
   const int ph = expressionPhase % 64;
   const float t = (float)ph / 63.0f;
@@ -2288,30 +2301,86 @@ void setScene(const String& name) {
 
 // ─── Particle mode helpers ───
 
-static const uint16_t BURST_COLORS[] = {
+static const uint16_t BURST_COLORS_RAINBOW[] = {
   COL_ROSE, COL_GOLD, COL_SKYBLUE, COL_MINT, COL_PINK, COL_LAVENDER, COL_PEACH, COL_ACCENT
 };
+static const uint16_t BURST_COLORS_WARM[] = {
+  COL_ROSE, COL_GOLD, COL_PEACH, COL_PINK, COL_ROSE, COL_GOLD, COL_PEACH, COL_PINK
+};
+static const uint16_t BURST_COLORS_COOL[] = {
+  COL_SKYBLUE, COL_MINT, COL_LAVENDER, COL_ACCENT, COL_SKYBLUE, COL_MINT, COL_LAVENDER, COL_ACCENT
+};
+
+uint16_t pickBurstColor() {
+  switch (fireworkPalette) {
+    case 1: return BURST_COLORS_WARM[(uint8_t)random(8)];
+    case 2: return BURST_COLORS_COOL[(uint8_t)random(8)];
+    case 3: return userAccentColor; // mono
+    default: return BURST_COLORS_RAINBOW[(uint8_t)random(8)];
+  }
+}
+
+// Firework states: rocket uses vx=0, vy<0 (ascending), life>100 = rocket phase
+// When life drops to 100, it "explodes" into burst particles
+
+uint8_t fwRocketCount = 0; // how many rockets are currently active
+
+void initFireworkRocket() {
+  // Launch 1-2 rockets from bottom
+  uint8_t count = 1 + (uint8_t)random(2);
+  fwRocketCount = count;
+  gPtclCount = 48;
+  for (uint8_t r = 0; r < count; r++) {
+    gPtcl[r].x     = (int16_t)(60 + random(200));
+    gPtcl[r].y     = (int16_t)(SCREEN_HEIGHT - 10);
+    gPtcl[r].vx    = (int8_t)(random(3) - 1); // slight drift
+    gPtcl[r].vy    = (int8_t)(-6 - random(3)); // upward
+    gPtcl[r].life  = 200; // >100 means rocket phase
+    gPtcl[r].color = COL_GOLD;
+  }
+  // Clear remaining
+  for (uint8_t i = count; i < 48; i++) {
+    gPtcl[i].life = 0;
+  }
+}
+
+void explodeRocket(uint8_t rocketIdx) {
+  int16_t cx = gPtcl[rocketIdx].x;
+  int16_t cy = gPtcl[rocketIdx].y;
+  uint16_t col = pickBurstColor();
+  gPtcl[rocketIdx].life = 0;
+  // Find free slots for burst (22 particles per burst)
+  uint8_t placed = 0;
+  bool heartBurst = (fireworkShape == 1);
+  for (uint8_t i = 0; i < 48 && placed < 22; i++) {
+    if (gPtcl[i].life > 0) continue;
+    float a;
+    int spd;
+    if (heartBurst) {
+      // Heart-shaped burst: parametric heart curve
+      float t = (float)placed * 3.14159f * 2.f / 22.f;
+      float hx = 16.f * sinf(t) * sinf(t) * sinf(t);
+      float hy = -(13.f * cosf(t) - 5.f * cosf(2*t) - 2.f * cosf(3*t) - cosf(4*t));
+      gPtcl[i].x  = cx;
+      gPtcl[i].y  = cy;
+      gPtcl[i].vx = (int8_t)(hx * 0.4f);
+      gPtcl[i].vy = (int8_t)(hy * 0.4f);
+    } else {
+      a = (float)placed * 3.14159f * 2.f / 22.f + (random(100) / 100.f) * 0.3f;
+      spd = 2 + (int)random(5);
+      gPtcl[i].x  = cx;
+      gPtcl[i].y  = cy;
+      gPtcl[i].vx = (int8_t)((float)spd * cosf(a));
+      gPtcl[i].vy = (int8_t)((float)spd * sinf(a));
+    }
+    gPtcl[i].life  = (uint8_t)(25 + random(20));
+    gPtcl[i].color = (placed % 3 == 0) ? COL_GOLD : col;
+    placed++;
+  }
+}
 
 void initFireworks() {
-  // Two simultaneous bursts at random positions (upper 2/3 of screen)
-  gPtclCount = 48;
-  for (uint8_t burst = 0; burst < 2; burst++) {
-    int cx = 60 + (int)random(201);
-    int cy = 30 + (int)random(100);
-    uint16_t col = BURST_COLORS[(uint8_t)random(8)];
-    for (uint8_t i = 0; i < 24; i++) {
-      uint8_t idx = burst * 24 + i;
-      float a = (float)i * 3.14159f * 2.f / 24.f + (random(100) / 100.f) * 0.25f;
-      int spd = 2 + (int)random(5);
-      gPtcl[idx].x     = (int16_t)cx;
-      gPtcl[idx].y     = (int16_t)cy;
-      gPtcl[idx].vx    = (int8_t)((float)spd * cosf(a));
-      gPtcl[idx].vy    = (int8_t)((float)spd * sinf(a));
-      gPtcl[idx].life  = (uint8_t)(25 + random(20));
-      // Alternate between main color and lighter sparkle
-      gPtcl[idx].color = (i % 3 == 0) ? COL_GOLD : col;
-    }
-  }
+  initFireworkRocket();
 }
 
 void renderFireworksFrame() {
@@ -2321,34 +2390,56 @@ void renderFireworksFrame() {
   for (uint8_t i = 0; i < gPtclCount; i++) {
     if (gPtcl[i].life == 0) continue;
     anyAlive = true;
-    gPtcl[i].x  += gPtcl[i].vx;
-    gPtcl[i].y  += gPtcl[i].vy;
-    // Gentle gravity (apply every other frame to slow descent)
-    if (gPtcl[i].life % 2 == 0) gPtcl[i].vy = (int8_t)(gPtcl[i].vy + 1);
-    // Air resistance — slow horizontal velocity over time
-    if (gPtcl[i].life % 4 == 0 && gPtcl[i].vx != 0)
-      gPtcl[i].vx = (int8_t)(gPtcl[i].vx > 0 ? gPtcl[i].vx - 1 : gPtcl[i].vx + 1);
-    gPtcl[i].life--;
-    // Kill particles that go off-screen
-    if (gPtcl[i].y >= SCREEN_HEIGHT || gPtcl[i].x < -5 || gPtcl[i].x >= SCREEN_WIDTH + 5) {
-      gPtcl[i].life = 0;
-      continue;
-    }
-    int16_t nx = gPtcl[i].x, ny = gPtcl[i].y;
-    if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT) {
-      // Size fades as life decreases
-      int r = (gPtcl[i].life > 30) ? 3 : (gPtcl[i].life > 15) ? 2 : 1;
-      drawFireworkParticle(nx, ny, r, gPtcl[i].color);
-      // Sparkle trail — dim trail dot behind each particle
-      if (gPtcl[i].life > 10) {
-        int tx = nx - gPtcl[i].vx;
-        int ty = ny - gPtcl[i].vy;
-        if (tx >= 0 && tx < SCREEN_WIDTH && ty >= 0 && ty < SCREEN_HEIGHT)
-          gfx->drawPixel(tx, ty, gPtcl[i].color);
+
+    if (gPtcl[i].life > 100) {
+      // Rocket phase: ascending
+      gPtcl[i].x += gPtcl[i].vx;
+      gPtcl[i].y += gPtcl[i].vy;
+      gPtcl[i].life--;
+      // Explode when reaches target height or life hits 100
+      bool targetReached = gPtcl[i].y <= (int16_t)(30 + random(80));
+      if (gPtcl[i].life <= 101 || targetReached) {
+        gPtcl[i].life = 101; // will be set to 0 in explodeRocket
+        explodeRocket(i);
+        continue;
+      }
+      // Draw rocket trail
+      int16_t rx = gPtcl[i].x, ry = gPtcl[i].y;
+      if (rx >= 0 && rx < SCREEN_WIDTH && ry >= 0 && ry < SCREEN_HEIGHT) {
+        gfx->fillCircle(rx, ry, 2, COL_GOLD);
+        // Tail sparks
+        for (int t = 1; t <= 3; t++) {
+          int16_t ty = ry + t * 4;
+          if (ty < SCREEN_HEIGHT)
+            gfx->drawPixel(rx + (int)random(3) - 1, ty, COL_PEACH);
+        }
+      }
+    } else {
+      // Burst phase: expanding particles
+      gPtcl[i].x += gPtcl[i].vx;
+      gPtcl[i].y += gPtcl[i].vy;
+      if (gPtcl[i].life % 2 == 0) gPtcl[i].vy = (int8_t)(gPtcl[i].vy + 1);
+      if (gPtcl[i].life % 4 == 0 && gPtcl[i].vx != 0)
+        gPtcl[i].vx = (int8_t)(gPtcl[i].vx > 0 ? gPtcl[i].vx - 1 : gPtcl[i].vx + 1);
+      gPtcl[i].life--;
+      if (gPtcl[i].y >= SCREEN_HEIGHT || gPtcl[i].x < -5 || gPtcl[i].x >= SCREEN_WIDTH + 5) {
+        gPtcl[i].life = 0;
+        continue;
+      }
+      int16_t nx = gPtcl[i].x, ny = gPtcl[i].y;
+      if (nx >= 0 && nx < SCREEN_WIDTH && ny >= 0 && ny < SCREEN_HEIGHT) {
+        int r = (gPtcl[i].life > 30) ? 3 : (gPtcl[i].life > 15) ? 2 : 1;
+        drawFireworkParticle(nx, ny, r, gPtcl[i].color);
+        if (gPtcl[i].life > 10) {
+          int tx = nx - gPtcl[i].vx;
+          int ty = ny - gPtcl[i].vy;
+          if (tx >= 0 && tx < SCREEN_WIDTH && ty >= 0 && ty < SCREEN_HEIGHT)
+            gfx->drawPixel(tx, ty, gPtcl[i].color);
+        }
       }
     }
   }
-  if (!anyAlive) initFireworks();
+  if (!anyAlive) initFireworkRocket();
   pushCanvas();
 }
 
@@ -2508,12 +2599,53 @@ void initNoteOverlayFlowers() {
   }
 }
 
+void initNoteOverlayFireworks() {
+  noteOvCount = 16;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)(40 + random(SCREEN_WIDTH - 80));
+    noteOvPtcl[i].y     = (int16_t)(20 + random(SCREEN_HEIGHT / 2));
+    float a = (float)i * 3.14159f * 2.f / 16.f;
+    int spd = 1 + (int)random(3);
+    noteOvPtcl[i].vx    = (int8_t)((float)spd * cosf(a));
+    noteOvPtcl[i].vy    = (int8_t)((float)spd * sinf(a));
+    noteOvPtcl[i].life  = (uint8_t)(20 + random(25));
+    noteOvPtcl[i].color = pickBurstColor();
+  }
+}
+
+void initNoteOverlaySnowfall() {
+  noteOvCount = 18;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)random(SCREEN_WIDTH);
+    noteOvPtcl[i].y     = (int16_t)random(SCREEN_HEIGHT);
+    noteOvPtcl[i].vx    = (int8_t)(random(3) - 1);
+    noteOvPtcl[i].vy    = (int8_t)(1 + random(2));
+    noteOvPtcl[i].life  = (uint8_t)(1 + random(3));
+    noteOvPtcl[i].color = userFaceColor;
+  }
+}
+
+void initNoteOverlayStarfield() {
+  noteOvCount = 20;
+  for (uint8_t i = 0; i < noteOvCount; i++) {
+    noteOvPtcl[i].x     = (int16_t)(SCREEN_WIDTH / 2 + random(41) - 20);
+    noteOvPtcl[i].y     = (int16_t)(SCREEN_HEIGHT / 2 + random(41) - 20);
+    noteOvPtcl[i].vx    = 0;
+    noteOvPtcl[i].vy    = 0;
+    noteOvPtcl[i].life  = (uint8_t)(4 + random(60));
+    noteOvPtcl[i].color = userFaceColor;
+  }
+}
+
 void initNoteOverlay() {
   switch (noteAnimType) {
-    case 1: initNoteOverlayWater();   break;
-    case 2: initNoteOverlayStars();   break;
-    case 3: initNoteOverlayFlowers(); break;
-    default: noteOvCount = 0;         break;
+    case 1: initNoteOverlayWater();     break;
+    case 2: initNoteOverlayStars();     break;
+    case 3: initNoteOverlayFlowers();   break;
+    case 4: initNoteOverlayFireworks(); break;
+    case 5: initNoteOverlaySnowfall();  break;
+    case 6: initNoteOverlayStarfield(); break;
+    default: noteOvCount = 0;           break;
   }
 }
 
@@ -2598,6 +2730,53 @@ void renderAnimatedNoteFrame() {
         // Flower head
         drawFlowerShape(noteOvPtcl[i].x, fy, s, noteOvPtcl[i].color);
       }
+    } else if (noteAnimType == 4) {
+      // Fireworks overlay: burst particles that fade and respawn
+      noteOvPtcl[i].x += noteOvPtcl[i].vx;
+      noteOvPtcl[i].y += noteOvPtcl[i].vy;
+      if (noteOvPtcl[i].life % 2 == 0) noteOvPtcl[i].vy = (int8_t)(noteOvPtcl[i].vy + 1);
+      noteOvPtcl[i].life--;
+      if (noteOvPtcl[i].life == 0) {
+        // Respawn burst from random center
+        int16_t cx = (int16_t)(40 + random(SCREEN_WIDTH - 80));
+        int16_t cy = (int16_t)(20 + random(SCREEN_HEIGHT / 2));
+        float a = (float)i * 3.14159f * 2.f / noteOvCount;
+        int spd = 1 + (int)random(3);
+        noteOvPtcl[i].x    = cx;
+        noteOvPtcl[i].y    = cy;
+        noteOvPtcl[i].vx   = (int8_t)((float)spd * cosf(a));
+        noteOvPtcl[i].vy   = (int8_t)((float)spd * sinf(a));
+        noteOvPtcl[i].life = (uint8_t)(20 + random(25));
+        noteOvPtcl[i].color = pickBurstColor();
+      }
+      int16_t px = noteOvPtcl[i].x, py = noteOvPtcl[i].y;
+      if (px >= 0 && px < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT) {
+        int r = noteOvPtcl[i].life > 15 ? 2 : 1;
+        canvas->fillCircle(px, py, r, noteOvPtcl[i].color);
+      }
+    } else if (noteAnimType == 5) {
+      // Snowfall overlay: gentle drift down
+      noteOvPtcl[i].x += noteOvPtcl[i].vx;
+      noteOvPtcl[i].y += noteOvPtcl[i].vy;
+      if (noteOvPtcl[i].y >= SCREEN_HEIGHT) { noteOvPtcl[i].y = 0; noteOvPtcl[i].x = (int16_t)random(SCREEN_WIDTH); }
+      if (noteOvPtcl[i].x < 0)             noteOvPtcl[i].x = SCREEN_WIDTH - 1;
+      if (noteOvPtcl[i].x >= SCREEN_WIDTH)  noteOvPtcl[i].x = 0;
+      canvas->fillCircle(noteOvPtcl[i].x, noteOvPtcl[i].y, noteOvPtcl[i].life, noteOvPtcl[i].color);
+    } else if (noteAnimType == 6) {
+      // Starfield overlay: zoom from center
+      const int CX = SCREEN_WIDTH / 2, CY = SCREEN_HEIGHT / 2;
+      float z = noteOvPtcl[i].life / 64.f + 0.01f;
+      int sx = CX + (int)((noteOvPtcl[i].x - CX) / z);
+      int sy = CY + (int)((noteOvPtcl[i].y - CY) / z);
+      noteOvPtcl[i].life--;
+      if (noteOvPtcl[i].life == 0 || sx < 0 || sx >= SCREEN_WIDTH || sy < 0 || sy >= SCREEN_HEIGHT) {
+        noteOvPtcl[i].x    = (int16_t)(CX + random(41) - 20);
+        noteOvPtcl[i].y    = (int16_t)(CY + random(41) - 20);
+        noteOvPtcl[i].life = (uint8_t)(50 + random(14));
+      } else {
+        int r = noteOvPtcl[i].life < 20 ? 2 : 1;
+        canvas->fillCircle(sx, sy, r, noteOvPtcl[i].color);
+      }
     }
   }
   pushCanvas();
@@ -2644,10 +2823,15 @@ void renderCountdownFrame() {
   gfx->fillRect(20, 148, barTotal, 8, COL_BG);
   gfx->fillRect(20, 148, barFill,  8, COL_ACCENT);
   gfx->drawRect(20, 148, barTotal, 8, userFaceColor);
-  // At zero: trigger fireworks celebration
+  // At zero: trigger chosen celebration
   if (remaining == 0 && !countdownExpired) {
     countdownExpired = true;
-    setParticleMode("fireworks");
+    switch (countdownEndAction) {
+      case 1:  setParticleMode("heart_rain"); break;
+      case 2:  setParticleMode("snowfall");   break;
+      case 3:  setParticleMode("starfield");  break;
+      default: setParticleMode("fireworks");  break;
+    }
     startTransientExpression("love", 4000, "Time's up!");
   }
   pushCanvas();
@@ -3290,6 +3474,9 @@ void handleCommandJson(const String& body) {
     if      (anim == "flowing_water")    noteAnimType = 1;
     else if (anim == "shooting_stars")   noteAnimType = 2;
     else if (anim == "growing_flowers")  noteAnimType = 3;
+    else if (anim == "fireworks")        noteAnimType = 4;
+    else if (anim == "snowfall")         noteAnimType = 5;
+    else if (anim == "starfield")        noteAnimType = 6;
     else                                 noteAnimType = 0;
     // If we have a color image loaded, switch to animated note mode
     if (noteAnimType > 0 && colorImageBuffer) {
@@ -3306,7 +3493,35 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_countdown") {
+    int endAct = extractJsonIntField(body, "endAction", 0);
+    countdownEndAction = (uint8_t)endAct;
     setCountdown((long)extractJsonIntField(body, "seconds", 60));
+    return;
+  }
+
+  if (type == "set_expression_speed") {
+    int spd = extractJsonIntField(body, "speed", 2);
+    if (spd < 1) spd = 1;
+    if (spd > 8) spd = 8;
+    expressionSpeedMul = (uint8_t)spd;
+    return;
+  }
+
+  if (type == "set_firework_palette") {
+    String pal = extractJsonStringField(body, "palette", "rainbow");
+    if      (pal == "warm") fireworkPalette = 1;
+    else if (pal == "cool") fireworkPalette = 2;
+    else if (pal == "mono") fireworkPalette = 3;
+    else                    fireworkPalette = 0;
+    return;
+  }
+
+  if (type == "set_companion_scale") {
+    int sc = extractJsonIntField(body, "scale", 100);
+    if (sc < 50) sc = 50;
+    if (sc > 200) sc = 200;
+    companionScale = (uint8_t)sc;
+    if (currentMode == MODE_EXPRESSION) renderCurrentMode();
     return;
   }
 
@@ -4007,7 +4222,8 @@ void loop() {
     const unsigned long now = millis();
     if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 64;
+      for (uint8_t s = 0; s < expressionSpeedMul; s++)
+        expressionPhase = (expressionPhase + 1) % 64;
       renderExpressionFrame();
     }
   }
@@ -4016,7 +4232,8 @@ void loop() {
     const unsigned long now = millis();
     if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 64;
+      for (uint8_t s = 0; s < expressionSpeedMul; s++)
+        expressionPhase = (expressionPhase + 1) % 64;
       renderFlowerFrame();
     }
   }
@@ -4025,7 +4242,8 @@ void loop() {
     const unsigned long now = millis();
     if (now - lastExpressionTickMs >= 16) {
       lastExpressionTickMs = now;
-      expressionPhase = (expressionPhase + 1) % 64;
+      for (uint8_t s = 0; s < expressionSpeedMul; s++)
+        expressionPhase = (expressionPhase + 1) % 64;
       renderSceneFrame();
     }
   }

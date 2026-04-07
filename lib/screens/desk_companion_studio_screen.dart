@@ -96,7 +96,7 @@ extension DeskFireworkShapeExt on DeskFireworkShape {
       };
 }
 
-enum DeskNoteAnimation { none, flowingWater, shootingStars, growingFlowers }
+enum DeskNoteAnimation { none, flowingWater, shootingStars, growingFlowers, fireworks, snowfall, starfield }
 
 extension DeskNoteAnimationExt on DeskNoteAnimation {
   String get label => switch (this) {
@@ -104,6 +104,9 @@ extension DeskNoteAnimationExt on DeskNoteAnimation {
         DeskNoteAnimation.flowingWater => 'Flowing water',
         DeskNoteAnimation.shootingStars => 'Shooting stars',
         DeskNoteAnimation.growingFlowers => 'Growing flowers',
+        DeskNoteAnimation.fireworks => 'Fireworks',
+        DeskNoteAnimation.snowfall => 'Snowfall',
+        DeskNoteAnimation.starfield => 'Starfield',
       };
 
   String get command => switch (this) {
@@ -111,6 +114,45 @@ extension DeskNoteAnimationExt on DeskNoteAnimation {
         DeskNoteAnimation.flowingWater => 'flowing_water',
         DeskNoteAnimation.shootingStars => 'shooting_stars',
         DeskNoteAnimation.growingFlowers => 'growing_flowers',
+        DeskNoteAnimation.fireworks => 'fireworks',
+        DeskNoteAnimation.snowfall => 'snowfall',
+        DeskNoteAnimation.starfield => 'starfield',
+      };
+}
+
+enum DeskFireworkPalette { rainbow, warm, cool, mono }
+
+extension DeskFireworkPaletteExt on DeskFireworkPalette {
+  String get label => switch (this) {
+        DeskFireworkPalette.rainbow => 'Rainbow',
+        DeskFireworkPalette.warm => 'Warm',
+        DeskFireworkPalette.cool => 'Cool',
+        DeskFireworkPalette.mono => 'Mono',
+      };
+
+  String get command => switch (this) {
+        DeskFireworkPalette.rainbow => 'rainbow',
+        DeskFireworkPalette.warm => 'warm',
+        DeskFireworkPalette.cool => 'cool',
+        DeskFireworkPalette.mono => 'mono',
+      };
+}
+
+enum DeskCountdownEndAction { fireworks, heartRain, snowfall, starfield }
+
+extension DeskCountdownEndActionExt on DeskCountdownEndAction {
+  String get label => switch (this) {
+        DeskCountdownEndAction.fireworks => 'Fireworks',
+        DeskCountdownEndAction.heartRain => 'Heart rain',
+        DeskCountdownEndAction.snowfall => 'Snowfall',
+        DeskCountdownEndAction.starfield => 'Starfield',
+      };
+
+  int get value => switch (this) {
+        DeskCountdownEndAction.fireworks => 0,
+        DeskCountdownEndAction.heartRain => 1,
+        DeskCountdownEndAction.snowfall => 2,
+        DeskCountdownEndAction.starfield => 3,
       };
 }
 
@@ -497,9 +539,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskScene _selectedDeskScene = DeskScene.wave;
   DeskParticle _selectedParticle = DeskParticle.fireworks;
   DeskFireworkShape _selectedFireworkShape = DeskFireworkShape.circle;
+  DeskFireworkPalette _selectedFireworkPalette = DeskFireworkPalette.rainbow;
   DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
+  DeskCountdownEndAction _countdownEndAction = DeskCountdownEndAction.fireworks;
   int _countdownHours = 0;
   int _countdownMinutes = 5;
+  int _countdownSeconds = 0;
+  double _expressionSpeed = 2;
+  double _companionScale = 100;
   double _timezoneOffsetHours = 0;
   int _displayRotation = 1;
   Color _eyeColor = Colors.white;
@@ -1450,6 +1497,25 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               )
                               .toList(growable: false),
                         ),
+                        const SizedBox(height: 8),
+                        const Text('Color palette',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.white70)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: DeskFireworkPalette.values
+                              .map(
+                                (p) => ChoiceChip(
+                                  label: Text(p.label),
+                                  selected: _selectedFireworkPalette == p,
+                                  onSelected: (_) =>
+                                      setState(() => _selectedFireworkPalette = p),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
                       ],
                       const SizedBox(height: 12),
                       SizedBox(
@@ -1463,6 +1529,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                                       if (_selectedParticle == DeskParticle.fireworks) {
                                         await controller.sendFireworkShape(
                                             _selectedFireworkShape.command);
+                                        await controller.sendFireworkPalette(
+                                            _selectedFireworkPalette.command);
                                       }
                                       await controller.sendParticle(
                                           _selectedParticle.command);
@@ -1509,17 +1577,16 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Hours: $_countdownHours',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                Slider(
-                                  min: 0,
-                                  max: 23,
-                                  divisions: 23,
-                                  value: _countdownHours.toDouble(),
-                                  onChanged: (v) => setState(
-                                      () => _countdownHours = v.round()),
+                                Text('Hours', style: Theme.of(context).textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: 48,
+                                  child: TextField(
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(hintText: '0', isDense: true),
+                                    controller: TextEditingController(text: '$_countdownHours'),
+                                    onChanged: (v) => setState(() => _countdownHours = int.tryParse(v) ?? 0),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1529,23 +1596,58 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Minutes: $_countdownMinutes',
-                                  style: Theme.of(context).textTheme.bodyMedium,
+                                Text('Minutes', style: Theme.of(context).textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: 48,
+                                  child: TextField(
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(hintText: '5', isDense: true),
+                                    controller: TextEditingController(text: '$_countdownMinutes'),
+                                    onChanged: (v) => setState(() => _countdownMinutes = int.tryParse(v) ?? 0),
+                                  ),
                                 ),
-                                Slider(
-                                  min: 0,
-                                  max: 59,
-                                  divisions: 59,
-                                  value: _countdownMinutes.toDouble(),
-                                  onChanged: (v) => setState(
-                                      () => _countdownMinutes = v.round()),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Seconds', style: Theme.of(context).textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: 48,
+                                  child: TextField(
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(hintText: '0', isDense: true),
+                                    controller: TextEditingController(text: '$_countdownSeconds'),
+                                    onChanged: (v) => setState(() => _countdownSeconds = int.tryParse(v) ?? 0),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      const Text('When timer ends',
+                          style: TextStyle(fontSize: 12, color: Colors.white70)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DeskCountdownEndAction.values
+                            .map((a) => ChoiceChip(
+                                  label: Text(a.label),
+                                  selected: _countdownEndAction == a,
+                                  onSelected: (_) =>
+                                      setState(() => _countdownEndAction = a),
+                                ))
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -1554,15 +1656,17 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               ? null
                               : () {
                                   final secs = _countdownHours * 3600 +
-                                      _countdownMinutes * 60;
+                                      _countdownMinutes * 60 +
+                                      _countdownSeconds;
                                   if (secs <= 0) {
-                                    _showMessage('Set at least 1 minute.');
+                                    _showMessage('Set at least 1 second.');
                                     return;
                                   }
                                   _perform(
-                                    () => controller.startCountdown(secs),
+                                    () => controller.startCountdown(secs,
+                                        endAction: _countdownEndAction.value),
                                     success:
-                                        'Countdown started (${_countdownHours}h ${_countdownMinutes}m).',
+                                        'Countdown started.',
                                   );
                                 },
                           icon: const Icon(Icons.timer_outlined),
@@ -2707,6 +2811,48 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           );
                         }).toList(),
                       ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: SizedBox(
+                          height: 100,
+                          child: CompanionFacePreview(
+                            visualModel: _selectedVisualModel,
+                            scene: _selectedScene,
+                            personality: _selectedPersonality.command,
+                            petMode: _selectedPetMode.command,
+                            expression: _appearancePreviewReferencePose
+                                ? null
+                                : _selectedExpression.command,
+                            hair: _selectedHairStyle.command,
+                            ears: _selectedEarsStyle.command,
+                            mustache: _selectedMustacheStyle.command,
+                            glasses: _selectedGlassesStyle.command,
+                            headwear: _selectedHeadwearStyle.command,
+                            piercing: _selectedPiercingStyle.command,
+                            hairSize: _selectedHairSize.round(),
+                            mustacheSize: _selectedMustacheSize.round(),
+                            hairWidth: _selectedHairWidth.round(),
+                            hairHeight: _selectedHairHeight.round(),
+                            hairThickness: _selectedHairThickness.round(),
+                            hairOffsetX: _selectedHairOffsetX.round(),
+                            hairOffsetY: _selectedHairOffsetY.round(),
+                            eyeOffsetY: _selectedEyeOffsetY.round(),
+                            mouthOffsetY: _selectedMouthOffsetY.round(),
+                            mustacheWidth: _selectedMustacheWidth.round(),
+                            mustacheHeight: _selectedMustacheHeight.round(),
+                            mustacheThickness: _selectedMustacheThickness.round(),
+                            mustacheOffsetX: _selectedMustacheOffsetX.round(),
+                            mustacheOffsetY: _selectedMustacheOffsetY.round(),
+                            stickFigureScale: _stickFigureScale.round(),
+                            stickFigureSpacing: _stickFigureSpacing.round(),
+                            stickFigureEnergy: _stickFigureEnergy.round(),
+                            eyeColor: _eyeColor,
+                            faceColor: _faceColor,
+                            accentColor: _accentColor,
+                            bodyColor: _bodyColor,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         detailSummary,
@@ -2889,6 +3035,70 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     ? 'The app is now streaming the full scene animation over BLE instead of flattening it to a still frame.'
                     : 'App-first models can still be sent over Wi-Fi or relay, but only as a single snapshot because live scene streaming requires BLE.',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          _StudioGroup(
+            title: 'Animation speed',
+            subtitle: 'How fast the companion reacts and animates on screen.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Speed: ${_expressionSpeed.round()}x', style: Theme.of(context).textTheme.bodyMedium),
+                Slider(
+                  min: 1,
+                  max: 8,
+                  divisions: 7,
+                  value: _expressionSpeed,
+                  label: '${_expressionSpeed.round()}x',
+                  onChanged: (v) => setState(() => _expressionSpeed = v),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: controller.busy || !controller.canControlDevice
+                        ? null
+                        : () => _perform(
+                              () => controller.sendExpressionSpeed(_expressionSpeed.round()),
+                              success: 'Animation speed set to ${_expressionSpeed.round()}x.',
+                            ),
+                    icon: const Icon(Icons.speed),
+                    label: const Text('Apply speed'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _StudioGroup(
+            title: 'Companion size',
+            subtitle: 'Scale the companion face larger or smaller. 100% is default.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Scale: ${_companionScale.round()}%', style: Theme.of(context).textTheme.bodyMedium),
+                Slider(
+                  min: 50,
+                  max: 200,
+                  divisions: 15,
+                  value: _companionScale,
+                  label: '${_companionScale.round()}%',
+                  onChanged: (v) => setState(() => _companionScale = v),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: controller.busy || !controller.canControlDevice
+                        ? null
+                        : () => _perform(
+                              () => controller.sendCompanionScale(_companionScale.round()),
+                              success: 'Companion scaled to ${_companionScale.round()}%.',
+                            ),
+                    icon: const Icon(Icons.zoom_in),
+                    label: const Text('Apply size'),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           _StudioGroup(
