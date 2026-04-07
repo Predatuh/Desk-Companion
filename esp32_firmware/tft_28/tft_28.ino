@@ -16,6 +16,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <esp_system.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -292,6 +293,10 @@ unsigned long lastParticleTickMs = 0;
 uint8_t fireworkShape = 0;
 // Firework color palette: 0=rainbow, 1=warm, 2=cool, 3=mono
 uint8_t fireworkPalette = 0;
+// Firework size: 0=small, 1=medium, 2=large, 3=xl, 4=xxl, 5=random
+uint8_t fireworkSize = 1;
+// When true, fireworks only launch via manual fire_rocket commands (no auto-relaunch)
+bool fwManualOnly = false;
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
@@ -702,39 +707,55 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-// ─── Relay (identical to mini) ───
-
-static const char* RELAY_HTTP_HOST = "desk-companion-relay.fly.dev";
-static const uint16_t RELAY_HTTP_PORT = 80;
+// ─── Relay ───
 
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
   String finalUrl = url;
   int protoEnd = finalUrl.indexOf("://");
+  bool isHttps = finalUrl.startsWith("https://");
   String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
   int pathStart = hostAndPath.indexOf('/');
+  String host = (pathStart > 0) ? hostAndPath.substring(0, pathStart) : hostAndPath;
   String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
 
-  Serial.printf("[RELAY-HTTP] %s %s (host=%s:%u path=%s) heap=%u\n",
-    method, url.c_str(), RELAY_HTTP_HOST, RELAY_HTTP_PORT,
-    path.c_str(), ESP.getFreeHeap());
+  // Extract port from host if present (e.g. "host:8080")
+  uint16_t port = isHttps ? 443 : 80;
+  int colonIdx = host.indexOf(':');
+  if (colonIdx > 0) {
+    port = (uint16_t)host.substring(colonIdx + 1).toInt();
+    host = host.substring(0, colonIdx);
+  }
 
-  WiFiClient tcp;
-  tcp.setTimeout(15);
-  tcp.setConnectionTimeout(10000);
+  Serial.printf("[RELAY] %s %s (host=%s:%u path=%s https=%d) heap=%u\n",
+    method, url.c_str(), host.c_str(), port,
+    path.c_str(), isHttps, ESP.getFreeHeap());
+
+  Client* tcp;
+  WiFiClient plainTcp;
+  WiFiClientSecure secureTcp;
+  if (isHttps) {
+    secureTcp.setInsecure(); // skip cert verification (ESP32-S3 has limited CA store)
+    secureTcp.setTimeout(15);
+    tcp = &secureTcp;
+  } else {
+    plainTcp.setTimeout(15);
+    plainTcp.setConnectionTimeout(10000);
+    tcp = &plainTcp;
+  }
 
   unsigned long t0 = millis();
-  if (!tcp.connect(RELAY_HTTP_HOST, RELAY_HTTP_PORT)) {
+  if (!tcp->connect(host.c_str(), port)) {
     unsigned long elapsed = millis() - t0;
-    Serial.printf("[RELAY-HTTP] TCP connect FAILED in %lums heap=%u\n",
+    Serial.printf("[RELAY] TCP connect FAILED in %lums heap=%u\n",
       elapsed, ESP.getFreeHeap());
     response = String("TCP fail ") + String(elapsed) + "ms";
     return -1;
   }
   unsigned long elapsed = millis() - t0;
-  Serial.printf("[RELAY-HTTP] TCP connected in %lums\n", elapsed);
+  Serial.printf("[RELAY] TCP connected in %lums\n", elapsed);
 
   String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += String("Host: ") + RELAY_HTTP_HOST + "\r\n";
+  req += String("Host: ") + host + "\r\n";
   req += "Connection: close\r\n";
   if (body.length() > 0) {
     req += "Content-Type: application/json\r\n";
@@ -745,28 +766,28 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     req += body;
   }
 
-  tcp.print(req);
+  tcp->print(req);
 
   unsigned long respStart = millis();
   String statusLine = "";
   while (millis() - respStart < 10000) {
-    if (tcp.available()) {
-      statusLine = tcp.readStringUntil('\n');
+    if (tcp->available()) {
+      statusLine = tcp->readStringUntil('\n');
       statusLine.trim();
       break;
     }
-    if (!tcp.connected()) break;
+    if (!tcp->connected()) break;
     delay(10);
   }
 
   if (statusLine.length() == 0) {
-    Serial.println("[RELAY-HTTP] No response received");
+    Serial.println("[RELAY] No response received");
     response = "No response";
-    tcp.stop();
+    tcp->stop();
     return -2;
   }
 
-  Serial.printf("[RELAY-HTTP] Status: %s\n", statusLine.c_str());
+  Serial.printf("[RELAY] Status: %s\n", statusLine.c_str());
 
   int httpCode = 0;
   int spaceIdx = statusLine.indexOf(' ');
@@ -775,27 +796,27 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
   }
 
   while (millis() - respStart < 10000) {
-    if (tcp.available()) {
-      String line = tcp.readStringUntil('\n');
+    if (tcp->available()) {
+      String line = tcp->readStringUntil('\n');
       line.trim();
       if (line.length() == 0) break;
     }
-    if (!tcp.connected() && !tcp.available()) break;
+    if (!tcp->connected() && !tcp->available()) break;
     delay(1);
   }
 
   response = "";
   while (millis() - respStart < 10000) {
-    while (tcp.available()) {
-      response += (char)tcp.read();
+    while (tcp->available()) {
+      response += (char)tcp->read();
     }
-    if (!tcp.connected() && !tcp.available()) break;
+    if (!tcp->connected() && !tcp->available()) break;
     delay(10);
   }
 
-  Serial.printf("[RELAY-HTTP] Code=%d Body=%s\n", httpCode, response.c_str());
+  Serial.printf("[RELAY] Code=%d Body=%s\n", httpCode, response.c_str());
 
-  tcp.stop();
+  tcp->stop();
   return httpCode;
 }
 
@@ -2262,10 +2283,66 @@ void renderSceneFrame() {
     drawStickFigure(185, 120, 14,  hugP, 0.3f, 0.25f, 0.25f, userBodyColor);
 
   } else if (currentScene == "holdHands") {
-    float handBob = sinf(t * 3.14159f * 2.f) * 3.f;
-    drawStickFigure(100, 125 + (int)handBob, 14, 0.4f, 0.0f, 0.3f, 0.3f, userFaceColor);
-    drawStickFigure(220, 125 + (int)handBob, 14, 0.0f, 0.4f, 0.3f, 0.3f, userBodyColor);
-    gfx->fillCircle(160, 110, 5, COL_GOLD);
+    // Phase 1 (t 0→0.3): figures walk toward each other from edges
+    // Phase 2 (t 0.3→0.5): meet in middle, reach out hands
+    // Phase 3 (t 0.5→1.0): hold hands, walk off together into distance (shrink)
+    float walkBob = sinf(t * 3.14159f * 8.f) * 2.f;
+    if (t < 0.3f) {
+      // Walking toward each other
+      float p = t / 0.3f; // 0→1
+      float lx = 20.f + p * 120.f; // 20→140
+      float rx = 300.f - p * 120.f; // 300→180
+      float legSwing = sinf(t * 3.14159f * 12.f) * 0.25f;
+      drawStickFigure((int)lx, 125 + (int)walkBob, 14,
+                     0.3f, 0.3f, 0.3f + legSwing, 0.3f - legSwing, userFaceColor);
+      drawStickFigure((int)rx, 125 + (int)walkBob, 14,
+                     0.3f, 0.3f, 0.3f - legSwing, 0.3f + legSwing, userBodyColor);
+    } else if (t < 0.5f) {
+      // Reaching out hands to each other
+      float p = (t - 0.3f) / 0.2f; // 0→1
+      float armReach = 0.3f - p * 0.3f; // inner arm closes
+      drawStickFigure(140, 125 + (int)walkBob, 14,
+                     0.4f, armReach, 0.3f, 0.3f, userFaceColor);
+      drawStickFigure(180, 125 + (int)walkBob, 14,
+                     armReach, 0.4f, 0.3f, 0.3f, userBodyColor);
+      // Hearts appearing
+      if (p > 0.5f) {
+        gfx->fillCircle(158, 100, 3, COL_ROSE);
+        gfx->fillCircle(162, 100, 3, COL_ROSE);
+        gfx->fillTriangle(155, 101, 165, 101, 160, 107, COL_ROSE);
+      }
+    } else {
+      // Walking off together into the distance (shrinking)
+      float p = (t - 0.5f) / 0.5f; // 0→1
+      int centerX = 160;
+      int baseY = 125;
+      float scale = 14.f * (1.f - p * 0.7f); // shrink from 14 to ~4
+      float yOff = p * -60.f; // move up (into distance)
+      float driftX = p * 30.f; // drift slightly right
+      int cy = baseY + (int)yOff + (int)(walkBob * (1.f - p));
+      int sc = (int)scale;
+      if (sc < 3) sc = 3;
+      float legSwing2 = sinf(t * 3.14159f * 12.f) * 0.2f * (1.f - p);
+      drawStickFigure(centerX - sc + (int)driftX, cy, sc,
+                     0.4f, 0.0f, 0.3f + legSwing2, 0.3f - legSwing2, userFaceColor);
+      drawStickFigure(centerX + sc + (int)driftX, cy, sc,
+                     0.0f, 0.4f, 0.3f - legSwing2, 0.3f + legSwing2, userBodyColor);
+      // Heart floating above them
+      int hy = cy - sc * 3 - 5;
+      if (hy > 10) {
+        gfx->fillCircle(centerX + (int)driftX - 3, hy, 2, COL_ROSE);
+        gfx->fillCircle(centerX + (int)driftX + 3, hy, 2, COL_ROSE);
+        gfx->fillTriangle(centerX + (int)driftX - 5, hy + 1,
+                          centerX + (int)driftX + 5, hy + 1,
+                          centerX + (int)driftX, hy + 6, COL_ROSE);
+      }
+      // Sunset glow at horizon
+      if (p > 0.3f) {
+        uint16_t glowCol = (p > 0.6f) ? COL_GOLD : COL_PEACH;
+        int glowR = (int)(p * 40.f);
+        gfx->fillCircle(centerX + (int)driftX, SCREEN_HEIGHT - 5, glowR, glowCol);
+      }
+    }
 
   } else if (currentScene == "kiss") {
     float lean = sinf(t * 3.14159f) * 8.f;
@@ -2344,38 +2421,64 @@ void initFireworkRocket() {
   }
 }
 
+// Firework size params: {particleCount, speedMin, speedMax, heartScale, lifeBase}
+struct FwSizeParams { uint8_t count; uint8_t spdMin; uint8_t spdMax; float heartScale; uint8_t lifeBase; };
+static const FwSizeParams FW_SIZES[] = {
+  {10, 1, 3, 0.25f, 18},  // 0 = small
+  {22, 2, 5, 0.4f,  25},  // 1 = medium (original)
+  {30, 3, 6, 0.55f, 30},  // 2 = large
+  {38, 4, 8, 0.7f,  35},  // 3 = xl
+  {46, 5, 10, 0.85f, 40}, // 4 = xxl
+};
+
+FwSizeParams getFireworkSizeParams() {
+  uint8_t sz = fireworkSize;
+  if (sz == 5) sz = (uint8_t)random(5); // random
+  if (sz > 4) sz = 1;
+  return FW_SIZES[sz];
+}
+
 void explodeRocket(uint8_t rocketIdx) {
   int16_t cx = gPtcl[rocketIdx].x;
   int16_t cy = gPtcl[rocketIdx].y;
   uint16_t col = pickBurstColor();
   gPtcl[rocketIdx].life = 0;
-  // Find free slots for burst (22 particles per burst)
+  FwSizeParams sp = getFireworkSizeParams();
   uint8_t placed = 0;
   bool heartBurst = (fireworkShape == 1);
-  for (uint8_t i = 0; i < 48 && placed < 22; i++) {
+  for (uint8_t i = 0; i < 48 && placed < sp.count; i++) {
     if (gPtcl[i].life > 0) continue;
-    float a;
-    int spd;
     if (heartBurst) {
-      // Heart-shaped burst: parametric heart curve
-      float t = (float)placed * 3.14159f * 2.f / 22.f;
+      float t = (float)placed * 3.14159f * 2.f / (float)sp.count;
       float hx = 16.f * sinf(t) * sinf(t) * sinf(t);
       float hy = -(13.f * cosf(t) - 5.f * cosf(2*t) - 2.f * cosf(3*t) - cosf(4*t));
       gPtcl[i].x  = cx;
       gPtcl[i].y  = cy;
-      gPtcl[i].vx = (int8_t)(hx * 0.4f);
-      gPtcl[i].vy = (int8_t)(hy * 0.4f);
+      gPtcl[i].vx = (int8_t)(hx * sp.heartScale);
+      gPtcl[i].vy = (int8_t)(hy * sp.heartScale);
     } else {
-      a = (float)placed * 3.14159f * 2.f / 22.f + (random(100) / 100.f) * 0.3f;
-      spd = 2 + (int)random(5);
+      float a = (float)placed * 3.14159f * 2.f / (float)sp.count + (random(100) / 100.f) * 0.3f;
+      int spd = sp.spdMin + (int)random(sp.spdMax - sp.spdMin + 1);
       gPtcl[i].x  = cx;
       gPtcl[i].y  = cy;
       gPtcl[i].vx = (int8_t)((float)spd * cosf(a));
       gPtcl[i].vy = (int8_t)((float)spd * sinf(a));
     }
-    gPtcl[i].life  = (uint8_t)(25 + random(20));
+    gPtcl[i].life  = (uint8_t)(sp.lifeBase + random(20));
     gPtcl[i].color = (placed % 3 == 0) ? COL_GOLD : col;
     placed++;
+  }
+  // Crackle: schedule delayed secondary mini-bursts
+  // We mark the explosion center by placing a "crackle seed" particle
+  for (uint8_t i = 0; i < 48; i++) {
+    if (gPtcl[i].life > 0) continue;
+    gPtcl[i].x    = cx;
+    gPtcl[i].y    = cy;
+    gPtcl[i].vx   = 0;
+    gPtcl[i].vy   = 0;
+    gPtcl[i].life = 80; // >50 but ≤100: crackle seed (waits, then pops)
+    gPtcl[i].color = col;
+    break;
   }
 }
 
@@ -2390,6 +2493,34 @@ void renderFireworksFrame() {
   for (uint8_t i = 0; i < gPtclCount; i++) {
     if (gPtcl[i].life == 0) continue;
     anyAlive = true;
+
+    // Crackle seed: vx==0 && vy==0 && life 51-99 → waits then pops mini sparks
+    if (gPtcl[i].vx == 0 && gPtcl[i].vy == 0 && gPtcl[i].life > 50 && gPtcl[i].life <= 100) {
+      gPtcl[i].life--;
+      if (gPtcl[i].life == 51) {
+        // Crackle pop: spawn 4-6 tiny fast sparks
+        int16_t cx = gPtcl[i].x + (int16_t)(random(20) - 10);
+        int16_t cy = gPtcl[i].y + (int16_t)(random(20) - 10);
+        uint16_t cc = gPtcl[i].color;
+        gPtcl[i].life = 0;
+        uint8_t sparks = 4 + (uint8_t)random(3);
+        for (uint8_t s = 0; s < sparks; s++) {
+          for (uint8_t j = 0; j < 48; j++) {
+            if (gPtcl[j].life > 0) continue;
+            float a = (float)s * 3.14159f * 2.f / (float)sparks + (random(100) / 100.f) * 0.5f;
+            gPtcl[j].x    = cx;
+            gPtcl[j].y    = cy;
+            gPtcl[j].vx   = (int8_t)(3.f * cosf(a));
+            gPtcl[j].vy   = (int8_t)(3.f * sinf(a));
+            gPtcl[j].life = (uint8_t)(8 + random(8));
+            gPtcl[j].color = cc;
+            break;
+          }
+        }
+        continue;
+      }
+      continue; // crackle seed still waiting
+    }
 
     if (gPtcl[i].life > 100) {
       // Rocket phase: ascending
@@ -2439,7 +2570,7 @@ void renderFireworksFrame() {
       }
     }
   }
-  if (!anyAlive) initFireworkRocket();
+  if (!anyAlive && !fwManualOnly) initFireworkRocket();
   pushCanvas();
 }
 
@@ -2786,6 +2917,7 @@ void setParticleMode(const String& name) {
   lastParticleTickMs = 0;
   expressionPhase    = 0;
   gfx->fillScreen(COL_BG);
+  fwManualOnly = false; // "Send fireworks" enables auto-relaunch
   if      (name == "fireworks")  { currentMode = MODE_FIREWORKS;  initFireworks();  }
   else if (name == "heart_rain") { currentMode = MODE_HEART_RAIN; initHeartRain(); }
   else if (name == "snowfall")   { currentMode = MODE_SNOWFALL;   initSnowfall();  }
@@ -3469,6 +3601,18 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "set_firework_size") {
+    String sz = extractJsonStringField(body, "size", "medium");
+    if      (sz == "small")  fireworkSize = 0;
+    else if (sz == "medium") fireworkSize = 1;
+    else if (sz == "large")  fireworkSize = 2;
+    else if (sz == "xl")     fireworkSize = 3;
+    else if (sz == "xxl")    fireworkSize = 4;
+    else if (sz == "random") fireworkSize = 5;
+    else                     fireworkSize = 1;
+    return;
+  }
+
   if (type == "set_note_animation") {
     String anim = extractJsonStringField(body, "animation", "none");
     if      (anim == "flowing_water")    noteAnimType = 1;
@@ -3540,6 +3684,7 @@ void handleCommandJson(const String& body) {
       gPtclCount = 48;
       for (uint8_t i = 0; i < 48; i++) gPtcl[i].life = 0;
     }
+    fwManualOnly = true; // Manual rockets: no auto-relaunch
     // Find a free particle slot for a new rocket
     for (uint8_t i = 0; i < 48; i++) {
       if (gPtcl[i].life > 0) continue;

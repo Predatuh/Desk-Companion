@@ -68,7 +68,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _mode = 'idle';
   String _connectedSsid = '';
   String _deviceName = '';
-  String _relayBaseUrl = 'http://desk-companion-relay.fly.dev';
+  String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
@@ -776,6 +776,17 @@ class DeskCompanionController extends ChangeNotifier {
         mode: 'firework_palette',
         bleLabel: 'Firework palette sent over BLE.',
         relayLabel: 'Firework palette queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendFireworkSize(String size) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_firework_size', 'size': size},
+        mode: 'firework_size',
+        bleLabel: 'Firework size sent over BLE.',
+        relayLabel: 'Firework size queued through relay.',
       );
     });
   }
