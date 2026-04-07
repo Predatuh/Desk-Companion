@@ -322,6 +322,9 @@ void renderImage();
 void renderColorImage();
 void renderIdle();
 void renderCurrentMode();
+void drawFireworkParticle(int16_t x, int16_t y, int r, uint16_t c);
+void renderAnimatedNoteFrame();
+void initNoteOverlay();
 String petDisplayLabel(const String& value);
 String normalizePetPersonality(const String& value);
 String normalizePetMode(const String& value);
@@ -2434,13 +2437,6 @@ void renderStarfieldFrame() {
       gPtcl[i].life = (uint8_t)(50 + random(14));
     } else {
       int r = (gPtcl[i].life < 20) ? 2 : 1;
-      uint16_t c = (gPtcl[i].life < 20) ? userAccentColor : userFaceColor;
-      gfx->fillCircle(sx, sy, r, c);
-    }
-  }
-  pushCanvas();
-}
-
       uint16_t c = (gPtcl[i].life < 20) ? userAccentColor : userFaceColor;
       gfx->fillCircle(sx, sy, r, c);
     }
