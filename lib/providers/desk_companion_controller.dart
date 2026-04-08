@@ -14,6 +14,9 @@ import '../models/companion_visual_model.dart';
 enum CompanionBleState { disconnected, scanning, connecting, connected }
 
 class DeskCompanionController extends ChangeNotifier {
+  static const Duration _relayHeartbeatGrace = Duration(seconds: 75);
+  static const Duration _relayStatusRefreshInterval = Duration(seconds: 5);
+
   DeskCompanionController() {
     unawaited(_loadRelayPreferences());
   }
@@ -112,6 +115,8 @@ class DeskCompanionController extends ChangeNotifier {
   bool _busy = false;
   bool _wifiScanPending = false;
   bool _wifiConnectPending = false;
+  double _relaySendProgress = 0.0;
+  Timer? _relayDeliveryPollTimer;
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _commandCharacteristic;
@@ -126,6 +131,7 @@ class DeskCompanionController extends ChangeNotifier {
   Uint8List? _queuedLiveBitmap;
   bool _intentionalDisconnect = false;
   Timer? _relayPollTimer;
+  bool _relayStatusRequestInFlight = false;
 
   CompanionBleState get bleState => _bleState;
   String get statusMessage => _statusMessage;
@@ -176,12 +182,13 @@ class DeskCompanionController extends ChangeNotifier {
   bool get busy => _busy;
   bool get wifiScanPending => _wifiScanPending;
   bool get wifiConnectPending => _wifiConnectPending;
+  double get relaySendProgress => _relaySendProgress;
   bool get wifiConnected =>
       _connectedSsid.isNotEmpty && _wifiIpAddress.isNotEmpty;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
   bool get hasRelayTarget =>
       _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
-  bool get canControlDevice => isBleConnected || _relayOnline;
+  bool get canControlDevice => isBleConnected || hasRelayTarget;
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
@@ -1053,7 +1060,7 @@ class DeskCompanionController extends ChangeNotifier {
       final sent = await _postRelay(payload);
       if (sent) {
         _mode = mode;
-        _scheduleRelayDeliveryCheck(relayLabel);
+        _pollRelayDelivery(relayLabel);
         notifyListeners();
         return;
       }
@@ -1076,7 +1083,7 @@ class DeskCompanionController extends ChangeNotifier {
       if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
         _mode = 'image';
         if (!silent) {
-          _scheduleRelayDeliveryCheck('Image queued through relay.');
+          _pollRelayDelivery('Image');
         }
         return;
       }
@@ -1108,11 +1115,62 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> _sendColorBitmap(Uint8List rgb565) async {
-    if (!isBleConnected ||
-        _imageCharacteristic == null ||
-        _commandCharacteristic == null) {
+    final canSendOverBle = isBleConnected &&
+        _imageCharacteristic != null &&
+        _commandCharacteristic != null;
+
+    if (!canSendOverBle && hasRelayTarget) {
+      _relaySendProgress = 0.0;
+      notifyListeners();
+
+      final started = await _postRelay({
+        'type': 'begin_color_image',
+        'total': rgb565.length,
+      });
+      if (!started) {
+        _relaySendProgress = 0.0;
+        notifyListeners();
+        throw HttpException(_lastRelayError ?? 'Relay send failed.');
+      }
+
+      const chunkSize = 3072;
+      final totalChunks =
+          (rgb565.length + chunkSize - 1) ~/ chunkSize;
+      var chunkIndex = 0;
+      for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
+        final end = (offset + chunkSize < rgb565.length)
+            ? offset + chunkSize
+            : rgb565.length;
+        final sent = await _postRelay({
+          'type': 'color_image_chunk',
+          'data': base64Encode(rgb565.sublist(offset, end)),
+        });
+        if (!sent) {
+          _relaySendProgress = 0.0;
+          notifyListeners();
+          throw HttpException(_lastRelayError ?? 'Relay send failed.');
+        }
+        chunkIndex++;
+        _relaySendProgress = chunkIndex / (totalChunks + 1);
+        _setStatus(
+            'Uploading… (${(_relaySendProgress * 100).round()}%)');
+      }
+
+      if (await _postRelay({'type': 'commit_color_image'})) {
+        _relaySendProgress = 1.0;
+        notifyListeners();
+        _mode = 'color_image';
+        _pollRelayDelivery('Color image');
+        return;
+      }
+      _relaySendProgress = 0.0;
+      notifyListeners();
+      throw HttpException(_lastRelayError ?? 'Relay send failed.');
+    }
+
+    if (!canSendOverBle) {
       throw const HttpException(
-          'BLE is not connected. Color images require BLE.');
+          'BLE is not connected and relay color image send is unavailable.');
     }
 
     await _sendBleCommand(
@@ -1164,15 +1222,20 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<bool> _fetchRelayStatus() async {
-    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
-    final token = _deviceToken.trim();
-    if (base.isEmpty || token.isEmpty) {
-      _setStatus('Relay URL or token is empty.');
-      return false;
+    if (_relayStatusRequestInFlight) {
+      return _relayOnline;
     }
 
-    final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+    _relayStatusRequestInFlight = true;
+    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
+    final token = _deviceToken.trim();
     try {
+      if (base.isEmpty || token.isEmpty) {
+        _setStatus('Relay URL or token is empty.');
+        return false;
+      }
+
+      final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         _relayOnline = false;
@@ -1202,9 +1265,10 @@ class DeskCompanionController extends ChangeNotifier {
       _relayLastStatusAt = lastStatusAtValue == null
           ? null
           : DateTime.tryParse(lastStatusAtValue)?.toLocal();
-      _relayOnline = _relayLastSeenAt != null &&
-          DateTime.now().difference(_relayLastSeenAt!) <=
-              const Duration(seconds: 30);
+        final latestRelayActivity = _latestRelayActivityAt();
+        _relayOnline = latestRelayActivity != null &&
+          DateTime.now().difference(latestRelayActivity) <=
+            _relayHeartbeatGrace;
       _relayStatusKnown = true;
 
       final lastStatus = payload['lastStatus'];
@@ -1213,10 +1277,12 @@ class DeskCompanionController extends ChangeNotifier {
       }
 
       if (!_relayOnline) {
-        if (_relayLastStatusAt != null) {
+        if (_relayLastSeenAt == null && _relayLastStatusAt != null) {
           _setStatus(
             'Device reached the relay, but it is not polling for commands yet.',
           );
+        } else if (latestRelayActivity != null) {
+          _setStatus('Device relay heartbeat is stale. Continuing to watch for reconnect.');
         } else {
           _setStatus('Device is not checking in to the relay.');
         }
@@ -1234,7 +1300,21 @@ class DeskCompanionController extends ChangeNotifier {
         _setStatus('Relay error: $message');
       }
       return false;
+    } finally {
+      _relayStatusRequestInFlight = false;
     }
+  }
+
+  DateTime? _latestRelayActivityAt() {
+    if (_relayLastSeenAt == null) {
+      return _relayLastStatusAt;
+    }
+    if (_relayLastStatusAt == null) {
+      return _relayLastSeenAt;
+    }
+    return _relayLastSeenAt!.isAfter(_relayLastStatusAt!)
+        ? _relayLastSeenAt
+        : _relayLastStatusAt;
   }
 
   void _applyStatusMap(Map<String, dynamic> payload) {
@@ -1458,10 +1538,18 @@ class DeskCompanionController extends ChangeNotifier {
     }
   }
 
-  void _scheduleRelayDeliveryCheck(String successLabel) {
-    _setStatus('Sent via relay. Checking delivery...');
-    Future.delayed(const Duration(seconds: 6), () async {
+  void _pollRelayDelivery(String successLabel) {
+    _relayDeliveryPollTimer?.cancel();
+    _setStatus('Queued on relay. Waiting for device…');
+    var attempts = 0;
+    const maxAttempts = 30;
+    _relayDeliveryPollTimer =
+        Timer.periodic(const Duration(seconds: 2), (timer) async {
+      attempts++;
       if (isBleConnected || !hasRelayTarget) {
+        timer.cancel();
+        _relaySendProgress = 0.0;
+        notifyListeners();
         return;
       }
       try {
@@ -1477,22 +1565,29 @@ class DeskCompanionController extends ChangeNotifier {
           return;
         }
         final pending = (payload['pending'] as int?) ?? 0;
-        final lastPullAtValue = payload['lastPullAt'] as String?;
-        final lastPullAt = lastPullAtValue == null
-            ? null
-            : DateTime.tryParse(lastPullAtValue)?.toLocal();
-        final isActivelyPolling = lastPullAt != null &&
-            DateTime.now().difference(lastPullAt) <=
-                const Duration(seconds: 30);
         if (pending == 0) {
+          timer.cancel();
+          _relaySendProgress = 0.0;
           _setStatus('Delivered. $successLabel');
-        } else if (!isActivelyPolling) {
+          return;
+        }
+        _setStatus('Queued on relay ($pending pending)…');
+      } catch (_) {
+        // Ignore transient errors, keep polling.
+      }
+      if (attempts >= maxAttempts) {
+        timer.cancel();
+        _relaySendProgress = 0.0;
+        final lastPull =
+            _relayLastSeenAt;
+        final isActive = lastPull != null &&
+            DateTime.now().difference(lastPull) <= _relayHeartbeatGrace;
+        if (!isActive) {
           _setStatus('Queued on relay. Device is not polling remotely.');
         } else {
-          _setStatus('Queued on relay. Waiting for the next device poll.');
+          _setStatus(
+              'Queued on relay. Timed out waiting — device may still receive it.');
         }
-      } catch (_) {
-        // Ignore follow-up failures; the last send status is good enough.
       }
     });
   }
@@ -1569,8 +1664,8 @@ class DeskCompanionController extends ChangeNotifier {
 
   void _startRelayPollTimer() {
     _relayPollTimer?.cancel();
-    _relayPollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!isBleConnected && hasRelayTarget && !_busy) {
+    _relayPollTimer = Timer.periodic(_relayStatusRefreshInterval, (_) {
+      if (!isBleConnected && hasRelayTarget) {
         unawaited(_fetchRelayStatus());
       }
     });
@@ -1579,6 +1674,7 @@ class DeskCompanionController extends ChangeNotifier {
   @override
   void dispose() {
     _relayPollTimer?.cancel();
+    _relayDeliveryPollTimer?.cancel();
     _scanSub?.cancel();
     _notifySub?.cancel();
     _connectionSub?.cancel();

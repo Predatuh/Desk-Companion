@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <Wire.h>
+#include <esp_wifi.h>
 #include <esp_system.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -258,6 +259,13 @@ void setupDisplay();
 void setupButtons();
 void handleButtons();
 bool probeDisplayOnPins(int sdaPin, int sclPin, uint8_t& foundAddr);
+void configureWifiStaMode();
+
+void configureWifiStaMode() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+}
 bool isButtonPinUsable(int pin);
 
 String bleValueToString(const String& value) {
@@ -2118,7 +2126,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   }
   preferences.end();
 
-  WiFi.mode(WIFI_STA);
+  configureWifiStaMode();
   delay(100);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
@@ -2185,7 +2193,7 @@ void scanWifiNetworks() {
     delay(150);
   }
 
-  WiFi.mode(WIFI_STA);
+  configureWifiStaMode();
   delay(120);
   WiFi.scanDelete();
   availableWifiNetworkCount = 0;
@@ -2197,7 +2205,7 @@ void scanWifiNetworks() {
     publishStatus();
     WiFi.scanDelete();
     delay(250);
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(120);
     foundNetworks = WiFi.scanNetworks(false, false, false, 300);
   }
@@ -2221,7 +2229,7 @@ void scanWifiNetworks() {
   WiFi.scanDelete();
 
   if (shouldRestoreWifi) {
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(100);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -3056,6 +3064,7 @@ void setup() {
   Serial.printf("[BOOT] Reset reason: %d\n", static_cast<int>(esp_reset_reason()));
 
   WiFi.persistent(false);
+  configureWifiStaMode();
 
   setupDisplay();
   setupButtons();
@@ -3130,7 +3139,7 @@ void loop() {
     statusText = "Starting Wi-Fi";
     publishStatus();
     Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(100);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -3168,7 +3177,7 @@ void loop() {
         millis() - lastWifiCheckMs >= 60000) {
       statusText = "Retrying Wi-Fi";
       publishStatus();
-      WiFi.mode(WIFI_STA);
+      configureWifiStaMode();
       delay(100);
       WiFi.setAutoReconnect(true);
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -3207,6 +3216,7 @@ void loop() {
       publishStatus();
       WiFi.disconnect(false, false);
       delay(100);
+      configureWifiStaMode();
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
       markWifiJoinStarted();
       lastWifiCheckMs = millis();

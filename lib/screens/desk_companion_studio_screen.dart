@@ -835,12 +835,23 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              if (_activeWorkspace == _StudioWorkspace.companion)
-                _buildStickyPreview(context, controller, currentPersonality, currentPetMode),
-              Expanded(
-                child: SingleChildScrollView(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final showPinnedPreview =
+                  _activeWorkspace == _StudioWorkspace.companion &&
+                  constraints.maxHeight >= 720;
+
+              return Column(
+                children: [
+                  if (showPinnedPreview)
+                    _buildStickyPreview(
+                      context,
+                      controller,
+                      currentPersonality,
+                      currentPetMode,
+                    ),
+                  Expanded(
+                    child: SingleChildScrollView(
             physics: _drawModeEnabled
                 ? const NeverScrollableScrollPhysics()
                 : const BouncingScrollPhysics(),
@@ -859,6 +870,29 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (controller.relaySendProgress > 0 &&
+                          controller.relaySendProgress < 1)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: controller.relaySendProgress,
+                                  minHeight: 6,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${(controller.relaySendProgress * 100).round()}%',
+                                style:
+                                    Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -2059,9 +2093,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ],
               ],
             ),
-          ),
-              ),
-            ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -3506,8 +3542,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         .trim();
     if (text.isEmpty) return;
 
-    // Always render as image — guarantees exact WYSIWYG with the preview,
-    // correct emoji rendering, and proper font sizing on device.
+    // Render notes as full-color cards for both BLE and relay so the device
+    // matches the on-screen preview exactly.
     await _perform(
       () async {
         final rgb565 = await NoteCardPreview.renderToRgb565(
@@ -3523,7 +3559,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           await controller.sendNoteAnimation(_selectedNoteAnimation.command);
         }
       },
-      success: 'Note delivered.',
+      success: controller.isBleConnected ? 'Note delivered.' : 'Note sent to relay.',
     );
   }
 
@@ -3533,7 +3569,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         _bannerController.text.trim(),
         speed: _bannerSpeed.round(),
       ),
-      success: 'Banner started.',
+      success: controller.isBleConnected ? 'Banner started.' : 'Banner sent to relay.',
     );
   }
 
@@ -3541,7 +3577,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _stopLiveScenePlayback();
     await _perform(
       () => controller.sendExpression(_selectedExpression.command),
-      success: '${_selectedExpression.label} expression sent.',
+      success: controller.isBleConnected
+          ? '${_selectedExpression.label} expression sent.'
+          : '${_selectedExpression.label} sent to relay.',
     );
   }
 
@@ -3919,8 +3957,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       return '';
     }
     final lastSeenAt = controller.relayLastSeenAt;
+    final lastStatusAt = controller.relayLastStatusAt;
     if (lastSeenAt == null) {
-      final lastStatusAt = controller.relayLastStatusAt;
       if (lastStatusAt != null) {
         final age = DateTime.now().difference(lastStatusAt);
         final ageLabel = age.inMinutes < 1
@@ -3941,6 +3979,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         : age.inHours < 1
             ? '${age.inMinutes}m ago'
             : '${age.inHours}h ago';
+    if (!controller.isRemoteConnected) {
+      return 'Last device check-in over Wi-Fi: $ageLabel. Commands can still queue through the relay while the app keeps checking for reconnect.';
+    }
     return 'Last device check-in over Wi-Fi: $ageLabel';
   }
 

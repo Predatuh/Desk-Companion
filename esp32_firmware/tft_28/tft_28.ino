@@ -18,6 +18,7 @@ static const FwSizeParams FW_SIZES[] = {
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <esp_wifi.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 #include <BLEDevice.h>
@@ -335,6 +336,9 @@ const char* modeName(DisplayMode mode);
 int relayRequest(const char* method, const String& url, const String& body, String& response);
 void clearImageBuffer();
 bool decodeBase64IntoImage(const String& input);
+bool appendBase64ColorChunk(const String& input);
+bool decodeBase64IntoColorImage(const String& input);
+bool relayColorTransferActive();
 void publishStatus();
 void publishStatusWithNetworks();
 String buildSlimStatusJson();
@@ -380,6 +384,7 @@ void setExpression(const String& expression);
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent = "");
 void setBanner(const String& text, int speed);
 void setImageReady();
+void clearSavedNote();
 void setFlower(const String& flowerType);
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
 bool connectToWifi(const String& ssid, const String& password);
@@ -402,6 +407,37 @@ void handleCommandJson(const String& body);
 void pushRelayStatus();
 void pollRelay();
 void setupBle();
+void configureWifiStaMode();
+bool isRelayBackgroundMode();
+unsigned long relayPollIntervalMs();
+unsigned long relayStatusIntervalMs();
+
+void configureWifiStaMode() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+}
+
+bool isRelayBackgroundMode() {
+  return currentMode == MODE_FIREWORKS ||
+      currentMode == MODE_HEART_RAIN ||
+      currentMode == MODE_SNOWFALL ||
+      currentMode == MODE_STARFIELD ||
+      currentMode == MODE_ANIMATED_NOTE ||
+      currentMode == MODE_COUNTDOWN;
+}
+
+unsigned long relayPollIntervalMs() {
+  if (relayColorTransferActive() || imageTransferActive) return 150UL;
+  if (currentMode == MODE_BANNER) return 8000UL;
+  if (isRelayBackgroundMode()) return 15000UL;
+  return 4000UL;
+}
+
+unsigned long relayStatusIntervalMs() {
+  if (isRelayBackgroundMode()) return 60000UL;
+  return 30000UL;
+}
 void setupDisplay();
 void handleTouch();
 void drawStickFigure(int cx, int cy, int sc, float armLA, float armRA, float legLA, float legRA, uint16_t color);
@@ -834,6 +870,12 @@ void clearImageBuffer() {
   memset(imageBuffer, 0, sizeof(imageBuffer));
 }
 
+bool relayColorTransferActive() {
+  return colorImageTransferActive &&
+      expectedColorBytes > 0 &&
+      receivedColorBytes < expectedColorBytes;
+}
+
 // ─── Pet logic (identical to mini) ───
 
 String petDisplayLabel(const String& value) {
@@ -1202,6 +1244,79 @@ bool decodeBase64IntoImage(const String& input) {
     reinterpret_cast<const unsigned char*>(input.c_str()), input.length()
   );
   return result == 0 && outputLength == sizeof(imageBuffer);
+}
+
+bool decodeBase64IntoColorImage(const String& input) {
+  const size_t targetBytes = SCREEN_WIDTH * SCREEN_HEIGHT * 2;
+  size_t decodedLength = 0;
+  if (mbedtls_base64_decode(nullptr, 0, &decodedLength,
+      reinterpret_cast<const unsigned char*>(input.c_str()), input.length()) != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    return false;
+  }
+  if (decodedLength != targetBytes) {
+    return false;
+  }
+  if (!colorImageBuffer) {
+    colorImageBuffer = (uint16_t*)ps_malloc(targetBytes);
+  }
+  if (!colorImageBuffer) {
+    return false;
+  }
+
+  size_t outputLength = 0;
+  const int result = mbedtls_base64_decode(
+    reinterpret_cast<unsigned char*>(colorImageBuffer),
+    targetBytes,
+    &outputLength,
+    reinterpret_cast<const unsigned char*>(input.c_str()),
+    input.length()
+  );
+  if (result != 0 || outputLength != targetBytes) {
+    return false;
+  }
+
+  const size_t pixelCount = SCREEN_WIDTH * SCREEN_HEIGHT;
+  for (size_t i = 0; i < pixelCount; i++) {
+    uint8_t hi = ((uint8_t*)colorImageBuffer)[i * 2];
+    uint8_t lo = ((uint8_t*)colorImageBuffer)[i * 2 + 1];
+    colorImageBuffer[i] = (uint16_t)(hi << 8) | lo;
+  }
+
+  return true;
+}
+
+bool appendBase64ColorChunk(const String& input) {
+  if (!colorImageTransferActive || !colorImageBuffer) {
+    return false;
+  }
+
+  size_t decodedLength = 0;
+  if (mbedtls_base64_decode(
+          nullptr,
+          0,
+          &decodedLength,
+          reinterpret_cast<const unsigned char*>(input.c_str()),
+          input.length()) != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    return false;
+  }
+
+  if (receivedColorBytes + decodedLength > expectedColorBytes) {
+    return false;
+  }
+
+  size_t outputLength = 0;
+  const int result = mbedtls_base64_decode(
+      reinterpret_cast<unsigned char*>(colorImageBuffer) + receivedColorBytes,
+      expectedColorBytes - receivedColorBytes,
+      &outputLength,
+      reinterpret_cast<const unsigned char*>(input.c_str()),
+      input.length());
+  if (result != 0 || outputLength != decodedLength) {
+    return false;
+  }
+
+  receivedColorBytes += outputLength;
+  return true;
 }
 
 void publishStatus() {
@@ -3826,6 +3941,16 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "color_image_chunk") {
+    const String encoded = extractJsonStringField(body, "data");
+    if (!appendBase64ColorChunk(encoded)) {
+      colorImageTransferActive = false;
+      statusText = "Bad color image chunk";
+      publishStatus();
+    }
+    return;
+  }
+
   if (type == "commit_color_image") {
     if (colorImageTransferActive && receivedColorBytes == expectedColorBytes) {
       colorImageTransferActive = false;
@@ -3837,6 +3962,7 @@ void handleCommandJson(const String& body) {
         colorImageBuffer[i] = (uint16_t)(hi << 8) | lo;
       }
       currentMode = MODE_COLOR_IMAGE;
+      clearSavedNote();
       statusText = "Color image ready";
       renderCurrentMode();
       publishStatus();
@@ -3856,6 +3982,22 @@ void handleCommandJson(const String& body) {
       statusText = "Bad image payload";
       publishStatus();
     }
+    return;
+  }
+
+  if (type == "set_color_image") {
+    const String encoded = extractJsonStringField(body, "data");
+    if (decodeBase64IntoColorImage(encoded)) {
+      currentMode = MODE_COLOR_IMAGE;
+      clearSavedNote();
+      statusText = "Color image ready";
+      renderCurrentMode();
+      publishStatus();
+    } else {
+      statusText = "Bad color image payload";
+      publishStatus();
+    }
+    return;
   }
 }
 
@@ -3869,6 +4011,12 @@ void setIdleStatus(const String& value) {
   activeCareAction = "";
   renderCurrentMode();
   publishStatus();
+}
+
+void clearSavedNote() {
+  preferences.begin("desk-cfg", false);
+  preferences.remove("note_text");
+  preferences.end();
 }
 
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent) {
@@ -3916,6 +4064,7 @@ void setBanner(const String& text, int speed) {
   boredomLevel = clampLevel(boredomLevel - 6);
   energyLevel = clampLevel(energyLevel - 2);
   persistPetState();
+  clearSavedNote();
   currentMode = MODE_BANNER;
   statusText = "Banner running";
   renderCurrentMode();
@@ -3928,6 +4077,7 @@ void setExpression(const String& expression) {
   expressionPhase = 0;
   lastExpressionTickMs = 0;
   gfx->fillScreen(COL_BG);
+  clearSavedNote();
   currentMode = MODE_EXPRESSION;
   statusText = "Expression active";
   renderCurrentMode();
@@ -3935,6 +4085,7 @@ void setExpression(const String& expression) {
 }
 
 void setImageReady() {
+  clearSavedNote();
   currentMode = MODE_IMAGE;
   statusText = "Image ready";
   renderCurrentMode();
@@ -3976,7 +4127,7 @@ bool connectToWifi(const String& ssid, const String& password) {
   if (!relayUrl.isEmpty()) preferences.putString("relay_url", relayUrl);
   if (!deviceToken.isEmpty()) preferences.putString("device_token", deviceToken);
   preferences.end();
-  WiFi.mode(WIFI_STA);
+  configureWifiStaMode();
   delay(100);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
@@ -4031,7 +4182,7 @@ void scanWifiNetworks() {
     WiFi.disconnect(false, false);
     delay(150);
   }
-  WiFi.mode(WIFI_STA);
+  configureWifiStaMode();
   delay(120);
   WiFi.scanDelete();
   availableWifiNetworkCount = 0;
@@ -4042,7 +4193,7 @@ void scanWifiNetworks() {
     publishStatus();
     WiFi.scanDelete();
     delay(250);
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(120);
     foundNetworks = WiFi.scanNetworks(false, false, false, 300);
   }
@@ -4057,7 +4208,7 @@ void scanWifiNetworks() {
   }
   WiFi.scanDelete();
   if (shouldRestoreWifi) {
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(100);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -4139,7 +4290,7 @@ void pushRelayStatus() {
 
 void pollRelay() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) return;
-  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
+  const unsigned long pollInterval = relayPollIntervalMs();
   if (millis() - lastRelayPollMs < pollInterval) return;
   lastRelayPollMs = millis();
   const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
@@ -4358,6 +4509,7 @@ void setup() {
   Serial.printf("[BOOT] Free heap: %u  PSRAM: %u\n", ESP.getFreeHeap(), ESP.getFreePsram());
 
   WiFi.persistent(false);
+  configureWifiStaMode();
 
   Serial.println("[BOOT] setupDisplay...");
   setupDisplay();
@@ -4464,10 +4616,8 @@ void loop() {
     }
   }
 
-  // Skip blocking network calls during particle/animation modes to avoid stutter
-  const bool inParticleMode = (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
-                               currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD ||
-                               currentMode == MODE_ANIMATED_NOTE || currentMode == MODE_COUNTDOWN);
+  // Keep relay maintenance alive during heavy animation modes, but at a slower cadence.
+  const bool inParticleMode = isRelayBackgroundMode();
 
   // Weather auto-fetch every 10 min when WiFi+location set (skip during particle modes)
   if (!inParticleMode &&
@@ -4491,7 +4641,7 @@ void loop() {
     statusText = "Starting Wi-Fi";
     publishStatus();
     Serial.println("[BOOT] Starting deferred Wi-Fi reconnect.");
-    WiFi.mode(WIFI_STA);
+    configureWifiStaMode();
     delay(100);
     WiFi.setAutoReconnect(true);
     WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -4529,7 +4679,7 @@ void loop() {
         millis() - lastWifiCheckMs >= 60000) {
       statusText = "Retrying Wi-Fi";
       publishStatus();
-      WiFi.mode(WIFI_STA);
+      configureWifiStaMode();
       delay(100);
       WiFi.setAutoReconnect(true);
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
@@ -4550,8 +4700,8 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  // Skip relay network calls during particle/animation modes to avoid stutter
-  if (!inParticleMode && (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000))) {
+  if (relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
     pushRelayStatus();
   }
 
@@ -4569,6 +4719,7 @@ void loop() {
       publishStatus();
       WiFi.disconnect(false, false);
       delay(100);
+      configureWifiStaMode();
       WiFi.begin(currentSsid.c_str(), storedWifiPass.c_str());
       markWifiJoinStarted();
       lastWifiCheckMs = millis();
@@ -4576,9 +4727,7 @@ void loop() {
     }
   }
 
-  if (!inParticleMode) {
-    pollRelay();
-  }
+  pollRelay();
 
   handleTouch();
 

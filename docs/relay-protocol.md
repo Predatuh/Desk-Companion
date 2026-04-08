@@ -41,6 +41,22 @@ Remote sends use:
 
 The relay stores the command in the device queue and returns a `2xx` response when queued successfully.
 
+Large full-color images are relayed as a sequence of smaller queued commands instead of one oversized payload:
+
+```json
+{ "type": "begin_color_image", "total": 153600 }
+```
+
+```json
+{ "type": "color_image_chunk", "data": "<base64 chunk>" }
+```
+
+```json
+{ "type": "commit_color_image" }
+```
+
+This allows the TFT device to keep polling and assemble the full RGB565 frame in PSRAM without requiring BLE.
+
 ## Device to relay
 
 ### Pull queued command
@@ -313,6 +329,15 @@ Care actions temporarily trigger a reaction scene and also adjust the companion'
 }
 ```
 
+- `set_color_image`
+
+```json
+{
+  "type": "set_color_image",
+  "data": "<base64 320x240 RGB565 bitmap>"
+}
+```
+
 ## Nearby image transfer over BLE
 
 When BLE is active, large image pushes use chunked transfer:
@@ -321,7 +346,7 @@ When BLE is active, large image pushes use chunked transfer:
 2. Write raw bitmap chunks to the image characteristic.
 3. Send `commit_image`.
 
-Remote relay image delivery uses `set_image` with a base64 payload instead.
+Remote relay image delivery uses `set_image` for monochrome bitmaps and `set_color_image` for TFT RGB565 frames.
 
 ## Pet behavior notes
 
