@@ -4740,8 +4740,9 @@ void handleTouch() {
     touchActive  = true;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
-    touchStartX  = (int)p.y;
-    touchStartY  = 240 - (int)p.x;
+    // Map raw portrait touch coords → landscape screen coords for MADCTL 0x28
+    touchStartX  = 319 - (int)p.y;
+    touchStartY  = (int)p.x;
   }
 
   if (!isTouched && touchActive) {
