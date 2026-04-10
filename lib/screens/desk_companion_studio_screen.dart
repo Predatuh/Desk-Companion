@@ -596,6 +596,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskFireworkSize _selectedFireworkSize = DeskFireworkSize.medium;
   int _selectedFireworkStages = 1; // 1=single, 2=double, 3=triple
   int _firecrackerFuseSeconds = 5;
+  String _firecrackerWord = 'BOOM!';
+  bool _firecrackerShowCountdown = true;
+  int _firecrackerCount = 1;
   DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
   DeskCountdownEndAction _countdownEndAction = DeskCountdownEndAction.fireworks;
   int _countdownHours = 0;
@@ -1840,11 +1843,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         const SizedBox(height: 16),
         _SectionCard(
           title: 'Display colors',
-          subtitle: 'Customise figure and partner colors on the device display.',
+          subtitle: 'Customise companion colors on the device display.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ColorRow(label: 'Figure', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+              _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Face', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
               const SizedBox(height: 8),
               _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
               const SizedBox(height: 8),
@@ -1855,8 +1860,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
               const SizedBox(height: 8),
               _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Partner', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -2214,7 +2217,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             children: [
               const Icon(Icons.timer_outlined, size: 20),
               const SizedBox(width: 8),
-              Text('${_firecrackerFuseSeconds}s'),
+              Text('Fuse ${_firecrackerFuseSeconds}s'),
               Expanded(
                 child: Slider(
                   value: _firecrackerFuseSeconds.toDouble(),
@@ -2227,6 +2230,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               ),
             ],
           ),
+          Row(
+            children: [
+              const Icon(Icons.numbers, size: 20),
+              const SizedBox(width: 8),
+              Text('×${_firecrackerCount}'),
+              Expanded(
+                child: Slider(
+                  value: _firecrackerCount.toDouble(),
+                  min: 1,
+                  max: 20,
+                  divisions: 19,
+                  label: '×${_firecrackerCount}',
+                  onChanged: (v) => setState(() => _firecrackerCount = v.round()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            decoration: const InputDecoration(
+              labelText: 'Explosion word',
+              hintText: 'BOOM!',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            controller: TextEditingController(text: _firecrackerWord),
+            onChanged: (v) => _firecrackerWord = v,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show countdown'),
+            value: _firecrackerShowCountdown,
+            onChanged: (v) => setState(() => _firecrackerShowCountdown = v),
+          ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -2234,7 +2273,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               onPressed: controller.busy || !controller.canControlDevice
                   ? null
                   : () => _perform(
-                        () => controller.sendFirecracker(_firecrackerFuseSeconds),
+                        () => controller.sendFirecracker(
+                          _firecrackerFuseSeconds,
+                          word: _firecrackerWord,
+                          showCountdown: _firecrackerShowCountdown,
+                          count: _firecrackerCount,
+                        ),
                         success: 'Firecracker lit! ${_firecrackerFuseSeconds}s fuse!',
                       ),
               icon: const Icon(Icons.local_fire_department),
@@ -5418,11 +5462,17 @@ class _FullscreenAppearanceEditorState
           const SizedBox(height: 8),
           _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
           const SizedBox(height: 8),
-          _ColorRow(label: 'Figure', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+          _ColorRow(label: 'Face', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Hat', color: _hatColor, onChanged: (c) => setState(() => _hatColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Mustache', color: _mustacheColor, onChanged: (c) => setState(() => _mustacheColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
           const SizedBox(height: 8),
           _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Partner', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
         ],
       ),
     );

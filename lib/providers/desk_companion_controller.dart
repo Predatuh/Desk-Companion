@@ -959,10 +959,21 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> sendFirecracker(int durationSeconds) async {
+  Future<void> sendFirecracker(
+    int durationSeconds, {
+    String word = 'BOOM!',
+    bool showCountdown = true,
+    int count = 1,
+  }) async {
     await _runBusy(() async {
       await _sendCommand(
-        {'type': 'fire_firecracker', 'duration': durationSeconds},
+        {
+          'type': 'fire_firecracker',
+          'duration': durationSeconds,
+          'word': word,
+          'countdown': showCountdown ? 1 : 0,
+          'count': count,
+        },
         mode: _mode,
         bleLabel: 'Firecracker lit over BLE!',
         relayLabel: 'Firecracker queued through relay!',
