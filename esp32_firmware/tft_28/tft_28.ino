@@ -4817,15 +4817,8 @@ void handleTouch() {
       currentMode = MODE_CONFIRM_CLEAR;
       renderConfirmClear();
 
-    } else if (holdDuration >= 500) {
-      // ─ Medium hold: comfort reaction
-      bondLevel    = clampLevel(bondLevel + 3);
-      boredomLevel = clampLevel(boredomLevel - 8);
-      persistPetState();
-      startTransientExpression(pickReactionExpression("comfort"), 2000, "Thanks for staying");
-
     } else {
-      // ─ Short tap
+      // ─ Short/medium tap
       if (currentMode == MODE_NOTE && noteQueueCount > 1) {
         noteQueueIndex      = (noteQueueIndex + 1) % noteQueueCount;
         currentNote         = noteQueue[noteQueueIndex];
@@ -4833,18 +4826,14 @@ void handleTouch() {
         currentMode         = MODE_NOTE;
         statusText          = "Showing note";
         renderCurrentMode(); publishStatus();
-        bondLevel    = clampLevel(bondLevel + 2);
-        boredomLevel = clampLevel(boredomLevel - 4);
-        persistPetState();
-        startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
 
       } else if (currentMode == MODE_SLEEP) {
         // Wake from sleep → idle, no reaction expression
         setIdleStatus("Ready");
 
       } else if (currentMode == MODE_IDLE &&
-                 touchStartX >= SCREEN_WIDTH - 36 && touchStartY <= 30) {
-        // Gear icon tap → open menu
+                 touchStartX >= SCREEN_WIDTH / 2 && touchStartY <= SCREEN_HEIGHT / 2) {
+        // Top-right quarter tap → open menu
         menuResumeMode = MODE_IDLE;
         menuPage = 0;
         menuOpenedMs = now;
@@ -4854,27 +4843,8 @@ void handleTouch() {
 
       } else if (currentMode != MODE_IDLE && currentMode != MODE_NOTE) {
         setIdleStatus("Ready");
-
-      } else {
-        if (now - lastTapReleaseMs < 400UL && lastTapReleaseMs > 0) {
-          lastTapReleaseMs = 0;
-          bondLevel    = clampLevel(bondLevel + 6);
-          boredomLevel = clampLevel(boredomLevel - 12);
-          persistPetState();
-          startTransientExpression(pickReactionExpression("cheer"), 2200, "Yay!");
-        } else {
-          lastTapReleaseMs = now;
-          if (displayAvailable) {
-            gfx->fillCircle(touchStartX, touchStartY, 7, userAccentColor);
-            gfx->fillCircle(touchStartX, touchStartY, 3, COL_BG);
-          }
-          delay(100);
-          bondLevel    = clampLevel(bondLevel + 2);
-          boredomLevel = clampLevel(boredomLevel - 5);
-          persistPetState();
-          startTransientExpression(pickReactionExpression("pet"), 1800, "That's nice");
-        }
       }
+      // Idle taps outside the gear zone: do nothing (no expressions)
     }
   }
 }
