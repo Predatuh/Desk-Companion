@@ -340,7 +340,8 @@ bool firecrackerExploded = false;
 String firecrackerWord = "BOOM!";
 bool firecrackerShowCountdown = true;
 uint8_t firecrackerCount = 1;
-uint8_t firecrackerCurrent = 0;  // which one in the strand is active
+unsigned long firecrackerWordDurationMs = 3000;  // how long word stays on screen
+unsigned long firecrackerExplodeMs = 0;          // millis() when explosion started
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
@@ -2391,7 +2392,7 @@ void renderExpressionFrame() {
     int mShift = (int)(sin(t * 3.14159f * 8.0f) * 3.0f);
     for (int line = 0; line < 3; line++) {
       gfx->drawLine(MX - 16, MY + mShift + line,
-                   MX + 16, MY - mShift + line, userFaceColor);
+                   MX + 16, MY - mShift + line, userMouthColor);
     }
     // Sweat drops (multiple, sliding down)
     float sweatT = fmod(t * 2.0f, 1.0f);
@@ -2436,7 +2437,7 @@ void renderExpressionFrame() {
     // Flat angled mouth
     for (int line = 0; line < 4; line++) {
       gfx->drawLine(MX - 16, MY + 2 + line,
-                   MX + 16, MY - 2 + line, userFaceColor);
+                   MX + 16, MY - 2 + line, userMouthColor);
     }
 
   } else if (currentExpression == "peaceful") {
@@ -2813,19 +2814,15 @@ void renderFirecrackerFrame() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
 
-  unsigned long elapsed = millis() - firecrackerStartMs;
+  unsigned long now = millis();
+  unsigned long elapsed = now - firecrackerStartMs;
   float progress = (float)elapsed / (float)firecrackerDurationMs;
   if (progress > 1.0f) progress = 1.0f;
 
-  // For strands, figure out active cracker index from time
   int totalCrackers = firecrackerCount;
-  float perCrackerFrac = 1.0f / (float)totalCrackers;
-  int activeCracker = (int)(progress / perCrackerFrac);
-  if (activeCracker >= totalCrackers) activeCracker = totalCrackers - 1;
-  float crackerLocalProgress = (progress - activeCracker * perCrackerFrac) / perCrackerFrac;
-  if (crackerLocalProgress > 1.0f) crackerLocalProgress = 1.0f;
 
   if (!firecrackerExploded && progress < 1.0f) {
+    // ── Draw all firecrackers (they all share ONE fuse) ──
     if (totalCrackers == 1) {
       // Single firecracker: centered
       int bodyX = 140, bodyY = 80, bodyW = 40, bodyH = 80;
@@ -2835,9 +2832,9 @@ void renderFirecrackerFrame() {
         gfx->fillRect(bodyX, sy, bodyW, 4, userAccentColor);
       }
       gfx->fillRoundRect(bodyX - 4, bodyY - 8, bodyW + 8, 14, 4, userEyeColor);
-      // Fuse
+      // Fuse from top, burning down
       float fuseTotal = 60.0f;
-      float fuseRemaining = fuseTotal * (1.0f - crackerLocalProgress);
+      float fuseRemaining = fuseTotal * (1.0f - progress);
       int fuseStartX = bodyX + bodyW / 2;
       int fuseStartY = bodyY - 8;
       for (float f = 0; f < fuseRemaining; f += 2.0f) {
@@ -2847,53 +2844,63 @@ void renderFirecrackerFrame() {
         gfx->fillCircle(fx, fy, 1, userEyeColor);
       }
       // Spark at tip
-      int sparkX = fuseStartX + (int)(sinf((1.0f - crackerLocalProgress) * 6.0f) * 12.0f);
+      int sparkX = fuseStartX + (int)(sinf((1.0f - progress) * 6.0f) * 12.0f);
       int sparkY = fuseStartY - (int)(fuseRemaining);
-      uint16_t sparkColors[] = {0xFFE0, 0xFBE0, 0xFC00, 0xFD20};
+      uint16_t sparkCols[] = {0xFFE0, 0xFBE0, 0xFC00, 0xFD20};
       for (int sp = 0; sp < 6; sp++) {
-        gfx->fillCircle(sparkX + random(11) - 5, sparkY + random(7) - 3, 1 + random(2), sparkColors[random(4)]);
+        gfx->fillCircle(sparkX + random(11) - 5, sparkY + random(7) - 3, 1 + random(2), sparkCols[random(4)]);
       }
     } else {
-      // Strand: draw multiple firecrackers in a row
+      // Multiple firecrackers in a row with ONE shared fuse connecting them
       int spacing = 300 / totalCrackers;
       int crackerW = (spacing < 30) ? spacing - 4 : 26;
       if (crackerW < 6) crackerW = 6;
       int crackerH = crackerW * 2;
-      int baseY = 140 - crackerH;
+      int baseY = 150 - crackerH;
+      int fuseY = baseY - 6;  // fuse runs along the top of all crackers
+
+      // Draw all firecracker bodies
       for (int c = 0; c < totalCrackers; c++) {
         int cx = 10 + c * spacing + spacing / 2 - crackerW / 2;
-        if (c < activeCracker) {
-          // Already exploded — draw smoke puff
-          gfx->fillCircle(cx + crackerW / 2, baseY + crackerH / 2, crackerW / 2 + 2, 0x4208);
-        } else if (c == activeCracker) {
-          // Active — draw with burning fuse
-          gfx->fillRoundRect(cx, baseY, crackerW, crackerH, 3, COL_ROSE);
-          gfx->fillRoundRect(cx - 2, baseY - 4, crackerW + 4, 7, 2, userEyeColor);
-          // Short fuse
-          float fuseLen = 20.0f * (1.0f - crackerLocalProgress);
-          int fuseX = cx + crackerW / 2;
-          int fuseY = baseY - 4;
-          for (float f = 0; f < fuseLen; f += 2.0f) {
-            int fy = fuseY - (int)f;
-            gfx->fillCircle(fuseX + (int)(sinf(f / 20.0f * 4.0f) * 4.0f), fy, 1, userEyeColor);
-          }
-          // Spark
-          uint16_t sparkColors[] = {0xFFE0, 0xFBE0, 0xFC00, 0xFD20};
-          int sparkY = fuseY - (int)fuseLen;
-          for (int sp = 0; sp < 4; sp++) {
-            gfx->fillCircle(fuseX + random(7) - 3, sparkY + random(5) - 2, 1, sparkColors[random(4)]);
-          }
-        } else {
-          // Waiting — draw unlit
-          gfx->fillRoundRect(cx, baseY, crackerW, crackerH, 3, COL_ROSE);
-          gfx->fillRoundRect(cx - 2, baseY - 4, crackerW + 4, 7, 2, userEyeColor);
-          // Full fuse
-          int fuseX = cx + crackerW / 2;
-          int fuseY = baseY - 4;
-          for (float f = 0; f < 20.0f; f += 2.0f) {
-            gfx->fillCircle(fuseX + (int)(sinf(f / 20.0f * 4.0f) * 4.0f), fuseY - (int)f, 1, userEyeColor);
-          }
+        gfx->fillRoundRect(cx, baseY, crackerW, crackerH, 3, COL_ROSE);
+        // Stripes
+        for (int s = 0; s < 2; s++) {
+          int sy = baseY + 4 + s * (crackerH / 3);
+          gfx->fillRect(cx, sy, crackerW, 2, userAccentColor);
         }
+        // Cap
+        gfx->fillRoundRect(cx - 2, baseY - 4, crackerW + 4, 7, 2, userEyeColor);
+      }
+
+      // Draw the shared horizontal fuse connecting all crackers
+      int firstCX = 10 + spacing / 2;
+      int lastCX = 10 + (totalCrackers - 1) * spacing + spacing / 2;
+      // The fuse runs from left of first to right of last at fuseY - 12
+      int fuseLineY = fuseY - 12;
+      float fuseLen = (float)(lastCX - firstCX + 20);
+      float burnedLen = fuseLen * progress;  // fuse burns left to right
+      // Draw remaining fuse (unburned portion)
+      int fuseStartPx = firstCX - 10 + (int)burnedLen;
+      int fuseEndPx = lastCX + 10;
+      if (fuseStartPx < fuseEndPx) {
+        for (int px = fuseStartPx; px <= fuseEndPx; px += 2) {
+          int fy = fuseLineY + (int)(sinf((float)(px - firstCX) / 20.0f) * 3.0f);
+          gfx->fillCircle(px, fy, 1, userEyeColor);
+        }
+      }
+      // Draw vertical fuse drops from horizontal fuse to each cracker cap
+      for (int c = 0; c < totalCrackers; c++) {
+        int cx = 10 + c * spacing + spacing / 2;
+        for (int dy = fuseLineY; dy <= fuseY; dy += 2) {
+          gfx->fillCircle(cx, dy, 1, userEyeColor);
+        }
+      }
+      // Spark traveling along the fuse
+      int sparkPx = firstCX - 10 + (int)burnedLen;
+      int sparkFY = fuseLineY + (int)(sinf((float)(sparkPx - firstCX) / 20.0f) * 3.0f);
+      uint16_t sparkCols[] = {0xFFE0, 0xFBE0, 0xFC00, 0xFD20};
+      for (int sp = 0; sp < 6; sp++) {
+        gfx->fillCircle(sparkPx + random(7) - 3, sparkFY + random(5) - 2, 1 + random(2), sparkCols[random(4)]);
       }
     }
 
@@ -2904,21 +2911,24 @@ void renderFirecrackerFrame() {
       gfx->setTextSize(totalCrackers == 1 ? 4 : 3);
       gfx->setTextColor(userEyeColor);
       int numW = secsLeft >= 10 ? 36 : 18;
-      gfx->setCursor(160 - numW / 2, totalCrackers == 1 ? 180 : 180);
+      gfx->setCursor(160 - numW / 2, totalCrackers == 1 ? 180 : 190);
       gfx->print(secsLeft);
     }
   } else {
-    // Explosion!
+    // ── Explosion! All firecrackers go off at once ──
     if (!firecrackerExploded) {
       firecrackerExploded = true;
-      int centerX = 160, centerY = 100;
-      if (totalCrackers > 1) {
-        // Explode from the last cracker's position
-        int spacing = 300 / totalCrackers;
-        centerX = 10 + (totalCrackers - 1) * spacing + spacing / 2;
-      }
+      firecrackerExplodeMs = now;
+      // Spread particles across all cracker positions
+      int spacing = totalCrackers > 1 ? 300 / totalCrackers : 0;
+      uint8_t perCracker = 48 / totalCrackers;
+      if (perCracker < 2) perCracker = 2;
       for (uint8_t i = 0; i < 48; i++) {
-        float a = (float)i * 3.14159f * 2.f / 48.f + (random(100) / 200.f);
+        int whichCracker = (int)(i / perCracker);
+        if (whichCracker >= totalCrackers) whichCracker = totalCrackers - 1;
+        int centerX = totalCrackers == 1 ? 160 : (10 + whichCracker * spacing + spacing / 2);
+        int centerY = totalCrackers == 1 ? 100 : 110;
+        float a = (float)i * 3.14159f * 2.f / (float)perCracker + (random(100) / 200.f);
         int spd = 4 + random(8);
         gPtcl[i].x = centerX;
         gPtcl[i].y = centerY;
@@ -2928,6 +2938,9 @@ void renderFirecrackerFrame() {
         gPtcl[i].color = pickBurstColor();
       }
     }
+
+    unsigned long explodeElapsed = now - firecrackerExplodeMs;
+
     // Render explosion particles
     bool anyAlive = false;
     for (uint8_t i = 0; i < 48; i++) {
@@ -2940,8 +2953,9 @@ void renderFirecrackerFrame() {
       int r = gPtcl[i].life > 10 ? 3 : (gPtcl[i].life > 5 ? 2 : 1);
       drawFireworkParticle(gPtcl[i].x, gPtcl[i].y, r, gPtcl[i].color);
     }
-    // Explosion word
-    if (firecrackerWord.length() > 0) {
+
+    // Show explosion word for the configured duration
+    if (firecrackerWord.length() > 0 && explodeElapsed < firecrackerWordDurationMs) {
       int wordLen = firecrackerWord.length();
       int textSize = wordLen <= 4 ? 4 : (wordLen <= 8 ? 3 : 2);
       int charW = textSize * 6;
@@ -2950,7 +2964,8 @@ void renderFirecrackerFrame() {
       gfx->setCursor(160 - (wordLen * charW) / 2, 108);
       gfx->print(firecrackerWord.c_str());
     }
-    if (!anyAlive) {
+
+    if (!anyAlive && explodeElapsed >= firecrackerWordDurationMs) {
       setIdleStatus("That was fun!");
     }
   }
@@ -4499,7 +4514,11 @@ void handleCommandJson(const String& body) {
     if (cnt < 1) cnt = 1;
     if (cnt > 20) cnt = 20;
     firecrackerCount = (uint8_t)cnt;
-    firecrackerCurrent = 0;
+    int wd = extractJsonIntField(body, "wordDuration", 3);
+    if (wd < 1) wd = 1;
+    if (wd > 30) wd = 30;
+    firecrackerWordDurationMs = (unsigned long)wd * 1000UL;
+    firecrackerExplodeMs = 0;
     currentMode = MODE_FIRECRACKER;
     statusText = "Firecracker lit!";
     publishStatus();

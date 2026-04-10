@@ -599,6 +599,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   String _firecrackerWord = 'BOOM!';
   bool _firecrackerShowCountdown = true;
   int _firecrackerCount = 1;
+  int _firecrackerWordDuration = 3;
   DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
   DeskCountdownEndAction _countdownEndAction = DeskCountdownEndAction.fireworks;
   int _countdownHours = 0;
@@ -2274,6 +2275,24 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             value: _firecrackerShowCountdown,
             onChanged: (v) => setState(() => _firecrackerShowCountdown = v),
           ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.text_fields, size: 20),
+              const SizedBox(width: 8),
+              Text('Word ${_firecrackerWordDuration}s'),
+              Expanded(
+                child: Slider(
+                  value: _firecrackerWordDuration.toDouble(),
+                  min: 1,
+                  max: 30,
+                  divisions: 29,
+                  label: '${_firecrackerWordDuration}s',
+                  onChanged: (v) => setState(() => _firecrackerWordDuration = v.round()),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -2286,6 +2305,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           word: _firecrackerWord,
                           showCountdown: _firecrackerShowCountdown,
                           count: _firecrackerCount,
+                          wordDuration: _firecrackerWordDuration,
                         ),
                         success: 'Firecracker lit! ${_firecrackerFuseSeconds}s fuse!',
                       ),

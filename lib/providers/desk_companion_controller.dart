@@ -964,6 +964,7 @@ class DeskCompanionController extends ChangeNotifier {
     String word = 'BOOM!',
     bool showCountdown = true,
     int count = 1,
+    int wordDuration = 3,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -973,6 +974,7 @@ class DeskCompanionController extends ChangeNotifier {
           'word': word,
           'countdown': showCountdown ? 1 : 0,
           'count': count,
+          'wordDuration': wordDuration,
         },
         mode: _mode,
         bleLabel: 'Firecracker lit over BLE!',
