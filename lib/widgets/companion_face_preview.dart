@@ -1254,28 +1254,22 @@ class _CompanionFacePainter extends CustomPainter {
     final idleLeftX = 70.0 + _clampOffset(eyeOffsetX) * 2.0;
     final idleRightX = 170.0 + _clampOffset(eyeOffsetX) * 2.0;
     final idleEyeY = 100.0 + _clampOffset(eyeOffsetY) * 2.0 + breathY;
-    final idleMouthX = 120.0 + _clampOffset(mouthOffsetX) * 2.0;
+    final idleMouthCenterX = 160.0 + _clampOffset(mouthOffsetX) * 2.0;
     final idleMouthY = 150.0 + _clampOffset(mouthOffsetY) * 2.0 + breathY;
     final expressionLeftX = 68.0 + _clampOffset(eyeOffsetX) * 2.0;
     final expressionRightX = 172.0 + _clampOffset(eyeOffsetX) * 2.0;
     final expressionEyeY = 85.0 + _clampOffset(eyeOffsetY) * 2.0;
-    final expressionMouthX = 120.0 + _clampOffset(mouthOffsetX) * 2.0;
+    final expressionMouthCenterX = 160.0 + _clampOffset(mouthOffsetX) * 2.0;
     final expressionMouthY = 140.0 + _clampOffset(mouthOffsetY) * 2.0;
 
     final normalizedExpression = expression?.trim();
 
-    final accessoryLeftX = normalizedExpression != null
-      ? expressionLeftX
-      : idleLeftX;
-    final accessoryRightX = normalizedExpression != null
-      ? expressionRightX
-      : idleRightX;
-    final accessoryEyeY = normalizedExpression != null
-      ? expressionEyeY
-      : idleEyeY;
-    final accessoryMouthY = normalizedExpression != null
-      ? expressionMouthY
-      : idleMouthY;
+    // Accessories use fixed base positions so they don't move with eye/mouth offsets.
+    // Hair/mustache still move independently via their own offset controls.
+    final accessoryBaseLeftX = normalizedExpression != null ? 68.0 : 70.0;
+    final accessoryBaseRightX = normalizedExpression != null ? 172.0 : 170.0;
+    final accessoryBaseEyeY = normalizedExpression != null ? 85.0 : (100.0 + breathY);
+    final accessoryBaseMouthY = normalizedExpression != null ? 140.0 : (150.0 + breathY);
     final isOff = !referencePose && normalizedExpression == null && petMode == 'off';
     final isSleepy = !referencePose && normalizedExpression == null && (petMode == 'nap' || personality == 'sleepy');
     final isCuddly = !referencePose && normalizedExpression == null && (petMode == 'cuddle' || personality == 'cuddly');
@@ -1285,7 +1279,7 @@ class _CompanionFacePainter extends CustomPainter {
     if (referencePose) {
       _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 0, 0);
       _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, 0, 0);
-      _drawOvalMouth(canvas, stroke, 160, idleMouthY, 9, 7);
+      _drawOvalMouth(canvas, stroke, idleMouthCenterX, idleMouthY, 9, 7);
     } else if (normalizedExpression != null) {
       _drawExpressionPreview(
         canvas,
@@ -1293,8 +1287,15 @@ class _CompanionFacePainter extends CustomPainter {
         fill,
         cut,
         normalizedExpression,
-        eyeY: expressionEyeY,
-        mouthY: expressionMouthY,
+        eyeY: expressionEyeY + breathY,
+        mouthY: expressionMouthY + breathY,
+        leftX: expressionLeftX,
+        rightX: expressionRightX,
+        mouthCenterX: expressionMouthCenterX,
+        t: t,
+        blinking: blinking,
+        driftDx: driftDx,
+        driftDy: driftDy,
       );
     } else if (isOff) {
       if (blinking) {
@@ -1304,13 +1305,13 @@ class _CompanionFacePainter extends CustomPainter {
         _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 40, 26, 9, driftDx, driftDy);
         _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 40, 26, 9, driftDx, driftDy);
       }
-      canvas.drawLine(Offset(143, idleMouthY), Offset(178, idleMouthY), stroke);
+      canvas.drawLine(Offset(idleMouthCenterX - 17, idleMouthY), Offset(idleMouthCenterX + 18, idleMouthY), stroke);
     } else if (isSleepy) {
       // Sleepy Z floats up with animation
       final zOffset = t * 12;
       _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 44, 8, 7);
       _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 44, 8, 7);
-      canvas.drawLine(Offset(140, idleMouthY), Offset(180, idleMouthY), stroke);
+      canvas.drawLine(Offset(idleMouthCenterX - 20, idleMouthY), Offset(idleMouthCenterX + 20, idleMouthY), stroke);
       _drawZ(canvas, stroke, Offset(200, 86 - zOffset), 2.5);
       _drawZ(canvas, stroke, Offset(216, 68 - zOffset), 2.0);
     } else if (isCuddly) {
@@ -1321,10 +1322,10 @@ class _CompanionFacePainter extends CustomPainter {
         _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, driftDx, driftDy);
         _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, driftDx, driftDy);
       }
-      _drawSmile(canvas, stroke, 160, idleMouthY - 2, 44);
+      _drawSmile(canvas, stroke, idleMouthCenterX, idleMouthY - 2, 44);
       // Heart pulses gently
       final heartScale = 6.0 + math.sin(t * 2 * math.pi) * 1.5;
-      _drawHeart(canvas, fill, Offset(160, 206 + breathY), heartScale);
+      _drawHeart(canvas, fill, Offset(idleMouthCenterX, 206 + breathY), heartScale);
     } else if (isPlayful) {
       if (blinking) {
         _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 48, 6, 7);
@@ -1333,7 +1334,7 @@ class _CompanionFacePainter extends CustomPainter {
         _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 6 + driftDx, driftDy);
         _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, 6 + driftDx, driftDy);
       }
-      _drawSmile(canvas, stroke, 160, idleMouthY - 4, 48);
+      _drawSmile(canvas, stroke, idleMouthCenterX, idleMouthY - 4, 48);
       // Ball bounces
       final bounceY = 184 - (math.sin(t * math.pi).abs()) * 20;
       canvas.drawCircle(Offset(45, bounceY), 4, fill);
@@ -1345,7 +1346,7 @@ class _CompanionFacePainter extends CustomPainter {
         _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 4 + driftDx, driftDy);
         _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, -4 + driftDx, driftDy);
       }
-      _drawSmile(canvas, stroke, 160, idleMouthY - 4, 52);
+      _drawSmile(canvas, stroke, idleMouthCenterX, idleMouthY - 4, 52);
       // Stars rotate around their positions
       final starR = 18.0;
       _drawStar(canvas, stroke, Offset(40 + math.cos(t * 2 * math.pi) * starR, 56 + math.sin(t * 2 * math.pi) * starR), 6);
@@ -1359,17 +1360,17 @@ class _CompanionFacePainter extends CustomPainter {
         _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 4 + driftDx, 2 + driftDy);
         _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, -2 + driftDx, -2 + driftDy);
       }
-      _drawOvalMouth(canvas, stroke, 160, idleMouthY, 9, 7);
+      _drawOvalMouth(canvas, stroke, idleMouthCenterX, idleMouthY, 9, 7);
     }
 
     _drawAccessories(
       canvas,
       stroke,
       fill,
-      accessoryLeftX,
-      accessoryRightX,
-      accessoryEyeY,
-      accessoryMouthY,
+      accessoryBaseLeftX,
+      accessoryBaseRightX,
+      accessoryBaseEyeY,
+      accessoryBaseMouthY,
     );
 
     if (showScreenBoundary) {
@@ -1379,7 +1380,7 @@ class _CompanionFacePainter extends CustomPainter {
     canvas.restore();
   }
 
-  int _clampPercent(int value) => value.clamp(70, 170);
+  int _clampPercent(int value) => value.clamp(10, 400);
 
   int _clampOffset(int value) => value.clamp(-60, 60);
 
@@ -1872,218 +1873,253 @@ class _CompanionFacePainter extends CustomPainter {
     String expression, {
     required double eyeY,
     required double mouthY,
+    double leftX = 68.0,
+    double rightX = 172.0,
+    double mouthCenterX = 160.0,
+    double t = 0.0,
+    bool blinking = false,
+    double driftDx = 0.0,
+    double driftDy = 0.0,
   }
   ) {
-    const leftX = 68.0;
-    const rightX = 172.0;
     const eyeWidth = 52.0;
     const eyeHeight = 40.0;
     const eyeRadius = 13.0;
     final eyeShift = eyeY - 85.0;
     final mouthShift = mouthY - 140.0;
+    final eyeDx = leftX - 68.0;
+    final mouthDx = mouthCenterX - 160.0;
+
+    // Helper: open eye with blink + drift support
+    void eye(double cx, double cy, double w, double h, double r, double pdx, double pdy) {
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, cx, cy, w, 6, r);
+      } else {
+        _drawEye(canvas, fill, cut, cx, cy, w, h, r, pdx + driftDx, pdy + driftDy);
+      }
+    }
 
     switch (expression) {
       case 'heart':
-        _drawHeart(canvas, fill, const Offset(160, 112), 19);
+        final pulse = 19.0 + math.sin(t * 2 * math.pi) * 2;
+        _drawHeart(canvas, fill, Offset(mouthCenterX, 112 + eyeShift), pulse);
         break;
       case 'love':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        eye(leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
         _drawHeart(canvas, fill, Offset(leftX, eyeY), 8);
         _drawHeart(canvas, fill, Offset(rightX, eyeY), 8);
-        _drawSmile(canvas, stroke, 160, mouthY - 4, 52);
-        _drawHeart(canvas, fill, Offset(60, 82 + eyeShift), 6);
-        _drawHeart(canvas, fill, Offset(260, 68 + eyeShift), 4);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 52);
+        _drawHeart(canvas, fill, Offset(60 + eyeDx, 82 + eyeShift), 6);
+        _drawHeart(canvas, fill, Offset(260 + eyeDx, 68 + eyeShift), 4);
         break;
       case 'surprised':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
-        _drawBrow(canvas, stroke, Offset(55, 26 + eyeShift), Offset(125, 26 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(195, 26 + eyeShift), Offset(265, 26 + eyeShift));
-        _drawOvalMouth(canvas, stroke, 160, mouthY, 11, 9);
+        eye(leftX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
+        eye(rightX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
+        _drawBrow(canvas, stroke, Offset(55 + eyeDx, 26 + eyeShift), Offset(125 + eyeDx, 26 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(195 + eyeDx, 26 + eyeShift), Offset(265 + eyeDx, 26 + eyeShift));
+        _drawOvalMouth(canvas, stroke, mouthCenterX, mouthY, 11, 9);
         break;
       case 'angry':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
-        canvas.drawRect(Rect.fromLTWH(55, 56 + eyeShift, 52, 8), cut);
-        canvas.drawRect(Rect.fromLTWH(195, 56 + eyeShift, 52, 8), cut);
-        _drawBrow(canvas, stroke, Offset(55, 30 + eyeShift), Offset(110, 68 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(265, 30 + eyeShift), Offset(210, 68 + eyeShift));
+        eye(leftX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
+        eye(rightX, eyeY + 4, eyeWidth, eyeHeight - 4, eyeRadius, 0, 4);
+        canvas.drawRect(Rect.fromLTWH(55 + eyeDx, 56 + eyeShift, 52, 8), cut);
+        canvas.drawRect(Rect.fromLTWH(195 + eyeDx, 56 + eyeShift, 52, 8), cut);
+        _drawBrow(canvas, stroke, Offset(55 + eyeDx, 30 + eyeShift), Offset(110 + eyeDx, 68 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(265 + eyeDx, 30 + eyeShift), Offset(210 + eyeDx, 68 + eyeShift));
         for (var line = 0; line < 5; line++) {
-          canvas.drawLine(Offset(135, mouthY + line), Offset(185, mouthY + line), stroke);
+          canvas.drawLine(Offset(135 + mouthDx, mouthY + line), Offset(185 + mouthDx, mouthY + line), stroke);
         }
         break;
       case 'sad':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
-        _drawBrow(canvas, stroke, Offset(55, 68 + eyeShift), Offset(115, 30 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(265, 68 + eyeShift), Offset(205, 30 + eyeShift));
-        _drawSadArc(canvas, stroke, 160, mouthY - 4, 30);
-        _drawTear(canvas, fill, Offset(130, 135 + eyeShift), 6);
+        eye(leftX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
+        eye(rightX, eyeY + 6, eyeWidth, eyeHeight - 8, eyeRadius, 0, 8);
+        _drawBrow(canvas, stroke, Offset(55 + eyeDx, 68 + eyeShift), Offset(115 + eyeDx, 30 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(265 + eyeDx, 68 + eyeShift), Offset(205 + eyeDx, 30 + eyeShift));
+        _drawSadArc(canvas, stroke, mouthCenterX, mouthY - 4, 30);
+        _drawTear(canvas, fill, Offset(130 + eyeDx, 135 + eyeShift), 6);
         break;
       case 'sleepy':
         _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 9, eyeRadius);
         _drawBlinkEye(canvas, fill, rightX, eyeY, eyeWidth, 9, eyeRadius);
-        canvas.drawLine(Offset(140, mouthY), Offset(180, mouthY), stroke);
-        _drawZ(canvas, stroke, Offset(250, 45 + eyeShift), 1.0);
-        _drawZ(canvas, stroke, Offset(270, 68 + eyeShift), 0.8);
+        canvas.drawLine(Offset(140 + mouthDx, mouthY), Offset(180 + mouthDx, mouthY), stroke);
+        final zOff = t * 12;
+        _drawZ(canvas, stroke, Offset(250 + eyeDx, 45 + eyeShift - zOff), 1.0);
+        _drawZ(canvas, stroke, Offset(270 + eyeDx, 68 + eyeShift - zOff), 0.8);
         break;
       case 'thinking':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth - 11, 22, eyeRadius, 9, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, 0);
-        canvas.drawCircle(Offset(270, 143 + eyeShift), 4, fill);
-        canvas.drawCircle(Offset(285, 105 + eyeShift), 6, fill);
-        canvas.drawCircle(Offset(295, 60 + eyeShift), 8, fill);
-        canvas.drawLine(Offset(140, mouthY), Offset(175, mouthY - 4), stroke);
-        canvas.drawLine(Offset(140, mouthY + 2), Offset(175, mouthY - 2), stroke);
+        eye(leftX, eyeY, eyeWidth - 11, 22, eyeRadius, 9, 0);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, 0);
+        final bobble = math.sin(t * 2 * math.pi) * 3;
+        canvas.drawCircle(Offset(270 + eyeDx, 143 + eyeShift + bobble), 4, fill);
+        canvas.drawCircle(Offset(285 + eyeDx, 105 + eyeShift + bobble), 6, fill);
+        canvas.drawCircle(Offset(295 + eyeDx, 60 + eyeShift + bobble), 8, fill);
+        canvas.drawLine(Offset(140 + mouthDx, mouthY), Offset(175 + mouthDx, mouthY - 4), stroke);
+        canvas.drawLine(Offset(140 + mouthDx, mouthY + 2), Offset(175 + mouthDx, mouthY - 2), stroke);
         break;
       case 'smile':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
-        _drawSmile(canvas, stroke, 160, mouthY - 4, 44);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 44);
         break;
       case 'confused':
-        _drawEye(canvas, fill, cut, leftX, eyeY - 4, eyeWidth, eyeHeight + 4, eyeRadius, -4, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 6, eyeWidth - 11, eyeHeight - 11, eyeRadius - 4, 4, 0);
-        _drawBrow(canvas, stroke, Offset(55, 34 + eyeShift), Offset(115, 49 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(210, 56 + eyeShift), Offset(265, 41 + eyeShift));
+        eye(leftX, eyeY - 4, eyeWidth, eyeHeight + 4, eyeRadius, -4, 0);
+        eye(rightX, eyeY + 6, eyeWidth - 11, eyeHeight - 11, eyeRadius - 4, 4, 0);
+        _drawBrow(canvas, stroke, Offset(55 + eyeDx, 34 + eyeShift), Offset(115 + eyeDx, 49 + eyeShift));
+        _drawBrow(canvas, stroke, Offset(210 + eyeDx, 56 + eyeShift), Offset(265 + eyeDx, 41 + eyeShift));
         for (var line = 0; line < 5; line++) {
-          canvas.drawLine(Offset(130, mouthY + 8 + line), Offset(190, mouthY - 4 + line), stroke);
+          canvas.drawLine(Offset(130 + mouthDx, mouthY + 8 + line), Offset(190 + mouthDx, mouthY - 4 + line), stroke);
         }
         break;
       case 'look_around':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, -2);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 9, -2);
-        canvas.drawLine(Offset(143, mouthY), Offset(178, mouthY), stroke);
-        canvas.drawLine(Offset(143, mouthY + 2), Offset(178, mouthY + 2), stroke);
+        final lookDx = math.sin(t * 2 * math.pi) * 9;
+        if (blinking) {
+          _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 6, eyeRadius);
+          _drawBlinkEye(canvas, fill, rightX, eyeY, eyeWidth, 6, eyeRadius);
+        } else {
+          _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, lookDx, -2);
+          _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, lookDx, -2);
+        }
+        canvas.drawLine(Offset(143 + mouthDx, mouthY), Offset(178 + mouthDx, mouthY), stroke);
+        canvas.drawLine(Offset(143 + mouthDx, mouthY + 2), Offset(178 + mouthDx, mouthY + 2), stroke);
         break;
       case 'kiss':
         _drawBlinkEye(canvas, fill, leftX, eyeY, eyeWidth, 8, eyeRadius);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawKissLips(canvas, fill, cut, 160, mouthY);
-        _drawHeart(canvas, fill, Offset(135, 105 + eyeShift), 6);
-        _drawHeart(canvas, fill, Offset(200, 75 + eyeShift), 4);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        _drawKissLips(canvas, fill, cut, mouthCenterX, mouthY);
+        final hFloat = math.sin(t * 3 * math.pi) * 6;
+        _drawHeart(canvas, fill, Offset(135 + mouthDx, 105 + eyeShift - hFloat.abs()), 6);
+        _drawHeart(canvas, fill, Offset(200 + mouthDx, 75 + eyeShift - hFloat.abs() * 0.6), 4);
         break;
       case 'wink':
         for (var line = 0; line < 5; line++) {
           canvas.drawLine(Offset(leftX - eyeWidth / 2, eyeY + line), Offset(leftX + eyeWidth / 2, eyeY + line), stroke);
         }
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawSmile(canvas, stroke, 160, mouthY - 4, 38);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 38);
         break;
       case 'laugh':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
+        final laughBounce = math.sin(t * 4 * math.pi).abs() * 4;
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(135, 126 + mouthShift, 38, 22), const Radius.circular(7)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(135 + mouthDx, 126 + mouthShift - laughBounce, 38, 22 + laughBounce), const Radius.circular(7)),
           fill,
         );
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(140, 130 + mouthShift, 30, 15), const Radius.circular(5)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(140 + mouthDx, 130 + mouthShift - laughBounce, 30, 15 + laughBounce * 0.6), const Radius.circular(5)),
           cut,
         );
         break;
       case 'star_eyes':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
-        _drawStar(canvas, stroke, Offset(leftX, eyeY), 9);
-        _drawStar(canvas, stroke, Offset(rightX, eyeY), 9);
-        _drawSmile(canvas, stroke, 160, mouthY - 4, 44);
+        eye(leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        final starSpin = t * 2 * math.pi;
+        _drawStar(canvas, stroke, Offset(leftX, eyeY), 9 + math.sin(starSpin) * 2);
+        _drawStar(canvas, stroke, Offset(rightX, eyeY), 9 + math.sin(starSpin) * 2);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 44);
         break;
       case 'excited':
-        _drawEye(canvas, fill, cut, leftX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
-        _drawBrow(canvas, stroke, Offset(55, eyeShift), Offset(125, eyeShift));
-        _drawBrow(canvas, stroke, Offset(195, eyeShift), Offset(265, eyeShift));
-        _drawSmile(canvas, stroke, 160, mouthY - 8, 52);
+        eye(leftX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
+        eye(rightX, eyeY - 6, eyeWidth + 8, eyeHeight + 8, eyeRadius, 0, 0);
+        _drawBrow(canvas, stroke, Offset(55 + eyeDx, eyeShift), Offset(125 + eyeDx, eyeShift));
+        _drawBrow(canvas, stroke, Offset(195 + eyeDx, eyeShift), Offset(265 + eyeDx, eyeShift));
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 8, 52);
         break;
       case 'tongue':
         for (var line = 0; line < 5; line++) {
           canvas.drawLine(Offset(leftX - eyeWidth / 2, eyeY + line), Offset(leftX + eyeWidth / 2, eyeY + line), stroke);
         }
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
         for (var line = 0; line < 4; line++) {
-          canvas.drawLine(Offset(135, mouthY - 4 + line), Offset(160, mouthY + 4 + line), stroke);
-          canvas.drawLine(Offset(160, mouthY + 4 + line), Offset(185, mouthY - 4 + line), stroke);
+          canvas.drawLine(Offset(135 + mouthDx, mouthY - 4 + line), Offset(160 + mouthDx, mouthY + 4 + line), stroke);
+          canvas.drawLine(Offset(160 + mouthDx, mouthY + 4 + line), Offset(185 + mouthDx, mouthY - 4 + line), stroke);
         }
+        final tongueWiggle = math.sin(t * 4 * math.pi) * 2;
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(145, 146 + mouthShift, 22, 15), const Radius.circular(7)),
+          RRect.fromRectAndRadius(Rect.fromLTWH(145 + mouthDx + tongueWiggle, 146 + mouthShift, 22, 15), const Radius.circular(7)),
           fill,
         );
-        canvas.drawCircle(Offset(160, 156 + mouthShift), 4, cut);
+        canvas.drawCircle(Offset(160 + mouthDx + tongueWiggle, 156 + mouthShift), 4, cut);
         break;
       case 'grateful':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
-        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 6, Paint()..color = _resolvedAccentColor);
-        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 6, Paint()..color = _resolvedAccentColor);
-        _drawSmile(canvas, stroke, 160, mouthY - 4, 48);
+        final blushPulse = 6.0 + math.sin(t * 2 * math.pi) * 1.5;
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), blushPulse, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), blushPulse, Paint()..color = _resolvedAccentColor);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 48);
         break;
       case 'crying':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 6, eyeWidth, eyeHeight - 9, eyeRadius, 0, 7);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 6, eyeWidth, eyeHeight - 9, eyeRadius, 0, 7);
+        eye(leftX, eyeY + 6, eyeWidth, eyeHeight - 9, eyeRadius, 0, 7);
+        eye(rightX, eyeY + 6, eyeWidth, eyeHeight - 9, eyeRadius, 0, 7);
         _drawBrow(canvas, stroke, Offset(leftX - 26, eyeY - 11 + eyeShift), Offset(leftX + 18, eyeY - 30 + eyeShift));
         _drawBrow(canvas, stroke, Offset(rightX + 26, eyeY - 11 + eyeShift), Offset(rightX - 18, eyeY - 30 + eyeShift));
-        _drawSadArc(canvas, stroke, 160, mouthY - 4, 34);
-        _drawTear(canvas, fill, Offset(leftX + eyeWidth / 2 + 3, eyeY + 30), 4);
-        _drawTear(canvas, fill, Offset(rightX + eyeWidth / 2 + 3, eyeY + 36), 4);
+        _drawSadArc(canvas, stroke, mouthCenterX, mouthY - 4, 34);
+        final tearDrop = (t * 30) % 20;
+        _drawTear(canvas, fill, Offset(leftX + eyeWidth / 2 + 3, eyeY + 30 + tearDrop), 4);
+        _drawTear(canvas, fill, Offset(rightX + eyeWidth / 2 + 3, eyeY + 36 + tearDrop * 0.7), 4);
         break;
       case 'blushing':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
-        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), 10, Paint()..color = _resolvedAccentColor);
-        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), 10, Paint()..color = _resolvedAccentColor);
+        eye(leftX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
+        eye(rightX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
+        final blushR = 10.0 + math.sin(t * 2 * math.pi) * 2;
+        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), blushR, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), blushR, Paint()..color = _resolvedAccentColor);
         for (var line = 0; line < 3; line++) {
-          canvas.drawLine(Offset(150, mouthY + line), Offset(170, mouthY + line), stroke);
+          canvas.drawLine(Offset(150 + mouthDx, mouthY + line), Offset(170 + mouthDx, mouthY + line), stroke);
         }
         break;
       case 'nervous':
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius, 4, 0);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius, 4, 0);
+        final jitter = math.sin(t * 12 * math.pi) * 1.5;
+        eye(leftX + jitter, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius, 4, 0);
+        eye(rightX + jitter, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius, 4, 0);
         _drawBrow(canvas, stroke, Offset(leftX - 26, eyeY - 32 + eyeShift), Offset(leftX + 26, eyeY - 30 + eyeShift));
         _drawBrow(canvas, stroke, Offset(rightX - 26, eyeY - 30 + eyeShift), Offset(rightX + 26, eyeY - 32 + eyeShift));
         for (var line = 0; line < 3; line++) {
-          canvas.drawLine(Offset(144, mouthY + 2 + line), Offset(176, mouthY - 2 + line), stroke);
+          canvas.drawLine(Offset(144 + mouthDx, mouthY + 2 + line), Offset(176 + mouthDx, mouthY - 2 + line), stroke);
         }
         break;
       case 'proud':
         _drawHappyArc(canvas, stroke, leftX, eyeY - 4, eyeWidth + 4);
         _drawHappyArc(canvas, stroke, rightX, eyeY - 4, eyeWidth + 4);
-        _drawSmile(canvas, stroke, 160, mouthY - 6, 56);
-        _drawStar(canvas, fill, Offset(140, eyeShift + 18), 5);
-        _drawStar(canvas, fill, Offset(160, eyeShift + 12), 7);
-        _drawStar(canvas, fill, Offset(180, eyeShift + 18), 5);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 6, 56);
+        final sparkle = math.sin(t * 3 * math.pi).abs();
+        _drawStar(canvas, fill, Offset(140 + eyeDx, eyeShift + 18), 5.0 + sparkle * 2);
+        _drawStar(canvas, fill, Offset(160 + eyeDx, eyeShift + 12), 7.0 + sparkle * 2);
+        _drawStar(canvas, fill, Offset(180 + eyeDx, eyeShift + 18), 5.0 + sparkle * 2);
         break;
       case 'skeptical':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 4, eyeWidth - 8, eyeHeight - 12, eyeRadius - 2, 4, 4);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius + 2, 4, 0);
+        eye(leftX, eyeY + 4, eyeWidth - 8, eyeHeight - 12, eyeRadius - 2, 4, 4);
+        eye(rightX, eyeY, eyeWidth + 4, eyeHeight + 4, eyeRadius + 2, 4, 0);
         _drawBrow(canvas, stroke, Offset(leftX - 22, eyeY - 18 + eyeShift), Offset(leftX + 22, eyeY - 20 + eyeShift));
-        _drawBrow(canvas, stroke, Offset(rightX - 22, eyeY - 36 + eyeShift), Offset(rightX + 22, eyeY - 32 + eyeShift));
+        final browRaise = math.sin(t * 2 * math.pi) * 3;
+        _drawBrow(canvas, stroke, Offset(rightX - 22, eyeY - 36 + eyeShift + browRaise), Offset(rightX + 22, eyeY - 32 + eyeShift + browRaise));
         for (var line = 0; line < 4; line++) {
-          canvas.drawLine(Offset(144, mouthY + 2 + line), Offset(176, mouthY - 2 + line), stroke);
+          canvas.drawLine(Offset(144 + mouthDx, mouthY + 2 + line), Offset(176 + mouthDx, mouthY - 2 + line), stroke);
         }
         break;
       case 'peaceful':
         _drawHappyArc(canvas, stroke, leftX, eyeY + 2, eyeWidth - 4);
         _drawHappyArc(canvas, stroke, rightX, eyeY + 2, eyeWidth - 4);
         for (var line = 0; line < 3; line++) {
-          canvas.drawLine(Offset(148, mouthY + line), Offset(172, mouthY + line), stroke);
+          canvas.drawLine(Offset(148 + mouthDx, mouthY + line), Offset(172 + mouthDx, mouthY + line), stroke);
         }
         break;
       case 'determined':
-        _drawEye(canvas, fill, cut, leftX, eyeY + 2, eyeWidth, eyeHeight - 6, eyeRadius, 0, 2);
-        _drawEye(canvas, fill, cut, rightX, eyeY + 2, eyeWidth, eyeHeight - 6, eyeRadius, 0, 2);
+        eye(leftX, eyeY + 2, eyeWidth, eyeHeight - 6, eyeRadius, 0, 2);
+        eye(rightX, eyeY + 2, eyeWidth, eyeHeight - 6, eyeRadius, 0, 2);
         _drawBrow(canvas, stroke, Offset(leftX - 22, eyeY - 20 + eyeShift), Offset(leftX + 22, eyeY - 28 + eyeShift));
         _drawBrow(canvas, stroke, Offset(rightX - 22, eyeY - 28 + eyeShift), Offset(rightX + 22, eyeY - 20 + eyeShift));
         for (var line = 0; line < 5; line++) {
-          canvas.drawLine(Offset(140, mouthY + line), Offset(180, mouthY + line), stroke);
+          canvas.drawLine(Offset(140 + mouthDx, mouthY + line), Offset(180 + mouthDx, mouthY + line), stroke);
         }
         break;
       case 'happy':
       default:
-        _drawEye(canvas, fill, cut, leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
-        _drawEye(canvas, fill, cut, rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
-        _drawSmile(canvas, stroke, 160, mouthY - 6, 44);
+        eye(leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
+        eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
+        _drawSmile(canvas, stroke, mouthCenterX, mouthY - 6, 44);
         break;
     }
 

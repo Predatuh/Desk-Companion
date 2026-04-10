@@ -1312,6 +1312,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _selectedVisualModel = result.visualModel;
       _selectedScene = result.scene;
       _appearancePreviewReferencePose = result.previewReferencePose;
+      _selectedExpression = result.expression;
       _selectedHairStyle = result.hairStyle;
       _selectedEarsStyle = result.earsStyle;
       _selectedMustacheStyle = result.mustacheStyle;
@@ -3352,30 +3353,39 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   Future<void> _sendCompanionStyle(DeskCompanionController controller) async {
     await _perform(
-      () => controller.setCompanionStyle(
-        hair: _selectedHairStyle.command,
-        ears: _selectedEarsStyle.command,
-        mustache: _selectedMustacheStyle.command,
-        glasses: _selectedGlassesStyle.command,
-        headwear: _selectedHeadwearStyle.command,
-        piercing: _selectedPiercingStyle.command,
-        hairSize: _selectedHairSize.round(),
-        mustacheSize: _selectedMustacheSize.round(),
-        hairWidth: _selectedHairWidth.round(),
-        hairHeight: _selectedHairHeight.round(),
-        hairThickness: _selectedHairThickness.round(),
-        hairOffsetX: _selectedHairOffsetX.round(),
-        hairOffsetY: _selectedHairOffsetY.round(),
-        eyeOffsetX: _selectedEyeOffsetX.round(),
-        eyeOffsetY: _selectedEyeOffsetY.round(),
-        mouthOffsetX: _selectedMouthOffsetX.round(),
-        mouthOffsetY: _selectedMouthOffsetY.round(),
-        mustacheWidth: _selectedMustacheWidth.round(),
-        mustacheHeight: _selectedMustacheHeight.round(),
-        mustacheThickness: _selectedMustacheThickness.round(),
-        mustacheOffsetX: _selectedMustacheOffsetX.round(),
-        mustacheOffsetY: _selectedMustacheOffsetY.round(),
-      ),
+      () async {
+        await controller.setCompanionStyle(
+          hair: _selectedHairStyle.command,
+          ears: _selectedEarsStyle.command,
+          mustache: _selectedMustacheStyle.command,
+          glasses: _selectedGlassesStyle.command,
+          headwear: _selectedHeadwearStyle.command,
+          piercing: _selectedPiercingStyle.command,
+          hairSize: _selectedHairSize.round(),
+          mustacheSize: _selectedMustacheSize.round(),
+          hairWidth: _selectedHairWidth.round(),
+          hairHeight: _selectedHairHeight.round(),
+          hairThickness: _selectedHairThickness.round(),
+          hairOffsetX: _selectedHairOffsetX.round(),
+          hairOffsetY: _selectedHairOffsetY.round(),
+          eyeOffsetX: _selectedEyeOffsetX.round(),
+          eyeOffsetY: _selectedEyeOffsetY.round(),
+          mouthOffsetX: _selectedMouthOffsetX.round(),
+          mouthOffsetY: _selectedMouthOffsetY.round(),
+          mustacheWidth: _selectedMustacheWidth.round(),
+          mustacheHeight: _selectedMustacheHeight.round(),
+          mustacheThickness: _selectedMustacheThickness.round(),
+          mustacheOffsetX: _selectedMustacheOffsetX.round(),
+          mustacheOffsetY: _selectedMustacheOffsetY.round(),
+        );
+        await controller.sendColors(
+          eyeColor: _colorToRgb565(_eyeColor),
+          faceColor: _colorToRgb565(_faceColor),
+          accentColor: _colorToRgb565(_accentColor),
+          bodyColor: _colorToRgb565(_bodyColor),
+        );
+        await controller.sendCompanionScale(_companionScale.round());
+      },
       success: 'Companion appearance applied.',
     );
     _appearanceDraftDirty = false;
@@ -4890,6 +4900,10 @@ class _FullscreenAppearanceEditorState
                 stickFigureScale: _stickFigureScale.round(),
                 stickFigureSpacing: _stickFigureSpacing.round(),
                 stickFigureEnergy: _stickFigureEnergy.round(),
+                eyeColor: _eyeColor,
+                faceColor: _faceColor,
+                accentColor: _accentColor,
+                bodyColor: _bodyColor,
               ),
             ),
           ),
