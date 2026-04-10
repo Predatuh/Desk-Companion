@@ -592,6 +592,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskFireworkShape _selectedFireworkShape = DeskFireworkShape.circle;
   DeskFireworkPalette _selectedFireworkPalette = DeskFireworkPalette.rainbow;
   DeskFireworkSize _selectedFireworkSize = DeskFireworkSize.medium;
+  int _selectedFireworkStages = 1; // 1=single, 2=double, 3=triple
   DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
   DeskCountdownEndAction _countdownEndAction = DeskCountdownEndAction.fireworks;
   int _countdownHours = 0;
@@ -607,6 +608,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Color _bodyColor = const Color(0xFFFF69B4);
   final _weatherLatController = TextEditingController();
   final _weatherLonController = TextEditingController();
+  final _geocodeController = TextEditingController();
+  bool _geocoding = false;
+  bool _idleShowClock = true;
+  bool _idleShowWeather = true;
+  bool _idleShowFace = true;
+  bool _idleShowWifi = true;
+  double _brightness = 128;
 
   CompanionImagePayload? _selectedImage;
   Uint8List _drawBitmap = Uint8List(DisplayBitmapCodec.byteLength);
@@ -710,6 +718,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _bannerController.dispose();
     _weatherLatController.dispose();
     _weatherLonController.dispose();
+    _geocodeController.dispose();
     _liveSyncTimer?.cancel();
     _stopLiveScenePlayback(updateUi: false);
     super.dispose();
@@ -1449,27 +1458,129 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildStyleStudioSection(context, controller, currentPersonality, currentPetMode),
-        const SizedBox(height: 16),
+        // ── Expression picker ──
         _SectionCard(
-          title: 'Live scenes',
-          subtitle: 'Send a duo animation to the device — these play directly on the display.',
+          title: 'Expression',
+          subtitle: 'Pick a mood for the classic companion face.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: DeskScene.values
-                    .map(
-                      (scene) => ChoiceChip(
-                        label: Text(scene.label),
-                        selected: _selectedDeskScene == scene,
-                        onSelected: (_) =>
-                            setState(() => _selectedDeskScene = scene),
+                spacing: 6,
+                runSpacing: 6,
+                children: DeskExpression.values.map((expr) {
+                  final active = expr == _selectedExpression;
+                  return ChoiceChip(
+                    label: Text(expr.label),
+                    selected: active,
+                    onSelected: controller.busy
+                        ? null
+                        : (_) => setState(() {
+                              _selectedExpression = expr;
+                              if (_appearancePreviewReferencePose) {
+                                _appearancePreviewReferencePose = false;
+                              }
+                            }),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white24),
+                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF1A1A2E),
+                  ),
+                  width: 160,
+                  height: 120,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: FittedBox(
+                      child: SizedBox(
+                        width: 320,
+                        height: 240,
+                        child: Transform.scale(
+                          scale: _companionScale / 100.0,
+                          child: CompanionFacePreview(
+                            visualModel: CompanionVisualModel.classic,
+                            scene: CompanionScene.none,
+                            personality: currentPersonality.command,
+                            petMode: currentPetMode.command,
+                            expression: _appearancePreviewReferencePose
+                                ? null
+                                : _selectedExpression.command,
+                            hair: _selectedHairStyle.command,
+                            ears: _selectedEarsStyle.command,
+                            mustache: _selectedMustacheStyle.command,
+                            glasses: _selectedGlassesStyle.command,
+                            headwear: _selectedHeadwearStyle.command,
+                            piercing: _selectedPiercingStyle.command,
+                            hairSize: _selectedHairSize.round(),
+                            mustacheSize: _selectedMustacheSize.round(),
+                            hairWidth: _selectedHairWidth.round(),
+                            hairHeight: _selectedHairHeight.round(),
+                            hairThickness: _selectedHairThickness.round(),
+                            hairOffsetX: _selectedHairOffsetX.round(),
+                            hairOffsetY: _selectedHairOffsetY.round(),
+                            eyeOffsetY: _selectedEyeOffsetY.round(),
+                            mouthOffsetY: _selectedMouthOffsetY.round(),
+                            mustacheWidth: _selectedMustacheWidth.round(),
+                            mustacheHeight: _selectedMustacheHeight.round(),
+                            mustacheThickness: _selectedMustacheThickness.round(),
+                            mustacheOffsetX: _selectedMustacheOffsetX.round(),
+                            mustacheOffsetY: _selectedMustacheOffsetY.round(),
+                            eyeColor: _eyeColor,
+                            faceColor: _faceColor,
+                            accentColor: _accentColor,
+                            bodyColor: _bodyColor,
+                          ),
+                        ),
                       ),
-                    )
-                    .toList(growable: false),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _sendExpression(controller),
+                  icon: const Icon(Icons.face_retouching_natural),
+                  label: Text('Show ${_selectedExpression.label}'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Personality & Pet mode ──
+        _SectionCard(
+          title: 'Personality & pet mode',
+          subtitle: 'Personality drives idle animations. Pet mode changes interaction style.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStudioDropdown(
+                context,
+                label: 'Personality',
+                value: _selectedPersonality,
+                values: DeskPersonality.values,
+                labelBuilder: (value) => value.label,
+                enabled: !controller.busy,
+                onChanged: (value) => setState(() => _selectedPersonality = value),
+              ),
+              const SizedBox(height: 10),
+              _buildStudioDropdown(
+                context,
+                label: 'Pet mode',
+                value: _selectedPetMode,
+                values: DeskPetMode.values,
+                labelBuilder: (value) => value.label,
+                enabled: !controller.busy,
+                onChanged: (value) => setState(() => _selectedPetMode = value),
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -1478,14 +1589,130 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   onPressed: controller.busy || !controller.canControlDevice
                       ? null
                       : () => _perform(
-                            () => controller.sendScene(_selectedDeskScene.command),
-                            success: '${_selectedDeskScene.label} scene started!',
+                            () async {
+                              await controller.setPetPersonality(_selectedPersonality.command);
+                              await controller.triggerPetMode(_selectedPetMode.command);
+                            },
+                            success: 'Personality & pet mode applied!',
                           ),
-                  icon: const Icon(Icons.people_outline),
-                  label: Text('Start ${_selectedDeskScene.label}'),
+                  icon: const Icon(Icons.pets_outlined),
+                  label: const Text('Apply behavior'),
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Animation speed ──
+        _SectionCard(
+          title: 'Animation speed',
+          subtitle: 'How fast the companion reacts and animates on screen.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Speed: ${_expressionSpeed.round()}x', style: Theme.of(context).textTheme.bodyMedium),
+              Slider(
+                min: 1,
+                max: 8,
+                divisions: 7,
+                value: _expressionSpeed,
+                label: '${_expressionSpeed.round()}x',
+                onChanged: (v) => setState(() => _expressionSpeed = v),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendExpressionSpeed(_expressionSpeed.round()),
+                            success: 'Animation speed set to ${_expressionSpeed.round()}x.',
+                          ),
+                  icon: const Icon(Icons.speed),
+                  label: const Text('Apply speed'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Companion size ──
+        _SectionCard(
+          title: 'Companion size',
+          subtitle: 'Scale the companion face larger or smaller. 100% is default.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Scale: ${_companionScale.round()}%', style: Theme.of(context).textTheme.bodyMedium),
+              Slider(
+                min: 50,
+                max: 200,
+                divisions: 15,
+                value: _companionScale,
+                label: '${_companionScale.round()}%',
+                onChanged: (v) => setState(() => _companionScale = v),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendCompanionScale(_companionScale.round()),
+                            success: 'Companion scaled to ${_companionScale.round()}%.',
+                          ),
+                  icon: const Icon(Icons.zoom_in),
+                  label: const Text('Apply size'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Display colors (Classic scoped) ──
+        _SectionCard(
+          title: 'Display colors',
+          subtitle: 'Customise eye, face, accent and body colors on the device display.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Face / outline', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Lines', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendColors(
+                              eyeColor: _colorToRgb565(_eyeColor),
+                              faceColor: _colorToRgb565(_faceColor),
+                              accentColor: _colorToRgb565(_accentColor),
+                              bodyColor: _colorToRgb565(_bodyColor),
+                            ),
+                            success: 'Colors applied!',
+                          ),
+                  icon: const Icon(Icons.palette_outlined),
+                  label: const Text('Apply colors'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Edit studio link ──
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: controller.busy ? null : _openAppearanceEditor,
+            icon: const Icon(Icons.tune),
+            label: const Text('Edit studio'),
           ),
         ),
       ],
@@ -1696,6 +1923,44 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Live scenes',
+          subtitle: 'Send a duo animation directly to the device display.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: DeskScene.values
+                    .map(
+                      (scene) => ChoiceChip(
+                        label: Text(scene.label),
+                        selected: _selectedDeskScene == scene,
+                        onSelected: (_) =>
+                            setState(() => _selectedDeskScene = scene),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendScene(_selectedDeskScene.command),
+                            success: '${_selectedDeskScene.label} scene started!',
+                          ),
+                  icon: const Icon(Icons.people_outline),
+                  label: Text('Start ${_selectedDeskScene.label}'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1854,6 +2119,30 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   )
                   .toList(growable: false),
             ),
+            const SizedBox(height: 8),
+            const Text('Burst stages', style: TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Single'),
+                  selected: _selectedFireworkStages == 1,
+                  onSelected: (_) => setState(() => _selectedFireworkStages = 1),
+                ),
+                ChoiceChip(
+                  label: const Text('Double'),
+                  selected: _selectedFireworkStages == 2,
+                  onSelected: (_) => setState(() => _selectedFireworkStages = 2),
+                ),
+                ChoiceChip(
+                  label: const Text('Triple'),
+                  selected: _selectedFireworkStages == 3,
+                  onSelected: (_) => setState(() => _selectedFireworkStages = 3),
+                ),
+              ],
+            ),
           ],
           const SizedBox(height: 12),
           SizedBox(
@@ -1867,6 +2156,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             await controller.sendFireworkShape(_selectedFireworkShape.command);
                             await controller.sendFireworkPalette(_selectedFireworkPalette.command);
                             await controller.sendFireworkSize(_selectedFireworkSize.command);
+                            await controller.sendFireworkStages(_selectedFireworkStages);
                           }
                           await controller.sendParticle(_selectedParticle.command);
                         },
@@ -2292,63 +2582,195 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               ),
             )
           else
-            Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white24),
-                  borderRadius: BorderRadius.circular(8),
-                  color: const Color(0xFF1A1A2E),
-                ),
-                width: 240,
-                height: 180,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: FittedBox(
-                    child: SizedBox(
-                      width: 320,
-                      height: 240,
-                      child: CompanionFacePreview(
-                        visualModel: _selectedVisualModel,
-                        scene: _selectedScene,
-                        personality: currentPersonality.command,
-                        petMode: currentPetMode.command,
-                        expression: _selectedExpression.command,
-                        hair: _selectedHairStyle.command,
-                        ears: _selectedEarsStyle.command,
-                        mustache: _selectedMustacheStyle.command,
-                        glasses: _selectedGlassesStyle.command,
-                        headwear: _selectedHeadwearStyle.command,
-                        piercing: _selectedPiercingStyle.command,
-                        hairSize: _selectedHairSize.round(),
-                        mustacheSize: _selectedMustacheSize.round(),
-                        hairWidth: _selectedHairWidth.round(),
-                        hairHeight: _selectedHairHeight.round(),
-                        hairThickness: _selectedHairThickness.round(),
-                        hairOffsetX: _selectedHairOffsetX.round(),
-                        hairOffsetY: _selectedHairOffsetY.round(),
-                        eyeOffsetY: _selectedEyeOffsetY.round(),
-                        mouthOffsetY: _selectedMouthOffsetY.round(),
-                        mustacheWidth: _selectedMustacheWidth.round(),
-                        mustacheHeight: _selectedMustacheHeight.round(),
-                        mustacheThickness: _selectedMustacheThickness.round(),
-                        mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                        mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                        stickFigureScale: _stickFigureScale.round(),
-                        stickFigureSpacing: _stickFigureSpacing.round(),
-                        stickFigureEnergy: _stickFigureEnergy.round(),
-                        eyeColor: _eyeColor,
-                        faceColor: _faceColor,
-                        accentColor: _accentColor,
-                        bodyColor: _bodyColor,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _buildLiveViewContent(context, controller, currentPersonality, currentPetMode, mode),
           const SizedBox(height: 12),
           _ChipLabel(label: mode.isEmpty ? 'Disconnected' : mode),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLiveViewContent(
+    BuildContext context,
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+    String mode,
+  ) {
+    // Decide what to show based on the device's actual current mode.
+    final isIdleOrExpression = mode == 'idle' || mode == 'expression';
+    final isScene = mode == 'scene';
+    final isNote = mode == 'note';
+    final isParticle = mode.startsWith('particle');
+    final isWeather = mode == 'weather';
+    final isFlower = mode.startsWith('flower');
+    final isBanner = mode == 'banner';
+    final isCountdown = mode == 'countdown';
+    final isGoodnight = mode == 'goodnight';
+    final isDraw = mode == 'draw' || mode == 'image';
+
+    // For idle/expression modes, show the classic companion face preview.
+    if (isIdleOrExpression) {
+      return _buildLiveViewPreviewFrame(
+        child: CompanionFacePreview(
+          visualModel: CompanionVisualModel.classic,
+          scene: CompanionScene.none,
+          personality: currentPersonality.command,
+          petMode: currentPetMode.command,
+          expression: _selectedExpression.command,
+          hair: _selectedHairStyle.command,
+          ears: _selectedEarsStyle.command,
+          mustache: _selectedMustacheStyle.command,
+          glasses: _selectedGlassesStyle.command,
+          headwear: _selectedHeadwearStyle.command,
+          piercing: _selectedPiercingStyle.command,
+          hairSize: _selectedHairSize.round(),
+          mustacheSize: _selectedMustacheSize.round(),
+          hairWidth: _selectedHairWidth.round(),
+          hairHeight: _selectedHairHeight.round(),
+          hairThickness: _selectedHairThickness.round(),
+          hairOffsetX: _selectedHairOffsetX.round(),
+          hairOffsetY: _selectedHairOffsetY.round(),
+          eyeOffsetY: _selectedEyeOffsetY.round(),
+          mouthOffsetY: _selectedMouthOffsetY.round(),
+          mustacheWidth: _selectedMustacheWidth.round(),
+          mustacheHeight: _selectedMustacheHeight.round(),
+          mustacheThickness: _selectedMustacheThickness.round(),
+          mustacheOffsetX: _selectedMustacheOffsetX.round(),
+          mustacheOffsetY: _selectedMustacheOffsetY.round(),
+          eyeColor: _eyeColor,
+          faceColor: _faceColor,
+          accentColor: _accentColor,
+          bodyColor: _bodyColor,
+        ),
+      );
+    }
+
+    // For scene mode, show stick figure / robot scene preview.
+    if (isScene) {
+      return _buildLiveViewPreviewFrame(
+        child: CompanionFacePreview(
+          visualModel: _selectedVisualModel == CompanionVisualModel.classic
+              ? CompanionVisualModel.stickFigure
+              : _selectedVisualModel,
+          scene: _selectedScene,
+          personality: currentPersonality.command,
+          petMode: currentPetMode.command,
+          expression: _selectedExpression.command,
+          hair: _selectedHairStyle.command,
+          ears: _selectedEarsStyle.command,
+          mustache: _selectedMustacheStyle.command,
+          glasses: _selectedGlassesStyle.command,
+          headwear: _selectedHeadwearStyle.command,
+          piercing: _selectedPiercingStyle.command,
+          hairSize: _selectedHairSize.round(),
+          mustacheSize: _selectedMustacheSize.round(),
+          hairWidth: _selectedHairWidth.round(),
+          hairHeight: _selectedHairHeight.round(),
+          hairThickness: _selectedHairThickness.round(),
+          hairOffsetX: _selectedHairOffsetX.round(),
+          hairOffsetY: _selectedHairOffsetY.round(),
+          eyeOffsetY: _selectedEyeOffsetY.round(),
+          mouthOffsetY: _selectedMouthOffsetY.round(),
+          mustacheWidth: _selectedMustacheWidth.round(),
+          mustacheHeight: _selectedMustacheHeight.round(),
+          mustacheThickness: _selectedMustacheThickness.round(),
+          mustacheOffsetX: _selectedMustacheOffsetX.round(),
+          mustacheOffsetY: _selectedMustacheOffsetY.round(),
+          stickFigureScale: _stickFigureScale.round(),
+          stickFigureSpacing: _stickFigureSpacing.round(),
+          stickFigureEnergy: _stickFigureEnergy.round(),
+          eyeColor: _eyeColor,
+          faceColor: _faceColor,
+          accentColor: _accentColor,
+          bodyColor: _bodyColor,
+        ),
+      );
+    }
+
+    // For all other modes, show an icon + label card.
+    final IconData icon;
+    final String label;
+    if (isNote) {
+      icon = Icons.sticky_note_2_outlined;
+      label = 'A sticky note is displayed on screen.';
+    } else if (isParticle) {
+      icon = Icons.auto_awesome;
+      label = '${mode.replaceAll('particle_', '').replaceAll('_', ' ')} particles are playing.';
+    } else if (isWeather) {
+      icon = Icons.cloud_outlined;
+      label = 'Weather forecast is showing.';
+    } else if (isFlower) {
+      icon = Icons.local_florist_outlined;
+      label = 'A flower is blooming on screen.';
+    } else if (isBanner) {
+      icon = Icons.text_fields;
+      label = 'A scrolling banner is displayed.';
+    } else if (isCountdown) {
+      icon = Icons.timer_outlined;
+      label = 'A countdown timer is running.';
+    } else if (isGoodnight) {
+      icon = Icons.nightlight_outlined;
+      label = 'Goodnight mode is active.';
+    } else if (isDraw) {
+      icon = Icons.brush_outlined;
+      label = 'A user image is displayed.';
+    } else {
+      icon = Icons.devices_outlined;
+      label = 'Device mode: $mode';
+    }
+    return _buildLiveViewModeLabel(context, icon, label);
+  }
+
+  Widget _buildLiveViewPreviewFrame({required Widget child}) {
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white24),
+          borderRadius: BorderRadius.circular(8),
+          color: const Color(0xFF1A1A2E),
+        ),
+        width: 240,
+        height: 180,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: FittedBox(
+            child: SizedBox(
+              width: 320,
+              height: 240,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveViewModeLabel(BuildContext context, IconData icon, String label) {
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white24),
+          borderRadius: BorderRadius.circular(8),
+          color: const Color(0xFF1A1A2E),
+        ),
+        width: 240,
+        height: 180,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 48, color: Colors.white54),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2548,10 +2970,54 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         const SizedBox(height: 16),
         _SectionCard(
           title: 'Weather location',
-          subtitle: 'Set latitude and longitude so the device can fetch live weather from open-meteo.com. Requires Wi-Fi.',
+          subtitle: 'Type a city, zip code, or address to auto-fill coordinates, or enter lat/lon manually.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _geocodeController,
+                      decoration: const InputDecoration(
+                        labelText: 'City / ZIP code',
+                        hintText: 'e.g. Austin TX, 90210',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _geocoding || controller.busy
+                          ? null
+                          : () async {
+                              final query = _geocodeController.text.trim();
+                              if (query.isEmpty) {
+                                _showMessage('Enter a city, zip code, or address.');
+                                return;
+                              }
+                              setState(() => _geocoding = true);
+                              final result = await controller.geocodeLocation(query);
+                              if (!mounted) return;
+                              setState(() => _geocoding = false);
+                              if (result != null) {
+                                _weatherLatController.text = result['lat']!.toStringAsFixed(4);
+                                _weatherLonController.text = result['lon']!.toStringAsFixed(4);
+                                _showMessage('Found: ${result['lat']!.toStringAsFixed(4)}, ${result['lon']!.toStringAsFixed(4)}');
+                              } else {
+                                _showMessage('Could not find that location. Try a different query.');
+                              }
+                            },
+                      child: _geocoding
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Look up'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(child: TextField(controller: _weatherLatController, keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true), decoration: const InputDecoration(labelText: 'Latitude'))),
@@ -2588,6 +3054,93 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Home screen config ──
+        _SectionCard(
+          title: 'Home screen',
+          subtitle: 'Choose which widgets appear on the device idle screen.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile.adaptive(
+                title: const Text('Clock'),
+                value: _idleShowClock,
+                onChanged: (v) => setState(() => _idleShowClock = v),
+                dense: true,
+              ),
+              SwitchListTile.adaptive(
+                title: const Text('Weather badge'),
+                value: _idleShowWeather,
+                onChanged: (v) => setState(() => _idleShowWeather = v),
+                dense: true,
+              ),
+              SwitchListTile.adaptive(
+                title: const Text('Companion face'),
+                value: _idleShowFace,
+                onChanged: (v) => setState(() => _idleShowFace = v),
+                dense: true,
+              ),
+              SwitchListTile.adaptive(
+                title: const Text('WiFi indicator'),
+                value: _idleShowWifi,
+                onChanged: (v) => setState(() => _idleShowWifi = v),
+                dense: true,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendIdleConfig(
+                              showClock: _idleShowClock,
+                              showWeather: _idleShowWeather,
+                              showFace: _idleShowFace,
+                              showWifi: _idleShowWifi,
+                            ),
+                            success: 'Home screen config applied!',
+                          ),
+                  icon: const Icon(Icons.home_outlined),
+                  label: const Text('Apply home screen'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Brightness ──
+        _SectionCard(
+          title: 'Display brightness',
+          subtitle: 'Adjust the TFT backlight brightness (0–255).',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Brightness: ${_brightness.round()}', style: Theme.of(context).textTheme.bodyMedium),
+              Slider(
+                min: 0,
+                max: 255,
+                divisions: 51,
+                value: _brightness,
+                label: '${_brightness.round()}',
+                onChanged: (v) => setState(() => _brightness = v),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendBrightness(_brightness.round()),
+                            success: 'Brightness set to ${_brightness.round()}.',
+                          ),
+                  icon: const Icon(Icons.brightness_6_outlined),
+                  label: const Text('Apply brightness'),
+                ),
               ),
             ],
           ),
@@ -2677,595 +3230,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               }
             }
           : null,
-    );
-  }
-
-  Widget _buildStyleStudioSection(
-    BuildContext context,
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) {
-    final usesNativeClassicSend =
-        _selectedVisualModel.isDeviceSupported && _selectedScene == CompanionScene.none;
-    final supportsLiveBleScene = !usesNativeClassicSend && controller.isBleConnected;
-    final streamsLiveBleScene =
-      supportsLiveBleScene && !_appearancePreviewReferencePose;
-    final isClassic = _selectedVisualModel == CompanionVisualModel.classic;
-    final isStickFigure = _selectedVisualModel == CompanionVisualModel.stickFigure;
-    final isRobot = _selectedVisualModel == CompanionVisualModel.robot;
-
-    return _SectionCard(
-      title: 'Style studio',
-      subtitle:
-          'Use compact selectors here, then open the editor only when you need deeper detail work.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Preset packs ──
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: CompanionTheme.panel,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: CompanionTheme.blush),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Preset packs', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 148,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemBuilder: (context, index) {
-                      final preset = _studioPresets[index];
-                      final active = preset.visualModel == _selectedVisualModel &&
-                          preset.scene == _selectedScene &&
-                          preset.expression == _selectedExpression;
-                      return SizedBox(
-                        width: 224,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: controller.busy
-                              ? null
-                              : () => _applyStudioPreset(controller, preset),
-                          child: Ink(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: active
-                                  ? CompanionTheme.coral.withValues(alpha: 0.18)
-                                  : CompanionTheme.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: active
-                                    ? CompanionTheme.coral
-                                    : CompanionTheme.blush,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(preset.title, style: Theme.of(context).textTheme.titleSmall),
-                                const SizedBox(height: 4),
-                                Expanded(
-                                  child: Text(
-                                    preset.subtitle,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: CompanionTheme.panel,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: CompanionTheme.blush),
-                                  ),
-                                  child: Text(
-                                    '${preset.visualModel.label} / ${preset.scene.label}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.labelSmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemCount: _studioPresets.length,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // ── Visual model selector ──
-          _StudioGroup(
-            title: 'Visual model',
-            subtitle: 'Choose the companion style. Classic is the emotion face, Stick figure and Robot are animated scenes.',
-            child: _buildStudioDropdown(
-              context,
-              label: 'Visual model',
-              value: _selectedVisualModel,
-              values: CompanionVisualModel.values,
-              labelBuilder: (value) => value.label,
-              enabled: !controller.busy,
-              onChanged: (value) {
-                _appearanceDraftDirty = true;
-                _updateSelectedVisualModel(controller, value);
-              },
-            ),
-          ),
-
-          // ── COMPANION FACE (Classic only) ──
-          if (isClassic) ...[
-            const SizedBox(height: 12),
-            _StudioGroup(
-              title: 'Companion face',
-              subtitle: 'Expression, accessories, and preview for the classic emotion face.',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Expression', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: DeskExpression.values.map((expr) {
-                      final active = expr == _selectedExpression;
-                      return ChoiceChip(
-                        label: Text(expr.label),
-                        selected: active,
-                        onSelected: controller.busy
-                            ? null
-                            : (_) => setState(() {
-                                  _selectedExpression = expr;
-                                  if (_appearancePreviewReferencePose) {
-                                    _appearancePreviewReferencePose = false;
-                                  }
-                                }),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white24),
-                        borderRadius: BorderRadius.circular(8),
-                        color: const Color(0xFF1A1A2E),
-                      ),
-                      width: 160,
-                      height: 120,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: FittedBox(
-                          child: SizedBox(
-                            width: 320,
-                            height: 240,
-                            child: Transform.scale(
-                              scale: _companionScale / 100.0,
-                              child: CompanionFacePreview(
-                                visualModel: _selectedVisualModel,
-                                scene: _selectedScene,
-                                personality: _selectedPersonality.command,
-                                petMode: _selectedPetMode.command,
-                                expression: _appearancePreviewReferencePose
-                                    ? null
-                                    : _selectedExpression.command,
-                                hair: _selectedHairStyle.command,
-                                ears: _selectedEarsStyle.command,
-                                mustache: _selectedMustacheStyle.command,
-                                glasses: _selectedGlassesStyle.command,
-                                headwear: _selectedHeadwearStyle.command,
-                                piercing: _selectedPiercingStyle.command,
-                                hairSize: _selectedHairSize.round(),
-                                mustacheSize: _selectedMustacheSize.round(),
-                                hairWidth: _selectedHairWidth.round(),
-                                hairHeight: _selectedHairHeight.round(),
-                                hairThickness: _selectedHairThickness.round(),
-                                hairOffsetX: _selectedHairOffsetX.round(),
-                                hairOffsetY: _selectedHairOffsetY.round(),
-                                eyeOffsetY: _selectedEyeOffsetY.round(),
-                                mouthOffsetY: _selectedMouthOffsetY.round(),
-                                mustacheWidth: _selectedMustacheWidth.round(),
-                                mustacheHeight: _selectedMustacheHeight.round(),
-                                mustacheThickness: _selectedMustacheThickness.round(),
-                                mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                                mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                                stickFigureScale: _stickFigureScale.round(),
-                                stickFigureSpacing: _stickFigureSpacing.round(),
-                                stickFigureEnergy: _stickFigureEnergy.round(),
-                                eyeColor: _eyeColor,
-                                faceColor: _faceColor,
-                                accentColor: _accentColor,
-                                bodyColor: _bodyColor,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Text(
-                      'Preview at ${_companionScale.round()}% scale',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAccessoryChipRow<DeskHairStyle>(
-                    context, 'Hair', DeskHairStyle.values,
-                    _selectedHairStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedHairStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildAccessoryChipRow<DeskEarsStyle>(
-                    context, 'Ears', DeskEarsStyle.values,
-                    _selectedEarsStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedEarsStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildAccessoryChipRow<DeskMustacheStyle>(
-                    context, 'Mustache', DeskMustacheStyle.values,
-                    _selectedMustacheStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedMustacheStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildAccessoryChipRow<DeskGlassesStyle>(
-                    context, 'Glasses', DeskGlassesStyle.values,
-                    _selectedGlassesStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedGlassesStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildAccessoryChipRow<DeskHeadwearStyle>(
-                    context, 'Headwear', DeskHeadwearStyle.values,
-                    _selectedHeadwearStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedHeadwearStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildAccessoryChipRow<DeskPiercingStyle>(
-                    context, 'Piercing', DeskPiercingStyle.values,
-                    _selectedPiercingStyle,
-                    (v) => setState(() { _appearanceDraftDirty = true; _selectedPiercingStyle = v; }),
-                    labelBuilder: (v) => v.label,
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── ANIMATED SCENES (Stick figure / Robot only) ──
-          if (!isClassic) ...[
-            const SizedBox(height: 12),
-            _StudioGroup(
-              title: 'Animated scenes',
-              subtitle: isStickFigure
-                  ? 'Pick a scene for the stick-figure duo and tune their motion.'
-                  : 'Pick a scene for the robot duo.',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStudioDropdown(
-                    context,
-                    label: 'Scene',
-                    value: _selectedScene,
-                    values: CompanionScene.values,
-                    labelBuilder: (value) => value.label,
-                    enabled: !controller.busy,
-                    onChanged: (value) => setState(() {
-                      _appearanceDraftDirty = true;
-                      _selectedScene = value;
-                      _persistStudioPreviewState(controller);
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _selectedScene.description,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white24),
-                        borderRadius: BorderRadius.circular(8),
-                        color: const Color(0xFF1A1A2E),
-                      ),
-                      width: 160,
-                      height: 120,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: FittedBox(
-                          child: SizedBox(
-                            width: 320,
-                            height: 240,
-                            child: CompanionFacePreview(
-                              visualModel: _selectedVisualModel,
-                              scene: _selectedScene,
-                              personality: _selectedPersonality.command,
-                              petMode: _selectedPetMode.command,
-                              expression: _appearancePreviewReferencePose
-                                  ? null
-                                  : _selectedExpression.command,
-                              hair: _selectedHairStyle.command,
-                              ears: _selectedEarsStyle.command,
-                              mustache: _selectedMustacheStyle.command,
-                              glasses: _selectedGlassesStyle.command,
-                              headwear: _selectedHeadwearStyle.command,
-                              piercing: _selectedPiercingStyle.command,
-                              hairSize: _selectedHairSize.round(),
-                              mustacheSize: _selectedMustacheSize.round(),
-                              hairWidth: _selectedHairWidth.round(),
-                              hairHeight: _selectedHairHeight.round(),
-                              hairThickness: _selectedHairThickness.round(),
-                              hairOffsetX: _selectedHairOffsetX.round(),
-                              hairOffsetY: _selectedHairOffsetY.round(),
-                              eyeOffsetY: _selectedEyeOffsetY.round(),
-                              mouthOffsetY: _selectedMouthOffsetY.round(),
-                              mustacheWidth: _selectedMustacheWidth.round(),
-                              mustacheHeight: _selectedMustacheHeight.round(),
-                              mustacheThickness: _selectedMustacheThickness.round(),
-                              mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                              mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                              stickFigureScale: _stickFigureScale.round(),
-                              stickFigureSpacing: _stickFigureSpacing.round(),
-                              stickFigureEnergy: _stickFigureEnergy.round(),
-                              eyeColor: _eyeColor,
-                              faceColor: _faceColor,
-                              accentColor: _accentColor,
-                              bodyColor: _bodyColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (isStickFigure) ...[
-                    const SizedBox(height: 12),
-                    _buildStudioSlider(
-                      context,
-                      'Figure scale ${_stickFigureScale.round()}%',
-                      _stickFigureScale,
-                      (value) => setState(() {
-                        _appearanceDraftDirty = true;
-                        _stickFigureScale = value;
-                        _persistStudioPreviewState(controller);
-                      }),
-                    ),
-                    _buildStudioSlider(
-                      context,
-                      'Partner spacing ${_stickFigureSpacing.round()}%',
-                      _stickFigureSpacing,
-                      (value) => setState(() {
-                        _appearanceDraftDirty = true;
-                        _stickFigureSpacing = value;
-                        _persistStudioPreviewState(controller);
-                      }),
-                    ),
-                    _buildStudioSlider(
-                      context,
-                      'Scene energy ${_stickFigureEnergy.round()}%',
-                      _stickFigureEnergy,
-                      (value) => setState(() {
-                        _appearanceDraftDirty = true;
-                        _stickFigureEnergy = value;
-                        _persistStudioPreviewState(controller);
-                      }),
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                    ),
-                  ],
-                  if (isRobot) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Robot keeps the main Studio compact and can stream live over BLE when the device is connected directly.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: controller.busy || !controller.canControlDevice
-                          ? null
-                          : () => _toggleStudioSceneSend(
-                                controller,
-                                currentPersonality,
-                                currentPetMode,
-                              ),
-                      icon: Icon(
-                        streamsLiveBleScene
-                            ? (_scenePlaybackActive
-                                ? Icons.stop_circle_outlined
-                                : Icons.play_circle_outline)
-                            : Icons.monitor_outlined,
-                      ),
-                      label: Text(
-                        streamsLiveBleScene
-                            ? (_scenePlaybackActive
-                                ? 'Stop live scene'
-                                : 'Start live scene')
-                            : 'Send scene snapshot',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Common controls ──
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy ? null : _openAppearanceEditor,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Edit studio'),
-                ),
-              ),
-              if (isClassic) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: controller.busy || !controller.canControlDevice
-                        ? null
-                        : () => _sendCompanionStyle(controller),
-                    icon: const Icon(Icons.face_retouching_natural),
-                    label: const Text('Apply appearance'),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: controller.busy || !controller.canControlDevice
-                  ? null
-                  : () => _sendExpression(controller),
-              icon: const Icon(Icons.face_retouching_natural),
-              label: Text('Show ${_selectedExpression.label}'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _StudioGroup(
-            title: 'Animation speed',
-            subtitle: 'How fast the companion reacts and animates on screen.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Speed: ${_expressionSpeed.round()}x', style: Theme.of(context).textTheme.bodyMedium),
-                Slider(
-                  min: 1,
-                  max: 8,
-                  divisions: 7,
-                  value: _expressionSpeed,
-                  label: '${_expressionSpeed.round()}x',
-                  onChanged: (v) => setState(() => _expressionSpeed = v),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: controller.busy || !controller.canControlDevice
-                        ? null
-                        : () => _perform(
-                              () => controller.sendExpressionSpeed(_expressionSpeed.round()),
-                              success: 'Animation speed set to ${_expressionSpeed.round()}x.',
-                            ),
-                    icon: const Icon(Icons.speed),
-                    label: const Text('Apply speed'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _StudioGroup(
-            title: 'Companion size',
-            subtitle: 'Scale the companion face larger or smaller. 100% is default.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Scale: ${_companionScale.round()}%', style: Theme.of(context).textTheme.bodyMedium),
-                Slider(
-                  min: 50,
-                  max: 200,
-                  divisions: 15,
-                  value: _companionScale,
-                  label: '${_companionScale.round()}%',
-                  onChanged: (v) => setState(() => _companionScale = v),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: controller.busy || !controller.canControlDevice
-                        ? null
-                        : () => _perform(
-                              () => controller.sendCompanionScale(_companionScale.round()),
-                              success: 'Companion scaled to ${_companionScale.round()}%.',
-                            ),
-                    icon: const Icon(Icons.zoom_in),
-                    label: const Text('Apply size'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _StudioGroup(
-            title: 'Display colors',
-            subtitle: 'Customise eye, face, accent and body colors on the device display.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ColorRow(
-                  label: 'Eyes',
-                  color: _eyeColor,
-                  onChanged: (c) => setState(() => _eyeColor = c),
-                ),
-                const SizedBox(height: 8),
-                _ColorRow(
-                  label: 'Face / outline',
-                  color: _faceColor,
-                  onChanged: (c) => setState(() => _faceColor = c),
-                ),
-                const SizedBox(height: 8),
-                _ColorRow(
-                  label: 'Accent',
-                  color: _accentColor,
-                  onChanged: (c) => setState(() => _accentColor = c),
-                ),
-                const SizedBox(height: 8),
-                _ColorRow(
-                  label: 'Lines',
-                  color: _bodyColor,
-                  onChanged: (c) => setState(() => _bodyColor = c),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: controller.busy ||
-                            !controller.canControlDevice
-                        ? null
-                        : () => _perform(
-                              () => controller.sendColors(
-                                eyeColor: _colorToRgb565(_eyeColor),
-                                faceColor: _colorToRgb565(_faceColor),
-                                accentColor: _colorToRgb565(_accentColor),
-                                bodyColor: _colorToRgb565(_bodyColor),
-                              ),
-                              success: 'Colors applied!',
-                            ),
-                    icon: const Icon(Icons.palette_outlined),
-                    label: const Text('Apply colors'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 

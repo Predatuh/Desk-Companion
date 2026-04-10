@@ -322,6 +322,7 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               mustacheThickness: widget.mustacheThickness,
               mustacheOffsetX: widget.mustacheOffsetX,
               mustacheOffsetY: widget.mustacheOffsetY,
+              animationProgress: animationProgress,
               eyeColor: widget.eyeColor,
               faceColor: widget.faceColor,
               accentColor: widget.accentColor,
@@ -1153,6 +1154,7 @@ class _CompanionFacePainter extends CustomPainter {
     required this.mustacheThickness,
     required this.mustacheOffsetX,
     required this.mustacheOffsetY,
+    this.animationProgress = 0.0,
     this.eyeColor,
     this.faceColor,
     this.accentColor,
@@ -1184,6 +1186,7 @@ class _CompanionFacePainter extends CustomPainter {
   final int mustacheThickness;
   final int mustacheOffsetX;
   final int mustacheOffsetY;
+  final double animationProgress;
   final Color? eyeColor;
   final Color? faceColor;
   final Color? accentColor;
@@ -1217,6 +1220,15 @@ class _CompanionFacePainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
 
+    // --- animation helpers ---
+    final double t = animationProgress; // 0..1 repeating
+    final double breathY = math.sin(t * 2 * math.pi) * 2; // gentle vertical bob
+    // Blink: eyes close briefly around t≈0.75 (a ~6% window)
+    final bool blinking = (t > 0.72 && t < 0.78);
+    // Pupil drift: slow figure-8 orbit
+    final double driftDx = math.sin(t * 2 * math.pi) * 3;
+    final double driftDy = math.sin(t * 4 * math.pi) * 1.5;
+
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         const Rect.fromLTWH(0, 0, 319, 239),
@@ -1227,8 +1239,8 @@ class _CompanionFacePainter extends CustomPainter {
 
     const idleLeftX = 70.0;
     const idleRightX = 170.0;
-    final idleEyeY = 100.0 + _clampOffset(eyeOffsetY) * 2.0;
-    final idleMouthY = 150.0 + _clampOffset(mouthOffsetY) * 2.0;
+    final idleEyeY = 100.0 + _clampOffset(eyeOffsetY) * 2.0 + breathY;
+    final idleMouthY = 150.0 + _clampOffset(mouthOffsetY) * 2.0 + breathY;
     const expressionLeftX = 68.0;
     const expressionRightX = 172.0;
     final expressionEyeY = 85.0 + _clampOffset(eyeOffsetY) * 2.0;
@@ -1269,34 +1281,68 @@ class _CompanionFacePainter extends CustomPainter {
         mouthY: expressionMouthY,
       );
     } else if (isOff) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 40, 26, 9, 0, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 40, 26, 9, 0, 0);
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 40, 6, 7);
+        _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 40, 6, 7);
+      } else {
+        _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 40, 26, 9, driftDx, driftDy);
+        _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 40, 26, 9, driftDx, driftDy);
+      }
       canvas.drawLine(Offset(143, idleMouthY), Offset(178, idleMouthY), stroke);
     } else if (isSleepy) {
+      // Sleepy Z floats up with animation
+      final zOffset = t * 12;
       _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 44, 8, 7);
       _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 44, 8, 7);
       canvas.drawLine(Offset(140, idleMouthY), Offset(180, idleMouthY), stroke);
-      _drawZ(canvas, stroke, const Offset(200, 86), 2.5);
-      _drawZ(canvas, stroke, const Offset(216, 68), 2.0);
+      _drawZ(canvas, stroke, Offset(200, 86 - zOffset), 2.5);
+      _drawZ(canvas, stroke, Offset(216, 68 - zOffset), 2.0);
     } else if (isCuddly) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 0, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, 0, 0);
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 44, 6, 7);
+        _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 44, 6, 7);
+      } else {
+        _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, driftDx, driftDy);
+        _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, driftDx, driftDy);
+      }
       _drawSmile(canvas, stroke, 160, idleMouthY - 2, 44);
-      _drawHeart(canvas, fill, const Offset(160, 206), 6);
+      // Heart pulses gently
+      final heartScale = 6.0 + math.sin(t * 2 * math.pi) * 1.5;
+      _drawHeart(canvas, fill, Offset(160, 206 + breathY), heartScale);
     } else if (isPlayful) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 6, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, 6, 0);
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 48, 6, 7);
+        _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 48, 6, 7);
+      } else {
+        _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 6 + driftDx, driftDy);
+        _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, 6 + driftDx, driftDy);
+      }
       _drawSmile(canvas, stroke, 160, idleMouthY - 4, 48);
-      canvas.drawCircle(const Offset(45, 184), 4, fill);
+      // Ball bounces
+      final bounceY = 184 - (math.sin(t * math.pi).abs()) * 20;
+      canvas.drawCircle(Offset(45, bounceY), 4, fill);
     } else if (isParty) {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 4, 0);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, -4, 0);
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 48, 6, 7);
+        _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 48, 6, 7);
+      } else {
+        _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 48, 34, 9, 4 + driftDx, driftDy);
+        _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 48, 34, 9, -4 + driftDx, driftDy);
+      }
       _drawSmile(canvas, stroke, 160, idleMouthY - 4, 52);
-      _drawStar(canvas, stroke, const Offset(40, 56), 6);
-      _drawStar(canvas, stroke, const Offset(280, 64), 6);
+      // Stars rotate around their positions
+      final starR = 18.0;
+      _drawStar(canvas, stroke, Offset(40 + math.cos(t * 2 * math.pi) * starR, 56 + math.sin(t * 2 * math.pi) * starR), 6);
+      _drawStar(canvas, stroke, Offset(280 + math.cos(t * 2 * math.pi + math.pi) * starR, 64 + math.sin(t * 2 * math.pi + math.pi) * starR), 6);
     } else {
-      _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 4, 2);
-      _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, -2, -2);
+      // Default curious
+      if (blinking) {
+        _drawBlinkEye(canvas, fill, idleLeftX, idleEyeY, 44, 6, 7);
+        _drawBlinkEye(canvas, fill, idleRightX, idleEyeY, 44, 6, 7);
+      } else {
+        _drawEye(canvas, fill, cut, idleLeftX, idleEyeY, 44, 30, 9, 4 + driftDx, 2 + driftDy);
+        _drawEye(canvas, fill, cut, idleRightX, idleEyeY, 44, 30, 9, -2 + driftDx, -2 + driftDy);
+      }
       _drawOvalMouth(canvas, stroke, 160, idleMouthY, 9, 7);
     }
 
@@ -2084,6 +2130,7 @@ class _CompanionFacePainter extends CustomPainter {
         mustacheThickness != oldDelegate.mustacheThickness ||
         mustacheOffsetX != oldDelegate.mustacheOffsetX ||
         mustacheOffsetY != oldDelegate.mustacheOffsetY ||
+        animationProgress != oldDelegate.animationProgress ||
         eyeColor != oldDelegate.eyeColor ||
         faceColor != oldDelegate.faceColor ||
         accentColor != oldDelegate.accentColor ||

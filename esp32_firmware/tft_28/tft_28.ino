@@ -74,7 +74,7 @@ static const FwSizeParams FW_SIZES[] = {
 #endif
 
 #ifndef BTN_HOLD_MS
-#define BTN_HOLD_MS 5000UL
+#define BTN_HOLD_MS 3000UL
 #endif
 
 #ifndef NOTE_QUEUE_MAX
@@ -177,6 +177,8 @@ enum DisplayMode {
   MODE_WEATHER,
   MODE_SLEEP,
   MODE_ANIMATED_NOTE,
+  MODE_MENU,
+  MODE_CONFIRM_CLEAR,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -278,6 +280,13 @@ unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
 
+// Menu state
+uint8_t menuPage = 0;
+unsigned long menuOpenedMs = 0;
+#define MENU_TIMEOUT_MS 10000UL
+#define MENU_PAGES 4
+DisplayMode menuResumeMode = MODE_IDLE;
+
 // Weather
 float weatherLat = 0.f;
 float weatherLon = 0.f;
@@ -308,6 +317,8 @@ uint8_t fireworkPalette = 0;
 uint8_t fireworkSize = 1;
 // When true, fireworks only launch via manual fire_rocket commands (no auto-relaunch)
 bool fwManualOnly = false;
+// Multi-stage firework bursts: 1=single, 2=double, 3=triple
+uint8_t fireworkStages = 1;
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
@@ -318,6 +329,13 @@ uint8_t countdownEndAction = 0;
 uint8_t expressionSpeedMul = 2;
 // Companion scale: 50-200 percent
 uint8_t companionScale = 100;
+// Idle screen toggles (NVS-persisted)
+bool idleShowClock   = true;
+bool idleShowWeather = true;
+bool idleShowFace    = true;
+bool idleShowWifi    = true;
+// Display brightness: 0-255 (PWM on TFT_BL pin)
+uint8_t displayBrightness = 128;
 // Countdown
 long     countdownSeconds  = 0;
 unsigned long countdownStartMs  = 0;
@@ -455,6 +473,10 @@ void setParticleMode(const String& name);
 void renderCountdownFrame();
 void setCountdown(long seconds);
 void syncNtp();
+void renderMenuFrame();
+void renderConfirmClear();
+void executeMenuAction(uint8_t page, uint8_t item);
+void explodeRocketStage(uint8_t rocketIdx, uint8_t stagesLeft);
 float extractJsonFloatField(const String& body, const char* key, float fallback = 0.f);
 void fetchWeather();
 void drawWeatherBadge(int x, int y);
@@ -747,6 +769,10 @@ const char* modeName(DisplayMode mode) {
       return "weather";
     case MODE_SLEEP:
       return "sleep";
+    case MODE_MENU:
+      return "menu";
+    case MODE_CONFIRM_CLEAR:
+      return "confirm_clear";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1348,9 +1374,9 @@ static const int FACE_OFFSET_Y = 40;  // vertical offset to center the face area
 static const int STATUS_BAR_Y = 222;  // y position for status text (within 240px screen)
 
 void drawIconHeart(int cx, int cy, int s) {
-  gfx->fillCircle(cx - s, cy - s / 3, s, COL_ROSE);
-  gfx->fillCircle(cx + s, cy - s / 3, s, COL_ROSE);
-  gfx->fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, COL_ROSE);
+  gfx->fillCircle(cx - s, cy - s / 3, s, userAccentColor);
+  gfx->fillCircle(cx + s, cy - s / 3, s, userAccentColor);
+  gfx->fillTriangle(cx - s * 2, cy - s / 3 + 1, cx + s * 2, cy - s / 3 + 1, cx, cy + s * 2 - 1, userAccentColor);
 }
 
 void drawIconStar(int cx, int cy, int r) {
@@ -1358,9 +1384,9 @@ void drawIconStar(int cx, int cy, int r) {
     float angle = i * 3.14159f / 3.0f;
     int x2 = cx + (int)(r * 0.97f * cos(angle));
     int y2 = cy + (int)(r * 0.97f * sin(angle));
-    gfx->drawLine(cx, cy, x2, y2, COL_GOLD);
+    gfx->drawLine(cx, cy, x2, y2, userAccentColor);
   }
-  gfx->fillCircle(cx, cy, r / 3, COL_GOLD);
+  gfx->fillCircle(cx, cy, r / 3, userAccentColor);
 }
 
 void drawIconFlower(int cx, int cy, int r) {
@@ -2218,7 +2244,7 @@ void renderIdle() {
   gfx->fillScreen(COL_BG);
 
   // ── Clock/header strip ──
-  {
+  if (idleShowClock) {
     struct tm timeinfo;
     bool timeOk = getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100;
     if (timeOk) {
@@ -2234,10 +2260,13 @@ void renderIdle() {
       gfx->setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
       gfx->print(dBuf);
     }
+  }
+  if (idleShowWeather) {
     drawWeatherBadge(280, 15);
   }
 
   // ── Face box ──
+  if (idleShowFace) {
   gfx->drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
 
   const int leftX = 70;
@@ -2284,10 +2313,214 @@ void renderIdle() {
   }
 
   drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
+  } // end idleShowFace
 
   // Status bar
-  drawStatusBar();
+  if (idleShowWifi) {
+    drawStatusBar();
+  }
   pushCanvas();
+}
+
+// ─── Touch menu renderer ───
+
+static const char* MENU_TITLES[] = { "Reactions", "Quick Actions", "Display", "Home Screen" };
+
+struct MenuItem { const char* label; };
+
+static const MenuItem MENU_P0[] = {
+  {"Heart"}, {"Thumbs up"}, {"Star"}, {"Hug"}
+};
+static const MenuItem MENU_P1[] = {
+  {"Clear screen"}, {"Show weather"}, {"Show clock"}, {"Goodnight"}
+};
+static const MenuItem MENU_P2[] = {
+  {"Bright +"}, {"Bright -"}, {"Rotate"}, {"Color cycle"}
+};
+static const MenuItem MENU_P3[] = {
+  {"Clock"}, {"Weather"}, {"Face"}, {"WiFi"}
+};
+
+static const uint8_t MENU_ITEM_COUNT = 4;
+
+void renderMenuFrame() {
+  if (!displayAvailable) return;
+  gfx->fillScreen(COL_BG);
+
+  // Title bar
+  gfx->setTextSize(2);
+  gfx->setTextColor(userAccentColor);
+  const char* title = MENU_TITLES[menuPage % MENU_PAGES];
+  gfx->setCursor((SCREEN_WIDTH - (int)strlen(title) * 12) / 2, 8);
+  gfx->print(title);
+
+  // Page indicator dots
+  for (uint8_t p = 0; p < MENU_PAGES; p++) {
+    int dx = SCREEN_WIDTH / 2 - (MENU_PAGES * 8) / 2 + p * 8 + 2;
+    if (p == menuPage)
+      gfx->fillCircle(dx, 30, 3, userAccentColor);
+    else
+      gfx->drawCircle(dx, 30, 3, userFaceColor);
+  }
+
+  // Menu items as touch zones (4 items, 40px tall each, starting at y=40)
+  const MenuItem* items;
+  switch (menuPage) {
+    case 0: items = MENU_P0; break;
+    case 1: items = MENU_P1; break;
+    case 2: items = MENU_P2; break;
+    default: items = MENU_P3; break;
+  }
+
+  for (uint8_t i = 0; i < MENU_ITEM_COUNT; i++) {
+    int y = 42 + i * 42;
+    gfx->drawRoundRect(10, y, SCREEN_WIDTH - 20, 36, 8, userFaceColor);
+    gfx->setTextSize(2);
+    gfx->setTextColor(userFaceColor);
+    gfx->setCursor(20, y + 10);
+    gfx->print(items[i].label);
+    // Show toggle state for Page 3 (Home Screen)
+    if (menuPage == 3) {
+      bool on = false;
+      switch (i) {
+        case 0: on = idleShowClock; break;
+        case 1: on = idleShowWeather; break;
+        case 2: on = idleShowFace; break;
+        case 3: on = idleShowWifi; break;
+      }
+      gfx->setCursor(SCREEN_WIDTH - 50, y + 10);
+      gfx->setTextColor(on ? 0x07E0 : COL_ROSE);
+      gfx->print(on ? "ON" : "OFF");
+    }
+  }
+
+  // Navigation arrows
+  gfx->setTextSize(3);
+  gfx->setTextColor(userFaceColor);
+  gfx->setCursor(10, 215);
+  gfx->print("<");
+  gfx->setCursor(SCREEN_WIDTH - 28, 215);
+  gfx->print(">");
+
+  pushCanvas();
+}
+
+void renderConfirmClear() {
+  if (!displayAvailable) return;
+  gfx->fillScreen(COL_BG);
+
+  gfx->setTextSize(3);
+  gfx->setTextColor(userAccentColor);
+  gfx->setCursor(90, 40);
+  gfx->print("Clear?");
+
+  // Yes button
+  gfx->fillRoundRect(30, 100, 110, 60, 12, 0x07E0);
+  gfx->setTextSize(3);
+  gfx->setTextColor(COL_BG);
+  gfx->setCursor(55, 118);
+  gfx->print("Yes");
+
+  // No button
+  gfx->fillRoundRect(180, 100, 110, 60, 12, COL_ROSE);
+  gfx->setTextColor(COL_BG);
+  gfx->setCursor(212, 118);
+  gfx->print("No");
+
+  pushCanvas();
+}
+
+// ─── Menu action handlers ───
+
+void executeMenuAction(uint8_t page, uint8_t item) {
+  switch (page) {
+    case 0: // Reactions
+      switch (item) {
+        case 0: startTransientExpression("love", 2500, "Heart sent!"); break;
+        case 1: startTransientExpression("happy", 2500, "Thumbs up!"); break;
+        case 2: startTransientExpression("sparkle", 2500, "Star!"); break;
+        case 3: startTransientExpression("blush", 2500, "Hug!"); break;
+      }
+      break;
+    case 1: // Quick Actions
+      switch (item) {
+        case 0:
+          noteQueueCount = 0; noteQueueIndex = 0;
+          currentMode = MODE_IDLE; currentNote = "";
+          preferences.begin("desk-cfg", false);
+          preferences.remove("note_text");
+          preferences.end();
+          setIdleStatus("Cleared");
+          break;
+        case 1:
+          currentMode = MODE_WEATHER;
+          renderCurrentMode();
+          break;
+        case 2:
+          currentMode = MODE_IDLE;
+          renderCurrentMode();
+          break;
+        case 3:
+          setSleepMode();
+          break;
+      }
+      break;
+    case 2: // Display
+      switch (item) {
+        case 0:
+          displayBrightness = (displayBrightness <= 230) ? displayBrightness + 25 : 255;
+          analogWrite(TFT_BL, displayBrightness);
+          preferences.begin("desk-cfg", false);
+          preferences.putUChar("brightness", displayBrightness);
+          preferences.end();
+          break;
+        case 1:
+          displayBrightness = (displayBrightness >= 25) ? displayBrightness - 25 : 0;
+          analogWrite(TFT_BL, displayBrightness);
+          preferences.begin("desk-cfg", false);
+          preferences.putUChar("brightness", displayBrightness);
+          preferences.end();
+          break;
+        case 2: {
+          static const uint8_t LANDSCAPE_MADCTL[] = { 0x28, 0x68, 0xA8, 0xE8 };
+          preferences.begin("desk-cfg", false);
+          int rot = (preferences.getInt("display_rot", 0) + 1) & 3;
+          preferences.putInt("display_rot", rot);
+          preferences.end();
+          tft.setRotation(1);
+          { uint8_t m = LANDSCAPE_MADCTL[rot]; tft.sendCommand(0x36, &m, 1); }
+          break;
+        }
+        case 3:
+          // Cycle accent color through a preset list
+          {
+            static const uint16_t ACCENT_CYCLE[] = { COL_ACCENT, COL_ROSE, COL_GOLD, COL_MINT, COL_LAVENDER, COL_SKYBLUE, COL_PEACH };
+            static uint8_t accentIdx = 0;
+            accentIdx = (accentIdx + 1) % 7;
+            userAccentColor = ACCENT_CYCLE[accentIdx];
+            preferences.begin("desk-cfg", false);
+            preferences.putUShort("col_accent", userAccentColor);
+            preferences.end();
+          }
+          break;
+      }
+      break;
+    case 3: // Home Screen toggles
+      switch (item) {
+        case 0: idleShowClock   = !idleShowClock; break;
+        case 1: idleShowWeather = !idleShowWeather; break;
+        case 2: idleShowFace    = !idleShowFace; break;
+        case 3: idleShowWifi    = !idleShowWifi; break;
+      }
+      preferences.begin("desk-cfg", false);
+      preferences.putBool("idle_clock",   idleShowClock);
+      preferences.putBool("idle_weather", idleShowWeather);
+      preferences.putBool("idle_face",    idleShowFace);
+      preferences.putBool("idle_wifi",    idleShowWifi);
+      preferences.end();
+      break;
+  }
+  publishStatus();
 }
 
 void renderCurrentMode() {
@@ -2342,6 +2575,12 @@ void renderCurrentMode() {
     case MODE_ANIMATED_NOTE:
       renderAnimatedNoteFrame();
       break;
+    case MODE_MENU:
+      renderMenuFrame();
+      break;
+    case MODE_CONFIRM_CLEAR:
+      renderConfirmClear();
+      break;
     case MODE_IDLE:
     default:
       renderIdle();
@@ -2391,9 +2630,9 @@ void renderSceneFrame() {
     float waveA = 0.2f + sinf(t * 3.14159f * 4.f) * 0.5f;
     drawStickFigure(220, 120 + (int)bob, 14, 0.3f, -waveA, 0.3f, 0.3f, userBodyColor);
     int hx = 160, hy = 70 - (int)(t * 18.f);
-    gfx->fillCircle(hx - 4, hy - 2, 4, COL_ROSE);
-    gfx->fillCircle(hx + 4, hy - 2, 4, COL_ROSE);
-    gfx->fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, COL_ROSE);
+    gfx->fillCircle(hx - 4, hy - 2, 4, userAccentColor);
+    gfx->fillCircle(hx + 4, hy - 2, 4, userAccentColor);
+    gfx->fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, userAccentColor);
 
   } else if (currentScene == "bow") {
     drawStickFigure(130, 120, 14, 0.5f, 0.5f, 0.25f, 0.25f, userFaceColor);
@@ -2432,9 +2671,9 @@ void renderSceneFrame() {
                      armReach, 0.4f, 0.3f, 0.3f, userBodyColor);
       // Hearts appearing
       if (p > 0.5f) {
-        gfx->fillCircle(158, 100, 3, COL_ROSE);
-        gfx->fillCircle(162, 100, 3, COL_ROSE);
-        gfx->fillTriangle(155, 101, 165, 101, 160, 107, COL_ROSE);
+        gfx->fillCircle(158, 100, 3, userAccentColor);
+        gfx->fillCircle(162, 100, 3, userAccentColor);
+        gfx->fillTriangle(155, 101, 165, 101, 160, 107, userAccentColor);
       }
     } else {
       // Walking off together into the distance (shrinking)
@@ -2455,11 +2694,11 @@ void renderSceneFrame() {
       // Heart floating above them
       int hy = cy - sc * 3 - 5;
       if (hy > 10) {
-        gfx->fillCircle(centerX + (int)driftX - 3, hy, 2, COL_ROSE);
-        gfx->fillCircle(centerX + (int)driftX + 3, hy, 2, COL_ROSE);
+        gfx->fillCircle(centerX + (int)driftX - 3, hy, 2, userAccentColor);
+        gfx->fillCircle(centerX + (int)driftX + 3, hy, 2, userAccentColor);
         gfx->fillTriangle(centerX + (int)driftX - 5, hy + 1,
                           centerX + (int)driftX + 5, hy + 1,
-                          centerX + (int)driftX, hy + 6, COL_ROSE);
+                          centerX + (int)driftX, hy + 6, userAccentColor);
       }
       // Sunset glow at horizon
       if (p > 0.3f) {
@@ -2477,18 +2716,18 @@ void renderSceneFrame() {
       for (int i = 0; i < 3; i++) {
         int hx2 = 160 + (i - 1) * 14;
         int hy2 = 76 - (int)(t * 15.f);
-        gfx->fillCircle(hx2 - 3, hy2,   3, COL_ROSE);
-        gfx->fillCircle(hx2 + 3, hy2,   3, COL_ROSE);
-        gfx->fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, COL_ROSE);
+        gfx->fillCircle(hx2 - 3, hy2,   3, userAccentColor);
+        gfx->fillCircle(hx2 + 3, hy2,   3, userAccentColor);
+        gfx->fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, userAccentColor);
       }
     }
   } else { // shyLeanIn (default)
     float lean2 = sinf(t * 3.14159f * 1.5f) * 5.f;
     drawStickFigure(105, 125 - (int)lean2, 14, 0.6f, 0.1f, 0.3f, 0.3f, userFaceColor);
     drawStickFigure(215, 125,              14, 0.3f, 0.7f, 0.3f, 0.3f, userBodyColor);
-    gfx->fillCircle(160, 95, 4, COL_PINK);
-    gfx->fillCircle(155, 85, 3, COL_PINK);
-    gfx->fillCircle(165, 80, 2, COL_PINK);
+    gfx->fillCircle(160, 95, 4, userAccentColor);
+    gfx->fillCircle(155, 85, 3, userAccentColor);
+    gfx->fillCircle(165, 80, 2, userAccentColor);
   }
   pushCanvas();
 }
@@ -2554,6 +2793,10 @@ FwSizeParams getFireworkSizeParams() {
 }
 
 void explodeRocket(uint8_t rocketIdx) {
+  explodeRocketStage(rocketIdx, fireworkStages);
+}
+
+void explodeRocketStage(uint8_t rocketIdx, uint8_t stagesLeft) {
   int16_t cx = gPtcl[rocketIdx].x;
   int16_t cy = gPtcl[rocketIdx].y;
   uint16_t col = pickBurstColor();
@@ -2584,16 +2827,30 @@ void explodeRocket(uint8_t rocketIdx) {
     placed++;
   }
   // Crackle: schedule delayed secondary mini-bursts
-  // We mark the explosion center by placing a "crackle seed" particle
   for (uint8_t i = 0; i < 48; i++) {
     if (gPtcl[i].life > 0) continue;
     gPtcl[i].x    = cx;
     gPtcl[i].y    = cy;
     gPtcl[i].vx   = 0;
     gPtcl[i].vy   = 0;
-    gPtcl[i].life = 80; // >50 but ≤100: crackle seed (waits, then pops)
+    gPtcl[i].life = 80; // >50 but ≤100: crackle seed
     gPtcl[i].color = col;
     break;
+  }
+  // Multi-stage: spawn child rocket(s) that will burst again
+  if (stagesLeft >= 2) {
+    for (uint8_t c = 0; c < (stagesLeft >= 3 ? 2 : 1); c++) {
+      for (uint8_t i = 0; i < 48; i++) {
+        if (gPtcl[i].life > 0) continue;
+        gPtcl[i].x     = cx + (int16_t)(random(40) - 20);
+        gPtcl[i].y     = cy;
+        gPtcl[i].vx    = (int8_t)(random(5) - 2);
+        gPtcl[i].vy    = (int8_t)(-4 - random(2));
+        gPtcl[i].life  = 120; // child rocket (>100 = rocket phase)
+        gPtcl[i].color = COL_GOLD;
+        break;
+      }
+    }
   }
 }
 
@@ -3775,6 +4032,45 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "set_firework_stages") {
+    int s = extractJsonIntField(body, "stages", 1);
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    fireworkStages = (uint8_t)s;
+    return;
+  }
+
+  if (type == "set_idle_config") {
+    idleShowClock   = extractJsonIntField(body, "showClock",   idleShowClock ? 1 : 0) != 0;
+    idleShowWeather = extractJsonIntField(body, "showWeather", idleShowWeather ? 1 : 0) != 0;
+    idleShowFace    = extractJsonIntField(body, "showFace",    idleShowFace ? 1 : 0) != 0;
+    idleShowWifi    = extractJsonIntField(body, "showWifi",    idleShowWifi ? 1 : 0) != 0;
+    preferences.begin("desk-cfg", false);
+    preferences.putBool("idle_clock",   idleShowClock);
+    preferences.putBool("idle_weather", idleShowWeather);
+    preferences.putBool("idle_face",    idleShowFace);
+    preferences.putBool("idle_wifi",    idleShowWifi);
+    preferences.end();
+    if (currentMode == MODE_IDLE) renderCurrentMode();
+    statusText = "Home screen updated";
+    publishStatus();
+    return;
+  }
+
+  if (type == "set_brightness") {
+    int b = extractJsonIntField(body, "brightness", 128);
+    if (b < 0) b = 0;
+    if (b > 255) b = 255;
+    displayBrightness = (uint8_t)b;
+    analogWrite(TFT_BL, displayBrightness);
+    preferences.begin("desk-cfg", false);
+    preferences.putUChar("brightness", displayBrightness);
+    preferences.end();
+    statusText = "Brightness set";
+    publishStatus();
+    return;
+  }
+
   if (type == "set_companion_scale") {
     int sc = extractJsonIntField(body, "scale", 100);
     if (sc < 50) sc = 50;
@@ -4362,10 +4658,18 @@ void setupDisplay() {
   userFaceColor   = preferences.getUShort("col_face",   COL_FG);
   userAccentColor = preferences.getUShort("col_accent", COL_ACCENT);
   userBodyColor   = preferences.getUShort("col_body",   COL_ROSE);
+  idleShowClock   = preferences.getBool("idle_clock",   true);
+  idleShowWeather = preferences.getBool("idle_weather", true);
+  idleShowFace    = preferences.getBool("idle_face",    true);
+  idleShowWifi    = preferences.getBool("idle_wifi",    true);
+  displayBrightness = preferences.getUChar("brightness", 128);
   preferences.end();
   displayRot = displayRot & 3;
   { uint8_t m = LANDSCAPE_MADCTL[displayRot]; tft.sendCommand(0x36, &m, 1); }
   Serial.printf("[TFT] MADCTL override: slot %d → 0x%02X\n", displayRot, LANDSCAPE_MADCTL[displayRot]);
+
+  // Apply saved brightness
+  analogWrite(TFT_BL, displayBrightness);
 
   // Create GFXcanvas16 framebuffer for flicker-free double-buffered rendering
   Serial.printf("[TFT] Heap before canvas: %u  PSRAM: %u  Largest block: %u\n",
@@ -4411,12 +4715,17 @@ void handleTouch() {
   bool isTouched = (touchCount > 0);
   unsigned long now = millis();
 
+  // Menu timeout
+  if (currentMode == MODE_MENU && now - menuOpenedMs >= MENU_TIMEOUT_MS) {
+    currentMode = menuResumeMode;
+    renderCurrentMode();
+    return;
+  }
+
   if (isTouched && !touchActive) {
     touchActive  = true;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
-    // Map raw portrait touch coords → landscape screen coords for setRotation(1):
-    // portrait-Y → screen-X, (240 - portrait-X) → screen-Y
     touchStartX  = (int)p.y;
     touchStartY  = 240 - (int)p.x;
   }
@@ -4426,19 +4735,75 @@ void handleTouch() {
     unsigned long holdDuration = now - touchStartMs;
     lastIdleInteractionMs = now;
 
+    // ─── Confirm Clear mode: tap Yes or No ───
+    if (currentMode == MODE_CONFIRM_CLEAR) {
+      if (touchStartY >= 100 && touchStartY <= 160) {
+        if (touchStartX >= 30 && touchStartX <= 140) {
+          // Yes → clear
+          noteQueueCount = 0; noteQueueIndex = 0;
+          currentMode = MODE_IDLE; currentNote = "";
+          preferences.begin("desk-cfg", false);
+          preferences.remove("note_text");
+          preferences.end();
+          setIdleStatus("Ready");
+          renderCurrentMode(); publishStatus();
+          energyLevel   = clampLevel(energyLevel + 4);
+          boredomLevel  = clampLevel(boredomLevel + 6);
+          persistPetState();
+          startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
+        } else if (touchStartX >= 180 && touchStartX <= 290) {
+          // No → cancel, go back
+          currentMode = menuResumeMode;
+          renderCurrentMode();
+        }
+      }
+      return;
+    }
+
+    // ─── Menu mode: handle menu taps ───
+    if (currentMode == MODE_MENU) {
+      menuOpenedMs = now; // reset timeout on interaction
+      // Left arrow
+      if (touchStartY >= 210 && touchStartX < 50) {
+        menuPage = (menuPage + MENU_PAGES - 1) % MENU_PAGES;
+        renderMenuFrame();
+        return;
+      }
+      // Right arrow
+      if (touchStartY >= 210 && touchStartX > SCREEN_WIDTH - 50) {
+        menuPage = (menuPage + 1) % MENU_PAGES;
+        renderMenuFrame();
+        return;
+      }
+      // Menu item tap (4 items, y=42+i*42, h=36)
+      for (uint8_t i = 0; i < MENU_ITEM_COUNT; i++) {
+        int itemY = 42 + i * 42;
+        if (touchStartY >= itemY && touchStartY <= itemY + 36 &&
+            touchStartX >= 10 && touchStartX <= SCREEN_WIDTH - 10) {
+          executeMenuAction(menuPage, i);
+          // Stay in menu for toggles (page 2, 3), exit for actions (page 0, 1)
+          if (menuPage <= 1) {
+            currentMode = menuResumeMode;
+          }
+          renderCurrentMode();
+          return;
+        }
+      }
+      // Tap outside items → dismiss menu
+      currentMode = menuResumeMode;
+      renderCurrentMode();
+      return;
+    }
+
+    // ─── Normal mode touch handling ───
+
     if (holdDuration >= BTN_HOLD_MS) {
-      // ─ Long press: clear display
-      noteQueueCount = 0; noteQueueIndex = 0;
-      currentMode = MODE_IDLE; currentNote = "";
-      preferences.begin("desk-cfg", false);
-      preferences.remove("note_text");
-      preferences.end();
-      setIdleStatus("Ready");
-      renderCurrentMode(); publishStatus();
-      energyLevel   = clampLevel(energyLevel + 4);
-      boredomLevel  = clampLevel(boredomLevel + 6);
-      persistPetState();
-      startTransientExpression(pickReactionExpression("button_clear"), 1600, "Miss my notes");
+      // ─ Long press: open menu (or confirm clear if in idle/note)
+      menuResumeMode = currentMode;
+      menuPage = 0;
+      menuOpenedMs = now;
+      currentMode = MODE_MENU;
+      renderMenuFrame();
 
     } else if (holdDuration >= 500) {
       // ─ Medium hold: comfort reaction
@@ -4450,7 +4815,6 @@ void handleTouch() {
     } else {
       // ─ Short tap
       if (currentMode == MODE_NOTE && noteQueueCount > 1) {
-        // Cycle notes
         noteQueueIndex      = (noteQueueIndex + 1) % noteQueueCount;
         currentNote         = noteQueue[noteQueueIndex];
         currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
@@ -4463,23 +4827,19 @@ void handleTouch() {
         startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
 
       } else if (currentMode != MODE_IDLE && currentMode != MODE_NOTE) {
-        // Tap on non-idle screen: dismiss
         setIdleStatus("Ready");
 
       } else {
-        // Tap in idle/note: double-tap = cheer, single tap = pet
         if (now - lastTapReleaseMs < 400UL && lastTapReleaseMs > 0) {
-          // Double tap
           lastTapReleaseMs = 0;
           bondLevel    = clampLevel(bondLevel + 6);
           boredomLevel = clampLevel(boredomLevel - 12);
           persistPetState();
           startTransientExpression(pickReactionExpression("cheer"), 2200, "Yay!");
         } else {
-          // Single tap: sparkle at touch point + pet
           lastTapReleaseMs = now;
           if (displayAvailable) {
-            gfx->fillCircle(touchStartX, touchStartY, 7, COL_GOLD);
+            gfx->fillCircle(touchStartX, touchStartY, 7, userAccentColor);
             gfx->fillCircle(touchStartX, touchStartY, 3, COL_BG);
           }
           delay(100);

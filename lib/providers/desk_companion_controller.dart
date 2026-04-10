@@ -938,6 +938,77 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  /// Geocode a city name, zip code, or address to lat/lon via Nominatim.
+  /// Returns `{lat, lon}` on success, `null` on failure.
+  Future<Map<String, double>?> geocodeLocation(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': trimmed,
+        'format': 'json',
+        'limit': '1',
+      });
+      final response = await http.get(uri, headers: {
+        'User-Agent': 'DeskCompanionApp/1.0',
+      });
+      if (response.statusCode != 200) return null;
+      final List<dynamic> results = json.decode(response.body);
+      if (results.isEmpty) return null;
+      final first = results[0] as Map<String, dynamic>;
+      final lat = double.tryParse(first['lat']?.toString() ?? '');
+      final lon = double.tryParse(first['lon']?.toString() ?? '');
+      if (lat == null || lon == null) return null;
+      return {'lat': lat, 'lon': lon};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> sendFireworkStages(int stages) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_firework_stages', 'stages': stages.clamp(1, 3)},
+        mode: _mode,
+        bleLabel: 'Firework stages sent over BLE.',
+        relayLabel: 'Firework stages queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendIdleConfig({
+    required bool showClock,
+    required bool showWeather,
+    required bool showFace,
+    required bool showWifi,
+  }) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {
+          'type': 'set_idle_config',
+          'showClock': showClock,
+          'showWeather': showWeather,
+          'showFace': showFace,
+          'showWifi': showWifi,
+        },
+        mode: _mode,
+        bleLabel: 'Idle config sent over BLE.',
+        relayLabel: 'Idle config queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendBrightness(int brightness) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_brightness', 'brightness': brightness.clamp(0, 255)},
+        mode: _mode,
+        bleLabel: 'Brightness sent over BLE.',
+        relayLabel: 'Brightness queued through relay.',
+      );
+    });
+  }
+
   Future<void> setCompanionStyle({
     required String hair,
     required String ears,
