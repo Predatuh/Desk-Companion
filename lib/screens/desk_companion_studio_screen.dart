@@ -501,21 +501,50 @@ extension DeskPiercingStyleExt on DeskPiercingStyle {
       };
 }
 
-enum _StudioWorkspace { companion, media, draw, settings }
+enum _StudioTab {
+  companion,
+  stickFigure,
+  notes,
+  banner,
+  flowers,
+  particles,
+  image,
+  draw,
+  countdown,
+  goodnight,
+  liveView,
+  settings,
+}
 
-extension _StudioWorkspaceExt on _StudioWorkspace {
+extension _StudioTabExt on _StudioTab {
   String get label => switch (this) {
-        _StudioWorkspace.companion => 'Companion',
-        _StudioWorkspace.media => 'Media',
-        _StudioWorkspace.draw => 'Draw',
-        _StudioWorkspace.settings => 'Settings',
+        _StudioTab.companion => 'Companion',
+        _StudioTab.stickFigure => 'Stick Figure',
+        _StudioTab.notes => 'Notes',
+        _StudioTab.banner => 'Banner',
+        _StudioTab.flowers => 'Flowers',
+        _StudioTab.particles => 'Particles',
+        _StudioTab.image => 'Image',
+        _StudioTab.draw => 'Draw',
+        _StudioTab.countdown => 'Countdown',
+        _StudioTab.goodnight => 'Goodnight',
+        _StudioTab.liveView => 'Live View',
+        _StudioTab.settings => 'Settings',
       };
 
   IconData get icon => switch (this) {
-        _StudioWorkspace.companion => Icons.auto_awesome,
-        _StudioWorkspace.media => Icons.perm_media_outlined,
-        _StudioWorkspace.draw => Icons.brush_outlined,
-        _StudioWorkspace.settings => Icons.settings,
+        _StudioTab.companion => Icons.auto_awesome,
+        _StudioTab.stickFigure => Icons.directions_walk,
+        _StudioTab.notes => Icons.sticky_note_2_outlined,
+        _StudioTab.banner => Icons.text_rotation_none,
+        _StudioTab.flowers => Icons.local_florist_outlined,
+        _StudioTab.particles => Icons.celebration_outlined,
+        _StudioTab.image => Icons.image_outlined,
+        _StudioTab.draw => Icons.brush_outlined,
+        _StudioTab.countdown => Icons.timer_outlined,
+        _StudioTab.goodnight => Icons.bedtime_outlined,
+        _StudioTab.liveView => Icons.visibility_outlined,
+        _StudioTab.settings => Icons.settings,
       };
 }
 
@@ -590,7 +619,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _bannerSpeed = 35;
   double _brushSize = 2;
   Color _drawColor = Colors.white;
-  _StudioWorkspace _activeWorkspace = _StudioWorkspace.companion;
+  _StudioTab _activeTab = _StudioTab.companion;
   DeskExpression _selectedExpression = DeskExpression.happy;
   CompanionScene _selectedScene = CompanionScene.none;
   DeskPersonality _selectedPersonality = DeskPersonality.curious;
@@ -835,1269 +864,24 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ),
         child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final showPinnedPreview =
-                  _activeWorkspace == _StudioWorkspace.companion &&
-                  constraints.maxHeight >= 720;
-
-              return Column(
-                children: [
-                  if (showPinnedPreview)
-                    _buildStickyPreview(
-                      context,
-                      controller,
-                      currentPersonality,
-                      currentPetMode,
-                    ),
-                  Expanded(
-                    child: SingleChildScrollView(
-            physics: _drawModeEnabled
-                ? const NeverScrollableScrollPhysics()
-                : const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildStudioHeader(context, controller),
-                const SizedBox(height: 18),
-                _buildWorkspaceSwitcher(context),
-                const SizedBox(height: 18),
-                if (_activeWorkspace == _StudioWorkspace.settings) ...[
-                _SectionCard(
-                  title: 'Device link',
-                  subtitle: controller.statusMessage,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (controller.relaySendProgress > 0 &&
-                          controller.relaySendProgress < 1)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: controller.relaySendProgress,
-                                  minHeight: 6,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${(controller.relaySendProgress * 100).round()}%',
-                                style:
-                                    Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _ChipLabel(
-                            label: controller.isBleConnected
-                                ? 'BLE: ${controller.deviceName}'
-                                : 'BLE: disconnected',
-                          ),
-                          _ChipLabel(
-                            label: controller.connectedSsid.isEmpty
-                                ? 'Wi-Fi: not joined'
-                                : 'Wi-Fi: ${controller.connectedSsid}',
-                          ),
-                          _ChipLabel(label: _relayChipLabel(controller)),
-                        ],
-                      ),
-                      if (_relayStatusText(controller).isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          _relayStatusText(controller),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                      if (controller.hasRelayTarget) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Token: ${controller.deviceToken} | Pending: ${controller.relayPendingCount}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (controller.relayLastCommandAt != null)
-                          Text(
-                            'Last command queued: ${_relativeTimeLabel(controller.relayLastCommandAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (controller.relayLastSeenAt != null)
-                          Text(
-                            'Last command poll: ${_relativeTimeLabel(controller.relayLastSeenAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (controller.relayLastStatusAt != null)
-                          Text(
-                            'Last status post: ${_relativeTimeLabel(controller.relayLastStatusAt!)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy
-                                  ? null
-                                  : controller.isBleConnected
-                                      ? null
-                                      : () => controller.scanAndConnect(),
-                              icon: const Icon(Icons.bluetooth_searching),
-                              label: const Text('Connect BLE'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy
-                                  ? null
-                                  : controller.isBleConnected
-                                      ? () => controller.disconnect()
-                                      : controller.hasRelayTarget
-                                          ? () => _connectWifiDevice(controller)
-                                          : null,
-                              icon: Icon(
-                                controller.isBleConnected
-                                    ? Icons.link_off
-                                    : controller.isRemoteConnected
-                                        ? Icons.wifi_tethering
-                                        : Icons.wifi_find_outlined,
-                              ),
-                              label: Text(
-                                controller.isBleConnected
-                                    ? 'Disconnect'
-                                    : 'Connect over Wi-Fi',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+          child: Column(
+            children: [
+              // ── Delivery progress stepper ──
+              if (controller.deliveryStage.isNotEmpty)
+                _buildDeliveryTracker(context, controller),
+              // ── Scrollable tab bar ──
+              _buildTabBar(context),
+              const SizedBox(height: 4),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: _drawModeEnabled
+                      ? const NeverScrollableScrollPhysics()
+                      : const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: _buildActiveTabContent(context, controller, currentPersonality, currentPetMode),
                 ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Remote setup',
-                  subtitle:
-                      'Provision Wi-Fi and relay settings over BLE once. After that, the device should stay on Wi-Fi and talk to the hosted relay on its own.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Wi-Fi',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildWifiStatusPanel(context, controller),
-                      const SizedBox(height: 12),
-                      if (controller.availableWifiNetworks.isEmpty) ...[
-                        Text(
-                          'No scanned networks are loaded yet. Run a scan over BLE, or type the Wi-Fi name manually.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (controller.availableWifiNetworks.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: controller.availableWifiNetworks
-                              .map(
-                                (ssid) => ChoiceChip(
-                                  label: Text(ssid),
-                                  selected: _wifiSsidController.text.trim() == ssid,
-                                  onSelected: (_) => setState(
-                                    () => _wifiSsidController.text = ssid,
-                                  ),
-                                ),
-                              )
-                              .toList(growable: false),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      TextField(
-                        controller: _wifiSsidController,
-                        decoration: const InputDecoration(
-                          labelText: 'Wi-Fi name',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _wifiPasswordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: 'Wi-Fi password',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _scanWifiNetworks(controller),
-                              icon: const Icon(Icons.wifi_find_outlined),
-                              label: const Text('Scan Wi-Fi'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _sendWifi(controller),
-                              icon: const Icon(Icons.wifi),
-                              label: const Text('Send Wi-Fi'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: controller.busy || !controller.isBleConnected
-                              ? null
-                              : () => _forgetWifi(controller),
-                          icon: const Icon(Icons.wifi_off_outlined),
-                          label: const Text('Forget device Wi-Fi'),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Relay',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _relayBaseUrlController,
-                        onChanged: controller.updateRelayBaseUrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Relay base URL',
-                          hintText: 'http://desk-companion-relay.fly.dev',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _deviceTokenController,
-                        onChanged: controller.updateDeviceToken,
-                        decoration: const InputDecoration(
-                          labelText: 'Device token',
-                          hintText: 'desk-01',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy || !controller.hasRelayTarget
-                                  ? null
-                                  : () => _connectWifiDevice(controller),
-                              icon: Icon(
-                                controller.isRemoteConnected
-                                    ? Icons.wifi_tethering
-                                    : Icons.wifi_find_outlined,
-                              ),
-                              label: Text(
-                                controller.isRemoteConnected
-                                    ? 'Connect to device'
-                                    : 'Connect to device',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.isBleConnected
-                                  ? null
-                                  : () => _configureRelay(controller),
-                              icon: const Icon(Icons.cloud_done_outlined),
-                              label: const Text('Save relay to device'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Display orientation',
-                  subtitle:
-                      'Tap each option and hit Apply until the screen looks correct. The device remembers your pick.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: List.generate(
-                          4,
-                          (i) => ChoiceChip(
-                            label: Text('Landscape ${String.fromCharCode(65 + i)}'),
-                            selected: _displayRotation == i,
-                            onSelected: (_) =>
-                                setState(() => _displayRotation = i),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller
-                                        .setDisplayRotation(_displayRotation),
-                                    success:
-                                        'Rotation $_displayRotation applied — check the screen!',
-                                  ),
-                          icon: const Icon(Icons.screen_rotation_outlined),
-                          label: const Text('Apply rotation'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Timezone',
-                  subtitle:
-                      'UTC offset for the on-screen clock. Requires Wi-Fi to be connected.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'UTC offset: ${_timezoneOffsetHours >= 0 ? '+' : ''}${_timezoneOffsetHours.toStringAsFixed(1)} h',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      Slider(
-                        min: -12,
-                        max: 14,
-                        divisions: 52,
-                        value: _timezoneOffsetHours,
-                        onChanged: (v) =>
-                            setState(() => _timezoneOffsetHours = v),
-                      ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller.setTimezone(
-                                        (_timezoneOffsetHours * 3600).round()),
-                                    success: 'Timezone sent.',
-                                  ),
-                          icon: const Icon(Icons.access_time_outlined),
-                          label: const Text('Send timezone'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Weather location',
-                  subtitle:
-                      'Set latitude and longitude so the device can fetch live weather from open-meteo.com. Requires Wi-Fi.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _weatherLatController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      signed: true, decimal: true),
-                              decoration: const InputDecoration(
-                                  labelText: 'Latitude'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _weatherLonController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      signed: true, decimal: true),
-                              decoration: const InputDecoration(
-                                  labelText: 'Longitude'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ||
-                                      !controller.canControlDevice
-                                  ? null
-                                  : () {
-                                      final lat = double.tryParse(
-                                          _weatherLatController.text.trim());
-                                      final lon = double.tryParse(
-                                          _weatherLonController.text.trim());
-                                      if (lat == null || lon == null) {
-                                        _showMessage(
-                                            'Enter valid latitude and longitude.');
-                                        return;
-                                      }
-                                      _perform(
-                                        () => controller.setLocation(lat, lon),
-                                        success:
-                                            'Location sent. Weather will refresh soon.',
-                                      );
-                                    },
-                              icon: const Icon(Icons.location_on_outlined),
-                              label: const Text('Set location'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy ||
-                                      !controller.canControlDevice
-                                  ? null
-                                  : () => _perform(
-                                        () => controller.showWeather(),
-                                        success:
-                                            'Switching to weather display.',
-                                      ),
-                              icon: const Icon(Icons.cloud_outlined),
-                              label: const Text('Show weather'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ],
-                if (_activeWorkspace == _StudioWorkspace.companion) ...[
-                _buildStyleStudioSection(
-                  context,
-                  controller,
-                  currentPersonality,
-                  currentPetMode,
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Live scenes',
-                  subtitle: 'Send a duo animation to the device — these play directly on the display.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskScene.values
-                            .map(
-                              (scene) => ChoiceChip(
-                                label: Text(scene.label),
-                                selected: _selectedDeskScene == scene,
-                                onSelected: (_) =>
-                                    setState(() => _selectedDeskScene = scene),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller
-                                        .sendScene(_selectedDeskScene.command),
-                                    success:
-                                        '${_selectedDeskScene.label} scene started!',
-                                  ),
-                          icon: const Icon(Icons.people_outline),
-                          label: Text('Start ${_selectedDeskScene.label}'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ],
-                if (_activeWorkspace == _StudioWorkspace.media) ...[
-                _buildStickyNoteSection(context, controller),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Banner',
-                  subtitle: 'Scrolling marquee for short, cute status lines.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _bannerController,
-                        decoration:
-                            const InputDecoration(labelText: 'Banner text'),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Scroll speed: ${_bannerSpeed.round()} px/s',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      Slider(
-                        min: 10,
-                        max: 80,
-                        value: _bannerSpeed,
-                        onChanged: (value) =>
-                            setState(() => _bannerSpeed = value),
-                      ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _sendBanner(controller),
-                          icon: const Icon(Icons.view_carousel_outlined),
-                          label: const Text('Start banner'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Flowers',
-                  subtitle:
-                      'Full-screen animated flowers — a little gift that fills the whole display.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStudioDropdown(
-                        context,
-                        label: 'Flower animation',
-                        value: _selectedFlower,
-                        values: DeskFlower.values,
-                        labelBuilder: (value) => value.label,
-                        enabled: !controller.busy,
-                        onChanged: (value) => setState(() => _selectedFlower = value),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _selectedFlower.description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller.sendFlower(
-                                        _selectedFlower.command),
-                                    success:
-                                        '${_selectedFlower.label} blooming on the display!',
-                                  ),
-                          icon: const Icon(Icons.local_florist_outlined),
-                          label: Text('Send ${_selectedFlower.label}'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Image',
-                  subtitle:
-                      'Any image is resized to 320×240 and converted to a 1-bit bitmap.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_selectedImage != null)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: CompanionTheme.ink,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.memory(
-                                  _selectedImage!.previewPng,
-                                  height: 96,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  gaplessPlayback: true,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                _selectedImage!.name,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(color: Colors.white),
-                              ),
-                              Text(
-                                '${_selectedImage!.byteLength} bytes ready for display',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Text(
-                          'No image selected yet.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      const SizedBox(height: 10),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Invert image while converting'),
-                        value: _invertImage,
-                        onChanged: (value) =>
-                            setState(() => _invertImage = value),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _pickImage,
-                              icon: const Icon(Icons.image_outlined),
-                              label: const Text('Pick image'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  controller.busy ||
-                                          _selectedImage == null ||
-                                          !controller.canControlDevice
-                                      ? null
-                                      : () => _sendImage(controller),
-                              icon: const Icon(Icons.send_outlined),
-                              label: const Text('Send image'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Particles',
-                  subtitle:
-                      'Full-screen ambient animations — fireworks, heart rain, snowfall, and starfield.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskParticle.values
-                            .map(
-                              (p) => ChoiceChip(
-                                label: Text(p.label),
-                                selected: _selectedParticle == p,
-                                onSelected: (_) =>
-                                    setState(() => _selectedParticle = p),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      if (_selectedParticle == DeskParticle.fireworks) ...[
-                        const SizedBox(height: 8),
-                        const Text('Firework shape',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.white70)),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: DeskFireworkShape.values
-                              .map(
-                                (s) => ChoiceChip(
-                                  label: Text(s.label),
-                                  selected: _selectedFireworkShape == s,
-                                  onSelected: (_) =>
-                                      setState(() => _selectedFireworkShape = s),
-                                ),
-                              )
-                              .toList(growable: false),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text('Color palette',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.white70)),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: DeskFireworkPalette.values
-                              .map(
-                                (p) => ChoiceChip(
-                                  label: Text(p.label),
-                                  selected: _selectedFireworkPalette == p,
-                                  onSelected: (_) =>
-                                      setState(() => _selectedFireworkPalette = p),
-                                ),
-                              )
-                              .toList(growable: false),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text('Explosion size',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.white70)),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: DeskFireworkSize.values
-                              .map(
-                                (s) => ChoiceChip(
-                                  label: Text(s.label),
-                                  selected: _selectedFireworkSize == s,
-                                  onSelected: (_) =>
-                                      setState(() => _selectedFireworkSize = s),
-                                ),
-                              )
-                              .toList(growable: false),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () async {
-                                      if (_selectedParticle == DeskParticle.fireworks) {
-                                        await controller.sendFireworkShape(
-                                            _selectedFireworkShape.command);
-                                        await controller.sendFireworkPalette(
-                                            _selectedFireworkPalette.command);
-                                        await controller.sendFireworkSize(
-                                            _selectedFireworkSize.command);
-                                      }
-                                      await controller.sendParticle(
-                                          _selectedParticle.command);
-                                    },
-                                    success:
-                                        '${_selectedParticle.label} started!',
-                                  ),
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: Text('Send ${_selectedParticle.label}'),
-                        ),
-                      ),
-                      if (_selectedParticle == DeskParticle.fireworks) ...[
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        Text('Manual launcher', style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tap a column to fire a rocket from that position. Rapid-fire as many as you want!',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: List.generate(8, (i) {
-                            return Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 2),
-                                child: GestureDetector(
-                                  onTap: !controller.canControlDevice
-                                      ? null
-                                      : () => controller.fireRocket(column: i),
-                                  child: Container(
-                                    height: 64,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.bottomCenter,
-                                        end: Alignment.topCenter,
-                                        colors: [
-                                          const Color(0xFFFF6B35),
-                                          const Color(0xFFFFD700).withValues(alpha: 0.3),
-                                          Colors.transparent,
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.white24),
-                                    ),
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.rocket_launch,
-                                        size: 20,
-                                        color: Colors.white.withValues(alpha: 0.8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: !controller.canControlDevice
-                                ? null
-                                : () => controller.fireRocket(),
-                            icon: const Icon(Icons.rocket_launch),
-                            label: const Text('Fire random'),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: controller.busy || !controller.canControlDevice
-                              ? null
-                              : () => _perform(
-                                    () => controller.clearDisplay(),
-                                    success: 'Particles stopped.',
-                                  ),
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          label: const Text('Stop particles'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Goodnight',
-                  subtitle:
-                      'Switches the display to a calm sleep scene with a crescent moon and drifting stars.',
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: controller.busy || !controller.canControlDevice
-                          ? null
-                          : () => _perform(
-                                () => controller.sendGoodnight(),
-                                success: 'Goodnight! Sleep scene started.',
-                              ),
-                      icon: const Icon(Icons.nights_stay_outlined),
-                      label: const Text('Send goodnight'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Countdown',
-                  subtitle: 'Displays a large live countdown timer on screen.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Hours', style: Theme.of(context).textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  height: 48,
-                                  child: TextField(
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(hintText: '0', isDense: true),
-                                    controller: TextEditingController(text: '$_countdownHours'),
-                                    onChanged: (v) => setState(() => _countdownHours = int.tryParse(v) ?? 0),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Minutes', style: Theme.of(context).textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  height: 48,
-                                  child: TextField(
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(hintText: '5', isDense: true),
-                                    controller: TextEditingController(text: '$_countdownMinutes'),
-                                    onChanged: (v) => setState(() => _countdownMinutes = int.tryParse(v) ?? 0),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Seconds', style: Theme.of(context).textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  height: 48,
-                                  child: TextField(
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(hintText: '0', isDense: true),
-                                    controller: TextEditingController(text: '$_countdownSeconds'),
-                                    onChanged: (v) => setState(() => _countdownSeconds = int.tryParse(v) ?? 0),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text('When timer ends',
-                          style: TextStyle(fontSize: 12, color: Colors.white70)),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: DeskCountdownEndAction.values
-                            .map((a) => ChoiceChip(
-                                  label: Text(a.label),
-                                  selected: _countdownEndAction == a,
-                                  onSelected: (_) =>
-                                      setState(() => _countdownEndAction = a),
-                                ))
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.busy ||
-                                  !controller.canControlDevice
-                              ? null
-                              : () {
-                                  final secs = _countdownHours * 3600 +
-                                      _countdownMinutes * 60 +
-                                      _countdownSeconds;
-                                  if (secs <= 0) {
-                                    _showMessage('Set at least 1 second.');
-                                    return;
-                                  }
-                                  _perform(
-                                    () => controller.startCountdown(secs,
-                                        endAction: _countdownEndAction.value),
-                                    success:
-                                        'Countdown started.',
-                                  );
-                                },
-                          icon: const Icon(Icons.timer_outlined),
-                          label: const Text('Start countdown'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ],
-                if (_activeWorkspace == _StudioWorkspace.draw) ...[
-                _SectionCard(
-                  title: 'Draw',
-                  subtitle: _drawModeEnabled
-                      ? 'Draw mode is on. Page scrolling is locked until you turn it off.'
-                      : 'Turn on Draw mode before sketching so the page does not scroll while you draw.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DisplayDrawingPad(
-                        bitmap: _drawBitmap,
-                        colorData: _drawColorData,
-                        showGrid: _showGrid,
-                        enabled: _drawModeEnabled,
-                        pixelColor: _drawColor,
-                        onPixel: _paintPixel,
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ActionChip(
-                            label: const Text('Fullscreen'),
-                            avatar: const Icon(Icons.open_in_full, size: 18),
-                            onPressed: () => _openFullscreenDrawEditor(),
-                          ),
-                          FilterChip(
-                            label: const Text('Draw mode'),
-                            selected: _drawModeEnabled,
-                            onSelected: (_) => setState(
-                                () => _drawModeEnabled = !_drawModeEnabled),
-                          ),
-                          FilterChip(
-                            label: const Text('Pen'),
-                            selected: !_eraserMode,
-                            onSelected: (_) =>
-                                setState(() => _eraserMode = false),
-                          ),
-                          FilterChip(
-                            label: const Text('Eraser'),
-                            selected: _eraserMode,
-                            onSelected: (_) =>
-                                setState(() => _eraserMode = true),
-                          ),
-                          FilterChip(
-                            label: const Text('Grid'),
-                            selected: _showGrid,
-                            onSelected: (_) =>
-                                setState(() => _showGrid = !_showGrid),
-                          ),
-                          FilterChip(
-                            label: const Text('Live push'),
-                            selected: _liveDraw,
-                            onSelected: (_) =>
-                                setState(() => _liveDraw = !_liveDraw),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Brush size: ${_brushSize.round()} px',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      Slider(
-                        min: 1,
-                        max: 5,
-                        divisions: 4,
-                        value: _brushSize,
-                        onChanged: (value) =>
-                            setState(() => _brushSize = value),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Draw color',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          Colors.white,
-                          const Color(0xFF00BFFF),
-                          const Color(0xFFFF69B4),
-                          const Color(0xFF00FF7F),
-                          const Color(0xFFFFD700),
-                          const Color(0xFFFF4500),
-                          const Color(0xFF8A2BE2),
-                          const Color(0xFFFF0000),
-                          const Color(0xFF00FFFF),
-                          const Color(0xFFFF1493),
-                          const Color(0xFF7CFC00),
-                          const Color(0xFFFF8C00),
-                        ].map((preset) {
-                          final selected = preset == _drawColor;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() => _drawColor = preset);
-                              _sendDrawColorToDevice(preset);
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: preset,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: selected
-                                      ? Colors.white
-                                      : Colors.white24,
-                                  width: selected ? 2.5 : 1,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _drawBitmap = Uint8List(
-                                            DisplayBitmapCodec.byteLength);
-                                        _drawColorData = Uint8List(
-                                            DisplayBitmapCodec.colorByteLength);
-                                      });
-                                      _queueLiveDraw();
-                                    },
-                              icon: const Icon(Icons.layers_clear_outlined),
-                              label: const Text('Clear canvas'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _fillCanvas,
-                              icon: const Icon(Icons.texture_outlined),
-                              label: const Text('Fill canvas'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  controller.busy ? null : _loadImageIntoCanvas,
-                              icon: const Icon(Icons.move_down_outlined),
-                              label: const Text('Use picked image'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: controller.busy || !controller.canControlDevice
-                                  ? null
-                                  : () => _sendCanvas(controller),
-                              icon: const Icon(Icons.draw_outlined),
-                              label: const Text('Push drawing'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Image',
-                  subtitle:
-                      'Any image is resized to 320×240 and converted to a 1-bit bitmap.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_selectedImage != null)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: CompanionTheme.ink,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.memory(
-                                  _selectedImage!.previewPng,
-                                  height: 96,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  gaplessPlayback: true,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                _selectedImage!.name,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(color: Colors.white),
-                              ),
-                              Text(
-                                '${_selectedImage!.byteLength} bytes ready for display',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Text(
-                          'No image selected yet.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      const SizedBox(height: 10),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Invert image while converting'),
-                        value: _invertImage,
-                        onChanged: (value) =>
-                            setState(() => _invertImage = value),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: controller.busy ? null : _pickImage,
-                              icon: const Icon(Icons.image_outlined),
-                              label: const Text('Pick image'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  controller.busy ||
-                                          _selectedImage == null ||
-                                          !controller.canControlDevice
-                                      ? null
-                                      : () => _sendImage(controller),
-                              icon: const Icon(Icons.send_outlined),
-                              label: const Text('Send image'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                ],
-              ],
-            ),
-                    ),
-                  ),
-                ],
-              );
-            },
+              ),
+            ],
           ),
         ),
       ),
@@ -2563,40 +1347,682 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     });
   }
 
-  Widget _buildStudioHeader(
+  Widget _buildTabBar(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _StudioTab.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final tab = _StudioTab.values[index];
+          final active = _activeTab == tab;
+          return ChoiceChip(
+            avatar: Icon(tab.icon, size: 18),
+            label: Text(tab.label),
+            selected: active,
+            onSelected: (_) {
+              if (tab != _StudioTab.companion && tab != _StudioTab.stickFigure) {
+                _stopLiveScenePlayback();
+              }
+              setState(() => _activeTab = tab);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDeliveryTracker(BuildContext context, DeskCompanionController controller) {
+    final stage = controller.deliveryStage;
+    const stages = ['sending', 'queued', 'delivered', 'displaying'];
+    final stageIndex = stages.indexOf(stage);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: List.generate(stages.length, (i) {
+          final label = stages[i][0].toUpperCase() + stages[i].substring(1);
+          final done = i < stageIndex;
+          final active = i == stageIndex;
+          final color = done || active
+              ? CompanionTheme.coral
+              : CompanionTheme.blush;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: i < stages.length - 1 ? 4 : 0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 4,
+                    child: LinearProgressIndicator(
+                      value: active ? null : (done ? 1 : 0),
+                      backgroundColor: CompanionTheme.cream,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(label, style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildActiveTabContent(
     BuildContext context,
     DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
   ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFFFF), Color(0xFFEAEAEA)],
+    return switch (_activeTab) {
+      _StudioTab.companion => _buildCompanionTab(context, controller, currentPersonality, currentPetMode),
+      _StudioTab.stickFigure => _buildStickFigureTab(context, controller, currentPersonality, currentPetMode),
+      _StudioTab.notes => _buildNotesTab(context, controller),
+      _StudioTab.banner => _buildBannerTab(context, controller),
+      _StudioTab.flowers => _buildFlowersTab(context, controller),
+      _StudioTab.particles => _buildParticlesTab(context, controller),
+      _StudioTab.image => _buildImageTab(context, controller),
+      _StudioTab.draw => _buildDrawTab(context, controller),
+      _StudioTab.countdown => _buildCountdownTab(context, controller),
+      _StudioTab.goodnight => _buildGoodnightTab(context, controller),
+      _StudioTab.liveView => _buildLiveViewTab(context, controller, currentPersonality, currentPetMode),
+      _StudioTab.settings => _buildSettingsTab(context, controller),
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Tab builders
+  // ════════════════════════════════════════════════════════════════════════════
+
+  Widget _buildCompanionTab(
+    BuildContext context,
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStyleStudioSection(context, controller, currentPersonality, currentPetMode),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Live scenes',
+          subtitle: 'Send a duo animation to the device — these play directly on the display.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: DeskScene.values
+                    .map(
+                      (scene) => ChoiceChip(
+                        label: Text(scene.label),
+                        selected: _selectedDeskScene == scene,
+                        onSelected: (_) =>
+                            setState(() => _selectedDeskScene = scene),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendScene(_selectedDeskScene.command),
+                            success: '${_selectedDeskScene.label} scene started!',
+                          ),
+                  icon: const Icon(Icons.people_outline),
+                  label: Text('Start ${_selectedDeskScene.label}'),
+                ),
+              ),
+            ],
+          ),
         ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: CompanionTheme.blush),
-      ),
+      ],
+    );
+  }
+
+  Widget _buildStickFigureTab(
+    BuildContext context,
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+  ) {
+    final supportsLiveBleScene = controller.isBleConnected;
+    final streamsLiveBleScene = supportsLiveBleScene && !_appearancePreviewReferencePose;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionCard(
+          title: 'Stick figure scenes',
+          subtitle: 'Pick a scene for the stick-figure duo and tune their motion.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStudioDropdown(
+                context,
+                label: 'Visual model',
+                value: _selectedVisualModel,
+                values: CompanionVisualModel.values.where((v) => v != CompanionVisualModel.classic).toList(),
+                labelBuilder: (value) => value.label,
+                enabled: !controller.busy,
+                onChanged: (value) {
+                  _appearanceDraftDirty = true;
+                  _updateSelectedVisualModel(controller, value);
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildStudioDropdown(
+                context,
+                label: 'Scene',
+                value: _selectedScene,
+                values: CompanionScene.values,
+                labelBuilder: (value) => value.label,
+                enabled: !controller.busy,
+                onChanged: (value) => setState(() {
+                  _appearanceDraftDirty = true;
+                  _selectedScene = value;
+                  _persistStudioPreviewState(controller);
+                }),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _selectedScene.description,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white24),
+                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF1A1A2E),
+                  ),
+                  width: 160,
+                  height: 120,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: FittedBox(
+                      child: SizedBox(
+                        width: 320,
+                        height: 240,
+                        child: CompanionFacePreview(
+                          visualModel: _selectedVisualModel,
+                          scene: _selectedScene,
+                          personality: _selectedPersonality.command,
+                          petMode: _selectedPetMode.command,
+                          expression: _appearancePreviewReferencePose
+                              ? null
+                              : _selectedExpression.command,
+                          hair: _selectedHairStyle.command,
+                          ears: _selectedEarsStyle.command,
+                          mustache: _selectedMustacheStyle.command,
+                          glasses: _selectedGlassesStyle.command,
+                          headwear: _selectedHeadwearStyle.command,
+                          piercing: _selectedPiercingStyle.command,
+                          hairSize: _selectedHairSize.round(),
+                          mustacheSize: _selectedMustacheSize.round(),
+                          hairWidth: _selectedHairWidth.round(),
+                          hairHeight: _selectedHairHeight.round(),
+                          hairThickness: _selectedHairThickness.round(),
+                          hairOffsetX: _selectedHairOffsetX.round(),
+                          hairOffsetY: _selectedHairOffsetY.round(),
+                          eyeOffsetY: _selectedEyeOffsetY.round(),
+                          mouthOffsetY: _selectedMouthOffsetY.round(),
+                          mustacheWidth: _selectedMustacheWidth.round(),
+                          mustacheHeight: _selectedMustacheHeight.round(),
+                          mustacheThickness: _selectedMustacheThickness.round(),
+                          mustacheOffsetX: _selectedMustacheOffsetX.round(),
+                          mustacheOffsetY: _selectedMustacheOffsetY.round(),
+                          stickFigureScale: _stickFigureScale.round(),
+                          stickFigureSpacing: _stickFigureSpacing.round(),
+                          stickFigureEnergy: _stickFigureEnergy.round(),
+                          eyeColor: _eyeColor,
+                          faceColor: _faceColor,
+                          accentColor: _accentColor,
+                          bodyColor: _bodyColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildStudioSlider(
+                context,
+                'Figure scale ${_stickFigureScale.round()}%',
+                _stickFigureScale,
+                (value) => setState(() {
+                  _appearanceDraftDirty = true;
+                  _stickFigureScale = value;
+                  _persistStudioPreviewState(controller);
+                }),
+              ),
+              _buildStudioSlider(
+                context,
+                'Partner spacing ${_stickFigureSpacing.round()}%',
+                _stickFigureSpacing,
+                (value) => setState(() {
+                  _appearanceDraftDirty = true;
+                  _stickFigureSpacing = value;
+                  _persistStudioPreviewState(controller);
+                }),
+              ),
+              _buildStudioSlider(
+                context,
+                'Scene energy ${_stickFigureEnergy.round()}%',
+                _stickFigureEnergy,
+                (value) => setState(() {
+                  _appearanceDraftDirty = true;
+                  _stickFigureEnergy = value;
+                  _persistStudioPreviewState(controller);
+                }),
+                min: 0,
+                max: 100,
+                divisions: 20,
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _toggleStudioSceneSend(
+                            controller,
+                            currentPersonality,
+                            currentPetMode,
+                          ),
+                  icon: Icon(
+                    streamsLiveBleScene
+                        ? (_scenePlaybackActive
+                            ? Icons.stop_circle_outlined
+                            : Icons.play_circle_outline)
+                        : Icons.monitor_outlined,
+                  ),
+                  label: Text(
+                    streamsLiveBleScene
+                        ? (_scenePlaybackActive
+                            ? 'Stop live scene'
+                            : 'Start live scene')
+                        : 'Send scene snapshot',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Display colors',
+          subtitle: 'Customise figure and partner colors on the device display.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ColorRow(label: 'Figure', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Partner', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice
+                      ? null
+                      : () => _perform(
+                            () => controller.sendColors(
+                              eyeColor: _colorToRgb565(_eyeColor),
+                              faceColor: _colorToRgb565(_faceColor),
+                              accentColor: _colorToRgb565(_accentColor),
+                              bodyColor: _colorToRgb565(_bodyColor),
+                            ),
+                            success: 'Colors applied!',
+                          ),
+                  icon: const Icon(Icons.palette_outlined),
+                  label: const Text('Apply colors'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotesTab(BuildContext context, DeskCompanionController controller) {
+    return _buildStickyNoteSection(context, controller);
+  }
+
+  Widget _buildBannerTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Banner',
+      subtitle: 'Scrolling marquee for short, cute status lines.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Companion Studio', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 8),
+          TextField(
+            controller: _bannerController,
+            decoration: const InputDecoration(labelText: 'Banner text'),
+          ),
+          const SizedBox(height: 10),
           Text(
-            'Build looks, scenes, notes, and device actions without digging through one endless stack.',
+            'Scroll speed: ${_bannerSpeed.round()} px/s',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 14),
+          Slider(
+            min: 10,
+            max: 80,
+            value: _bannerSpeed,
+            onChanged: (value) => setState(() => _bannerSpeed = value),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _sendBanner(controller),
+              icon: const Icon(Icons.view_carousel_outlined),
+              label: const Text('Start banner'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlowersTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Flowers',
+      subtitle: 'Full-screen animated flowers — a little gift that fills the whole display.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStudioDropdown(
+            context,
+            label: 'Flower animation',
+            value: _selectedFlower,
+            values: DeskFlower.values,
+            labelBuilder: (value) => value.label,
+            enabled: !controller.busy,
+            onChanged: (value) => setState(() => _selectedFlower = value),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _selectedFlower.description,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _perform(
+                        () => controller.sendFlower(_selectedFlower.command),
+                        success: '${_selectedFlower.label} blooming on the display!',
+                      ),
+              icon: const Icon(Icons.local_florist_outlined),
+              label: Text('Send ${_selectedFlower.label}'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParticlesTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Particles',
+      subtitle: 'Full-screen ambient animations — fireworks, heart rain, snowfall, and starfield.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Wrap(
             spacing: 8,
             runSpacing: 8,
+            children: DeskParticle.values
+                .map(
+                  (p) => ChoiceChip(
+                    label: Text(p.label),
+                    selected: _selectedParticle == p,
+                    onSelected: (_) =>
+                        setState(() => _selectedParticle = p),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          if (_selectedParticle == DeskParticle.fireworks) ...[
+            const SizedBox(height: 8),
+            const Text('Firework shape', style: TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: DeskFireworkShape.values
+                  .map(
+                    (s) => ChoiceChip(
+                      label: Text(s.label),
+                      selected: _selectedFireworkShape == s,
+                      onSelected: (_) =>
+                          setState(() => _selectedFireworkShape = s),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+            const SizedBox(height: 8),
+            const Text('Color palette', style: TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: DeskFireworkPalette.values
+                  .map(
+                    (p) => ChoiceChip(
+                      label: Text(p.label),
+                      selected: _selectedFireworkPalette == p,
+                      onSelected: (_) =>
+                          setState(() => _selectedFireworkPalette = p),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+            const SizedBox(height: 8),
+            const Text('Explosion size', style: TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: DeskFireworkSize.values
+                  .map(
+                    (s) => ChoiceChip(
+                      label: Text(s.label),
+                      selected: _selectedFireworkSize == s,
+                      onSelected: (_) =>
+                          setState(() => _selectedFireworkSize = s),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _perform(
+                        () async {
+                          if (_selectedParticle == DeskParticle.fireworks) {
+                            await controller.sendFireworkShape(_selectedFireworkShape.command);
+                            await controller.sendFireworkPalette(_selectedFireworkPalette.command);
+                            await controller.sendFireworkSize(_selectedFireworkSize.command);
+                          }
+                          await controller.sendParticle(_selectedParticle.command);
+                        },
+                        success: '${_selectedParticle.label} started!',
+                      ),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: Text('Send ${_selectedParticle.label}'),
+            ),
+          ),
+          if (_selectedParticle == DeskParticle.fireworks) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Manual launcher', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Tap a column to fire a rocket from that position. Rapid-fire as many as you want!',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: List.generate(8, (i) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: GestureDetector(
+                      onTap: !controller.canControlDevice
+                          ? null
+                          : () => controller.fireRocket(column: i),
+                      child: Container(
+                        height: 64,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              const Color(0xFFFF6B35),
+                              const Color(0xFFFFD700).withValues(alpha: 0.3),
+                              Colors.transparent,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.rocket_launch,
+                            size: 20,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: !controller.canControlDevice
+                    ? null
+                    : () => controller.fireRocket(),
+                icon: const Icon(Icons.rocket_launch),
+                label: const Text('Fire random'),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _perform(
+                        () => controller.clearDisplay(),
+                        success: 'Particles stopped.',
+                      ),
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Stop particles'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Image',
+      subtitle: 'Any image is resized to 320×240 and converted to a 1-bit bitmap.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_selectedImage != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CompanionTheme.ink,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      _selectedImage!.previewPng,
+                      height: 96,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _selectedImage!.name,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                  ),
+                  Text(
+                    '${_selectedImage!.byteLength} bytes ready for display',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
+            )
+          else
+            Text('No image selected yet.', style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 10),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Invert image while converting'),
+            value: _invertImage,
+            onChanged: (value) => setState(() => _invertImage = value),
+          ),
+          Row(
             children: [
-              _ChipLabel(label: _selectedVisualModel.label),
-              _ChipLabel(label: 'Scene: ${_selectedScene.label}'),
-              _ChipLabel(label: controller.canControlDevice ? 'Device linked' : 'Preview mode'),
-              _ChipLabel(label: _activeWorkspace.label),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: controller.busy ? null : _pickImage,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('Pick image'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || _selectedImage == null || !controller.canControlDevice
+                      ? null
+                      : () => _sendImage(controller),
+                  icon: const Icon(Icons.send_outlined),
+                  label: const Text('Send image'),
+                ),
+              ),
             ],
           ),
         ],
@@ -2604,25 +2030,569 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  Widget _buildWorkspaceSwitcher(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: _StudioWorkspace.values
-          .map(
-            (workspace) => ChoiceChip(
-              avatar: Icon(workspace.icon, size: 18),
-              label: Text(workspace.label),
-              selected: _activeWorkspace == workspace,
-              onSelected: (_) {
-                if (workspace != _StudioWorkspace.companion) {
-                  _stopLiveScenePlayback();
-                }
-                setState(() => _activeWorkspace = workspace);
-              },
+  Widget _buildDrawTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Draw',
+      subtitle: _drawModeEnabled
+          ? 'Draw mode is on. Page scrolling is locked until you turn it off.'
+          : 'Turn on Draw mode before sketching so the page does not scroll while you draw.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DisplayDrawingPad(
+            bitmap: _drawBitmap,
+            colorData: _drawColorData,
+            showGrid: _showGrid,
+            enabled: _drawModeEnabled,
+            pixelColor: _drawColor,
+            onPixel: _paintPixel,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ActionChip(
+                label: const Text('Fullscreen'),
+                avatar: const Icon(Icons.open_in_full, size: 18),
+                onPressed: () => _openFullscreenDrawEditor(),
+              ),
+              FilterChip(
+                label: const Text('Draw mode'),
+                selected: _drawModeEnabled,
+                onSelected: (_) => setState(() => _drawModeEnabled = !_drawModeEnabled),
+              ),
+              FilterChip(label: const Text('Pen'), selected: !_eraserMode, onSelected: (_) => setState(() => _eraserMode = false)),
+              FilterChip(label: const Text('Eraser'), selected: _eraserMode, onSelected: (_) => setState(() => _eraserMode = true)),
+              FilterChip(label: const Text('Grid'), selected: _showGrid, onSelected: (_) => setState(() => _showGrid = !_showGrid)),
+              FilterChip(label: const Text('Live push'), selected: _liveDraw, onSelected: (_) => setState(() => _liveDraw = !_liveDraw)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Brush size: ${_brushSize.round()} px', style: Theme.of(context).textTheme.bodyMedium),
+          Slider(min: 1, max: 5, divisions: 4, value: _brushSize, onChanged: (value) => setState(() => _brushSize = value)),
+          const SizedBox(height: 4),
+          Text('Draw color', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              Colors.white, const Color(0xFF00BFFF), const Color(0xFFFF69B4),
+              const Color(0xFF00FF7F), const Color(0xFFFFD700), const Color(0xFFFF4500),
+              const Color(0xFF8A2BE2), const Color(0xFFFF0000), const Color(0xFF00FFFF),
+              const Color(0xFFFF1493), const Color(0xFF7CFC00), const Color(0xFFFF8C00),
+            ].map((preset) {
+              final selected = preset == _drawColor;
+              return GestureDetector(
+                onTap: () {
+                  setState(() => _drawColor = preset);
+                  _sendDrawColorToDevice(preset);
+                },
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: preset,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: selected ? Colors.white : Colors.white24, width: selected ? 2.5 : 1),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: controller.busy
+                      ? null
+                      : () {
+                          setState(() {
+                            _drawBitmap = Uint8List(DisplayBitmapCodec.byteLength);
+                            _drawColorData = Uint8List(DisplayBitmapCodec.colorByteLength);
+                          });
+                          _queueLiveDraw();
+                        },
+                  icon: const Icon(Icons.layers_clear_outlined),
+                  label: const Text('Clear canvas'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: OutlinedButton.icon(onPressed: controller.busy ? null : _fillCanvas, icon: const Icon(Icons.texture_outlined), label: const Text('Fill canvas'))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: OutlinedButton.icon(onPressed: controller.busy ? null : _loadImageIntoCanvas, icon: const Icon(Icons.move_down_outlined), label: const Text('Use picked image'))),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice ? null : () => _sendCanvas(controller),
+                  icon: const Icon(Icons.draw_outlined),
+                  label: const Text('Push drawing'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountdownTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Countdown',
+      subtitle: 'Displays a large live countdown timer on screen.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Hours', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 48,
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: '0', isDense: true),
+                        controller: TextEditingController(text: '$_countdownHours'),
+                        onChanged: (v) => setState(() => _countdownHours = int.tryParse(v) ?? 0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Minutes', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 48,
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: '5', isDense: true),
+                        controller: TextEditingController(text: '$_countdownMinutes'),
+                        onChanged: (v) => setState(() => _countdownMinutes = int.tryParse(v) ?? 0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Seconds', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 48,
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: '0', isDense: true),
+                        controller: TextEditingController(text: '$_countdownSeconds'),
+                        onChanged: (v) => setState(() => _countdownSeconds = int.tryParse(v) ?? 0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text('When timer ends', style: TextStyle(fontSize: 12, color: Colors.white70)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: DeskCountdownEndAction.values
+                .map((a) => ChoiceChip(
+                      label: Text(a.label),
+                      selected: _countdownEndAction == a,
+                      onSelected: (_) => setState(() => _countdownEndAction = a),
+                    ))
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () {
+                      final secs = _countdownHours * 3600 + _countdownMinutes * 60 + _countdownSeconds;
+                      if (secs <= 0) {
+                        _showMessage('Set at least 1 second.');
+                        return;
+                      }
+                      _perform(
+                        () => controller.startCountdown(secs, endAction: _countdownEndAction.value),
+                        success: 'Countdown started.',
+                      );
+                    },
+              icon: const Icon(Icons.timer_outlined),
+              label: const Text('Start countdown'),
             ),
-          )
-          .toList(growable: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoodnightTab(BuildContext context, DeskCompanionController controller) {
+    return _SectionCard(
+      title: 'Goodnight',
+      subtitle: 'Switches the display to a calm sleep scene with a crescent moon and drifting stars.',
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: controller.busy || !controller.canControlDevice
+              ? null
+              : () => _perform(
+                    () => controller.sendGoodnight(),
+                    success: 'Goodnight! Sleep scene started.',
+                  ),
+          icon: const Icon(Icons.nights_stay_outlined),
+          label: const Text('Send goodnight'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveViewTab(
+    BuildContext context,
+    DeskCompanionController controller,
+    DeskPersonality currentPersonality,
+    DeskPetMode currentPetMode,
+  ) {
+    final mode = controller.currentDeviceMode;
+    return _SectionCard(
+      title: 'Live View',
+      subtitle: mode.isEmpty
+          ? 'Connect to a device to see what is currently displayed.'
+          : 'Showing a preview of the current device mode: $mode',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (mode.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text('No device mode reported yet.', style: Theme.of(context).textTheme.bodyMedium),
+              ),
+            )
+          else
+            Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white24),
+                  borderRadius: BorderRadius.circular(8),
+                  color: const Color(0xFF1A1A2E),
+                ),
+                width: 240,
+                height: 180,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: FittedBox(
+                    child: SizedBox(
+                      width: 320,
+                      height: 240,
+                      child: CompanionFacePreview(
+                        visualModel: _selectedVisualModel,
+                        scene: _selectedScene,
+                        personality: currentPersonality.command,
+                        petMode: currentPetMode.command,
+                        expression: _selectedExpression.command,
+                        hair: _selectedHairStyle.command,
+                        ears: _selectedEarsStyle.command,
+                        mustache: _selectedMustacheStyle.command,
+                        glasses: _selectedGlassesStyle.command,
+                        headwear: _selectedHeadwearStyle.command,
+                        piercing: _selectedPiercingStyle.command,
+                        hairSize: _selectedHairSize.round(),
+                        mustacheSize: _selectedMustacheSize.round(),
+                        hairWidth: _selectedHairWidth.round(),
+                        hairHeight: _selectedHairHeight.round(),
+                        hairThickness: _selectedHairThickness.round(),
+                        hairOffsetX: _selectedHairOffsetX.round(),
+                        hairOffsetY: _selectedHairOffsetY.round(),
+                        eyeOffsetY: _selectedEyeOffsetY.round(),
+                        mouthOffsetY: _selectedMouthOffsetY.round(),
+                        mustacheWidth: _selectedMustacheWidth.round(),
+                        mustacheHeight: _selectedMustacheHeight.round(),
+                        mustacheThickness: _selectedMustacheThickness.round(),
+                        mustacheOffsetX: _selectedMustacheOffsetX.round(),
+                        mustacheOffsetY: _selectedMustacheOffsetY.round(),
+                        stickFigureScale: _stickFigureScale.round(),
+                        stickFigureSpacing: _stickFigureSpacing.round(),
+                        stickFigureEnergy: _stickFigureEnergy.round(),
+                        eyeColor: _eyeColor,
+                        faceColor: _faceColor,
+                        accentColor: _accentColor,
+                        bodyColor: _bodyColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+          _ChipLabel(label: mode.isEmpty ? 'Disconnected' : mode),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTab(BuildContext context, DeskCompanionController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionCard(
+          title: 'Device link',
+          subtitle: controller.statusMessage,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (controller.relaySendProgress > 0 && controller.relaySendProgress < 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(value: controller.relaySendProgress, minHeight: 6),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${(controller.relaySendProgress * 100).round()}%', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _ChipLabel(label: controller.isBleConnected ? 'BLE: ${controller.deviceName}' : 'BLE: disconnected'),
+                  _ChipLabel(label: controller.connectedSsid.isEmpty ? 'Wi-Fi: not joined' : 'Wi-Fi: ${controller.connectedSsid}'),
+                  _ChipLabel(label: _relayChipLabel(controller)),
+                ],
+              ),
+              if (_relayStatusText(controller).isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(_relayStatusText(controller), style: Theme.of(context).textTheme.bodyMedium),
+              ],
+              if (controller.hasRelayTarget) ...[
+                const SizedBox(height: 10),
+                Text('Token: ${controller.deviceToken} | Pending: ${controller.relayPendingCount}', style: Theme.of(context).textTheme.bodySmall),
+                if (controller.relayLastCommandAt != null)
+                  Text('Last command queued: ${_relativeTimeLabel(controller.relayLastCommandAt!)}', style: Theme.of(context).textTheme.bodySmall),
+                if (controller.relayLastSeenAt != null)
+                  Text('Last command poll: ${_relativeTimeLabel(controller.relayLastSeenAt!)}', style: Theme.of(context).textTheme.bodySmall),
+                if (controller.relayLastStatusAt != null)
+                  Text('Last status post: ${_relativeTimeLabel(controller.relayLastStatusAt!)}', style: Theme.of(context).textTheme.bodySmall),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: controller.busy ? null : controller.isBleConnected ? null : () => controller.scanAndConnect(),
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Connect BLE'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: controller.busy
+                          ? null
+                          : controller.isBleConnected
+                              ? () => controller.disconnect()
+                              : controller.hasRelayTarget
+                                  ? () => _connectWifiDevice(controller)
+                                  : null,
+                      icon: Icon(controller.isBleConnected ? Icons.link_off : controller.isRemoteConnected ? Icons.wifi_tethering : Icons.wifi_find_outlined),
+                      label: Text(controller.isBleConnected ? 'Disconnect' : 'Connect over Wi-Fi'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Remote setup',
+          subtitle: 'Provision Wi-Fi and relay settings over BLE once. After that, the device should stay on Wi-Fi and talk to the hosted relay on its own.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Wi-Fi', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              _buildWifiStatusPanel(context, controller),
+              const SizedBox(height: 12),
+              if (controller.availableWifiNetworks.isEmpty) ...[
+                Text('No scanned networks are loaded yet. Run a scan over BLE, or type the Wi-Fi name manually.', style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 10),
+              ],
+              if (controller.availableWifiNetworks.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: controller.availableWifiNetworks
+                      .map((ssid) => ChoiceChip(label: Text(ssid), selected: _wifiSsidController.text.trim() == ssid, onSelected: (_) => setState(() => _wifiSsidController.text = ssid)))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(controller: _wifiSsidController, decoration: const InputDecoration(labelText: 'Wi-Fi name')),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _wifiPasswordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Wi-Fi password',
+                  suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: OutlinedButton.icon(onPressed: controller.busy || !controller.isBleConnected ? null : () => _scanWifiNetworks(controller), icon: const Icon(Icons.wifi_find_outlined), label: const Text('Scan Wi-Fi'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: ElevatedButton.icon(onPressed: controller.busy || !controller.isBleConnected ? null : () => _sendWifi(controller), icon: const Icon(Icons.wifi), label: const Text('Send Wi-Fi'))),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(onPressed: controller.busy || !controller.isBleConnected ? null : () => _forgetWifi(controller), icon: const Icon(Icons.wifi_off_outlined), label: const Text('Forget device Wi-Fi')),
+              ),
+              const SizedBox(height: 18),
+              Text('Relay', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              TextField(controller: _relayBaseUrlController, onChanged: controller.updateRelayBaseUrl, decoration: const InputDecoration(labelText: 'Relay base URL', hintText: 'http://desk-companion-relay.fly.dev')),
+              const SizedBox(height: 10),
+              TextField(controller: _deviceTokenController, onChanged: controller.updateDeviceToken, decoration: const InputDecoration(labelText: 'Device token', hintText: 'desk-01')),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: controller.busy || !controller.hasRelayTarget ? null : () => _connectWifiDevice(controller),
+                      icon: Icon(controller.isRemoteConnected ? Icons.wifi_tethering : Icons.wifi_find_outlined),
+                      label: const Text('Connect to device'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: ElevatedButton.icon(onPressed: controller.busy || !controller.isBleConnected ? null : () => _configureRelay(controller), icon: const Icon(Icons.cloud_done_outlined), label: const Text('Save relay to device'))),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Display orientation',
+          subtitle: 'Tap each option and hit Apply until the screen looks correct. The device remembers your pick.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: List.generate(4, (i) => ChoiceChip(label: Text('Landscape ${String.fromCharCode(65 + i)}'), selected: _displayRotation == i, onSelected: (_) => setState(() => _displayRotation = i))),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice ? null : () => _perform(() => controller.setDisplayRotation(_displayRotation), success: 'Rotation $_displayRotation applied — check the screen!'),
+                  icon: const Icon(Icons.screen_rotation_outlined),
+                  label: const Text('Apply rotation'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Timezone',
+          subtitle: 'UTC offset for the on-screen clock. Requires Wi-Fi to be connected.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('UTC offset: ${_timezoneOffsetHours >= 0 ? '+' : ''}${_timezoneOffsetHours.toStringAsFixed(1)} h', style: Theme.of(context).textTheme.bodyMedium),
+              Slider(min: -12, max: 14, divisions: 52, value: _timezoneOffsetHours, onChanged: (v) => setState(() => _timezoneOffsetHours = v)),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.busy || !controller.canControlDevice ? null : () => _perform(() => controller.setTimezone((_timezoneOffsetHours * 3600).round()), success: 'Timezone sent.'),
+                  icon: const Icon(Icons.access_time_outlined),
+                  label: const Text('Send timezone'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Weather location',
+          subtitle: 'Set latitude and longitude so the device can fetch live weather from open-meteo.com. Requires Wi-Fi.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _weatherLatController, keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true), decoration: const InputDecoration(labelText: 'Latitude'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(controller: _weatherLonController, keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true), decoration: const InputDecoration(labelText: 'Longitude'))),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: controller.busy || !controller.canControlDevice
+                          ? null
+                          : () {
+                              final lat = double.tryParse(_weatherLatController.text.trim());
+                              final lon = double.tryParse(_weatherLonController.text.trim());
+                              if (lat == null || lon == null) {
+                                _showMessage('Enter valid latitude and longitude.');
+                                return;
+                              }
+                              _perform(() => controller.setLocation(lat, lon), success: 'Location sent. Weather will refresh soon.');
+                            },
+                      icon: const Icon(Icons.location_on_outlined),
+                      label: const Text('Set location'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: controller.busy || !controller.canControlDevice ? null : () => _perform(() => controller.showWeather(), success: 'Switching to weather display.'),
+                      icon: const Icon(Icons.cloud_outlined),
+                      label: const Text('Show weather'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -2660,9 +2630,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     double value,
     ValueChanged<double> onChanged,
     {
-      double min = 70,
-      double max = 170,
-      int divisions = 20,
+      double min = 30,
+      double max = 250,
+      int divisions = 22,
     }
   ) {
     return Column(
@@ -2707,100 +2677,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               }
             }
           : null,
-    );
-  }
-
-  Widget _buildStickyPreview(
-    BuildContext context,
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) {
-    final previewPersonality = _appearancePreviewReferencePose
-        ? _selectedPersonality.command
-        : currentPersonality.command;
-    final previewPetMode = _appearancePreviewReferencePose
-        ? _selectedPetMode.command
-        : currentPetMode.command;
-    final previewExpression =
-        _appearancePreviewReferencePose ? null : _selectedExpression.command;
-    final previewMode = _appearancePreviewReferencePose ? 'Reference pose' : 'Live mood';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: CompanionTheme.panel,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: CompanionTheme.blush),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_selectedVisualModel.label} • ${_selectedScene.label} • $previewMode',
-                    style: Theme.of(context).textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const _ChipLabel(label: 'Pinned'),
-              ],
-            ),
-            const SizedBox(height: 6),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: CompanionTheme.ink,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: CompanionFacePreview(
-                  visualModel: _selectedVisualModel,
-                  scene: _selectedScene,
-                  personality: previewPersonality,
-                  petMode: previewPetMode,
-                  referencePose: _appearancePreviewReferencePose,
-                  showScreenBoundary: true,
-                  expression: previewExpression,
-                  hair: _selectedHairStyle.command,
-                  ears: _selectedEarsStyle.command,
-                  mustache: _selectedMustacheStyle.command,
-                  glasses: _selectedGlassesStyle.command,
-                  headwear: _selectedHeadwearStyle.command,
-                  piercing: _selectedPiercingStyle.command,
-                  hairSize: _selectedHairSize.round(),
-                  mustacheSize: _selectedMustacheSize.round(),
-                  hairWidth: _selectedHairWidth.round(),
-                  hairHeight: _selectedHairHeight.round(),
-                  hairThickness: _selectedHairThickness.round(),
-                  hairOffsetX: _selectedHairOffsetX.round(),
-                  hairOffsetY: _selectedHairOffsetY.round(),
-                  eyeOffsetY: _selectedEyeOffsetY.round(),
-                  mouthOffsetY: _selectedMouthOffsetY.round(),
-                  mustacheWidth: _selectedMustacheWidth.round(),
-                  mustacheHeight: _selectedMustacheHeight.round(),
-                  mustacheThickness: _selectedMustacheThickness.round(),
-                  mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                  mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                  stickFigureScale: _stickFigureScale.round(),
-                  stickFigureSpacing: _stickFigureSpacing.round(),
-                  stickFigureEnergy: _stickFigureEnergy.round(),
-                  eyeColor: _eyeColor,
-                  faceColor: _faceColor,
-                  accentColor: _accentColor,
-                  bodyColor: _bodyColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -3361,7 +3237,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                 ),
                 const SizedBox(height: 8),
                 _ColorRow(
-                  label: 'Body',
+                  label: 'Lines',
                   color: _bodyColor,
                   onChanged: (c) => setState(() => _bodyColor = c),
                 ),
@@ -5321,18 +5197,18 @@ class _FullscreenAppearanceEditorState
             'Eye line ${_eyeOffsetY.round()} px',
             _eyeOffsetY,
             (value) => setState(() => _eyeOffsetY = value),
-            min: -18,
-            max: 18,
-            divisions: 36,
+            min: -48,
+            max: 48,
+            divisions: 96,
           ),
           _buildSlider(
             context,
             'Mouth line ${_mouthOffsetY.round()} px',
             _mouthOffsetY,
             (value) => setState(() => _mouthOffsetY = value),
-            min: -18,
-            max: 18,
-            divisions: 36,
+            min: -48,
+            max: 48,
+            divisions: 96,
           ),
         ],
       ),
@@ -5477,9 +5353,9 @@ class _FullscreenAppearanceEditorState
     double value,
     ValueChanged<double> onChanged,
     {
-      double min = 70,
-      double max = 170,
-      int divisions = 20,
+      double min = 30,
+      double max = 250,
+      int divisions = 22,
     }
   ) {
     return Column(
@@ -5913,8 +5789,8 @@ class _OffsetPad extends StatelessWidget {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
               final centerX = constraints.maxWidth / 2;
               final centerY = constraints.maxHeight / 2;
-              final knobX = centerX + (offsetX / 18) * (constraints.maxWidth / 2 - 14);
-              final knobY = centerY + (offsetY / 18) * (constraints.maxHeight / 2 - 14);
+              final knobX = centerX + (offsetX / 48) * (constraints.maxWidth / 2 - 14);
+              final knobY = centerY + (offsetY / 48) * (constraints.maxHeight / 2 - 14);
               return GestureDetector(
                 onPanDown: (details) => _update(details.localPosition, size),
                 onPanUpdate: (details) => _update(details.localPosition, size),
@@ -5955,19 +5831,19 @@ class _OffsetPad extends StatelessWidget {
         Row(
           children: [
             IconButton.filledTonal(
-              onPressed: () => onChanged((offsetX - 1).clamp(-18, 18), offsetY),
+              onPressed: () => onChanged((offsetX - 1).clamp(-48, 48), offsetY),
               icon: const Icon(Icons.arrow_left),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged(offsetX, (offsetY - 1).clamp(-18, 18)),
+              onPressed: () => onChanged(offsetX, (offsetY - 1).clamp(-48, 48)),
               icon: const Icon(Icons.arrow_upward),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged(offsetX, (offsetY + 1).clamp(-18, 18)),
+              onPressed: () => onChanged(offsetX, (offsetY + 1).clamp(-48, 48)),
               icon: const Icon(Icons.arrow_downward),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged((offsetX + 1).clamp(-18, 18), offsetY),
+              onPressed: () => onChanged((offsetX + 1).clamp(-48, 48), offsetY),
               icon: const Icon(Icons.arrow_right),
             ),
             const Spacer(),
@@ -5984,9 +5860,9 @@ class _OffsetPad extends StatelessWidget {
   void _update(Offset localPosition, Size size) {
     final safeWidth = size.width.isFinite && size.width > 0 ? size.width : 300.0;
     final safeHeight = size.height > 0 ? size.height : 140.0;
-    final dx = ((localPosition.dx / safeWidth) * 36) - 18;
-    final dy = ((localPosition.dy / safeHeight) * 36) - 18;
-    onChanged(dx.clamp(-18, 18), dy.clamp(-18, 18));
+    final dx = ((localPosition.dx / safeWidth) * 96) - 48;
+    final dy = ((localPosition.dy / safeHeight) * 96) - 48;
+    onChanged(dx.clamp(-48, 48), dy.clamp(-48, 48));
   }
 }
 

@@ -118,6 +118,11 @@ class DeskCompanionController extends ChangeNotifier {
   double _relaySendProgress = 0.0;
   Timer? _relayDeliveryPollTimer;
 
+  // Delivery tracking stages: sending -> queued -> delivered -> displaying
+  String _deliveryStage = ''; // '', 'sending', 'queued', 'delivered', 'displaying'
+  DateTime? _lastCommandDeliveredAt;
+  String _currentDeviceMode = ''; // last known mode from device status
+
   BluetoothDevice? _device;
   BluetoothCharacteristic? _commandCharacteristic;
   BluetoothCharacteristic? _statusCharacteristic;
@@ -183,6 +188,9 @@ class DeskCompanionController extends ChangeNotifier {
   bool get wifiScanPending => _wifiScanPending;
   bool get wifiConnectPending => _wifiConnectPending;
   double get relaySendProgress => _relaySendProgress;
+  String get deliveryStage => _deliveryStage;
+  DateTime? get lastCommandDeliveredAt => _lastCommandDeliveredAt;
+  String get currentDeviceMode => _currentDeviceMode;
   bool get wifiConnected =>
       _connectedSsid.isNotEmpty && _wifiIpAddress.isNotEmpty;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
@@ -1049,10 +1057,20 @@ class DeskCompanionController extends ChangeNotifier {
     required String bleLabel,
     required String relayLabel,
   }) async {
+    _deliveryStage = 'sending';
+    notifyListeners();
+
     if (isBleConnected) {
       await _sendBleCommand(payload);
       _mode = mode;
+      _deliveryStage = 'displaying';
       _setStatus(bleLabel);
+      Future.delayed(const Duration(seconds: 3), () {
+        if (_deliveryStage == 'displaying') {
+          _deliveryStage = '';
+          notifyListeners();
+        }
+      });
       return;
     }
 
@@ -1060,13 +1078,18 @@ class DeskCompanionController extends ChangeNotifier {
       final sent = await _postRelay(payload);
       if (sent) {
         _mode = mode;
+        _deliveryStage = 'queued';
         _pollRelayDelivery(relayLabel);
         notifyListeners();
         return;
       }
+      _deliveryStage = '';
+      notifyListeners();
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
     }
 
+    _deliveryStage = '';
+    notifyListeners();
     throw const HttpException('Not connected. Pair over BLE or configure a relay.');
   }
 
@@ -1319,6 +1342,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   void _applyStatusMap(Map<String, dynamic> payload) {
     _mode = (payload['mode'] as String? ?? _mode).trim();
+    _currentDeviceMode = _mode;
     _connectedSsid = (payload['ssid'] as String? ?? '').trim();
     _wifiIpAddress = (payload['ip'] as String? ?? '').trim();
     final status = (payload['status'] as String? ?? '').trim();
@@ -1540,6 +1564,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   void _pollRelayDelivery(String successLabel) {
     _relayDeliveryPollTimer?.cancel();
+    _deliveryStage = 'queued';
     _setStatus('Queued on relay. Waiting for device…');
     var attempts = 0;
     const maxAttempts = 30;
@@ -1549,6 +1574,7 @@ class DeskCompanionController extends ChangeNotifier {
       if (isBleConnected || !hasRelayTarget) {
         timer.cancel();
         _relaySendProgress = 0.0;
+        _deliveryStage = '';
         notifyListeners();
         return;
       }
@@ -1568,7 +1594,21 @@ class DeskCompanionController extends ChangeNotifier {
         if (pending == 0) {
           timer.cancel();
           _relaySendProgress = 0.0;
+          _deliveryStage = 'delivered';
+          _lastCommandDeliveredAt = DateTime.now();
           _setStatus('Delivered. $successLabel');
+          Future.delayed(const Duration(seconds: 2), () {
+            if (_deliveryStage == 'delivered') {
+              _deliveryStage = 'displaying';
+              notifyListeners();
+              Future.delayed(const Duration(seconds: 3), () {
+                if (_deliveryStage == 'displaying') {
+                  _deliveryStage = '';
+                  notifyListeners();
+                }
+              });
+            }
+          });
           return;
         }
         _setStatus('Queued on relay ($pending pending)…');
@@ -1578,6 +1618,7 @@ class DeskCompanionController extends ChangeNotifier {
       if (attempts >= maxAttempts) {
         timer.cancel();
         _relaySendProgress = 0.0;
+        _deliveryStage = '';
         final lastPull =
             _relayLastSeenAt;
         final isActive = lastPull != null &&
