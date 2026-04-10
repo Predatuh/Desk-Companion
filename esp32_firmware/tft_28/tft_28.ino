@@ -213,7 +213,9 @@ int companionHairHeight = 100;
 int companionHairThickness = 100;
 int companionHairOffsetX = 0;
 int companionHairOffsetY = 0;
+int companionEyeOffsetX = 0;
 int companionEyeOffsetY = 0;
+int companionMouthOffsetX = 0;
 int companionMouthOffsetY = 0;
 int companionMustacheWidth = 100;
 int companionMustacheHeight = 100;
@@ -334,8 +336,8 @@ uint8_t noteOvCount = 0;
 uint8_t countdownEndAction = 0;
 // Expression speed multiplier (1=slow, 2=normal, 4=fast, 8=super fast)
 uint8_t expressionSpeedMul = 2;
-// Companion scale: 50-200 percent
-uint8_t companionScale = 100;
+// Companion scale: 10-300 percent
+uint16_t companionScale = 100;
 // Idle screen toggles (NVS-persisted)
 bool idleShowClock   = true;
 bool idleShowWeather = true;
@@ -424,6 +426,10 @@ void drawSadArc(int cx, int cy, int w);
 void drawSmile(int cx, int cy, int w);
 void drawOvalMouth(int cx, int cy, int rw, int rh);
 void drawIconHeart(int cx, int cy, int s);
+void drawVeinMark(int cx, int cy, int s);
+void drawTeethMouth(int cx, int cy, int w, int h);
+void drawHeartEye(int cx, int cy, int s);
+void drawSteamPuff(int cx, int cy, int r);
 void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY);
 void renderFlowerFrame();
 void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
@@ -664,7 +670,9 @@ String buildStatusJson() {
   json += "\"hairThickness\":" + String(companionHairThickness) + ",";
   json += "\"hairOffsetX\":" + String(companionHairOffsetX) + ",";
   json += "\"hairOffsetY\":" + String(companionHairOffsetY) + ",";
+  json += "\"eyeOffsetX\":" + String(companionEyeOffsetX) + ",";
   json += "\"eyeOffsetY\":" + String(companionEyeOffsetY) + ",";
+  json += "\"mouthOffsetX\":" + String(companionMouthOffsetX) + ",";
   json += "\"mouthOffsetY\":" + String(companionMouthOffsetY) + ",";
   json += "\"mustacheWidth\":" + String(companionMustacheWidth) + ",";
   json += "\"mustacheHeight\":" + String(companionMustacheHeight) + ",";
@@ -699,7 +707,9 @@ String buildBleStatusJson() {
   json += "\"hairThickness\":" + String(companionHairThickness) + ",";
   json += "\"hairOffsetX\":" + String(companionHairOffsetX) + ",";
   json += "\"hairOffsetY\":" + String(companionHairOffsetY) + ",";
+  json += "\"eyeOffsetX\":" + String(companionEyeOffsetX) + ",";
   json += "\"eyeOffsetY\":" + String(companionEyeOffsetY) + ",";
+  json += "\"mouthOffsetX\":" + String(companionMouthOffsetX) + ",";
   json += "\"mouthOffsetY\":" + String(companionMouthOffsetY) + ",";
   json += "\"mustacheWidth\":" + String(companionMustacheWidth) + ",";
   json += "\"mustacheHeight\":" + String(companionMustacheHeight) + ",";
@@ -1016,14 +1026,14 @@ int clampLevel(int value) {
 }
 
 int clampAppearancePercent(int value) {
-  if (value < 70) return 70;
-  if (value > 170) return 170;
+  if (value < 10) return 10;
+  if (value > 400) return 400;
   return value;
 }
 
 int clampAppearanceOffset(int value) {
-  if (value < -24) return -24;
-  if (value > 24) return 24;
+  if (value < -60) return -60;
+  if (value > 60) return 60;
   return value;
 }
 
@@ -1135,7 +1145,9 @@ void persistPetState() {
   preferences.putInt("companion_hair_thickness", companionHairThickness);
   preferences.putInt("companion_hair_offset_x", companionHairOffsetX);
   preferences.putInt("companion_hair_offset_y", companionHairOffsetY);
+  preferences.putInt("companion_eye_offset_x", companionEyeOffsetX);
   preferences.putInt("companion_eye_offset_y", companionEyeOffsetY);
+  preferences.putInt("companion_mouth_offset_x", companionMouthOffsetX);
   preferences.putInt("companion_mouth_offset_y", companionMouthOffsetY);
   preferences.putInt("companion_mustache_width", companionMustacheWidth);
   preferences.putInt("companion_mustache_height", companionMustacheHeight);
@@ -1884,6 +1896,47 @@ void drawZzz(int x, int y, int phase) {
   if (p >= 40) { gfx->setCursor(x + 26, y - drift / 2);      gfx->print('Z'); }
 }
 
+// ─── New expressive helpers ───
+
+void drawVeinMark(int cx, int cy, int s) {
+  // Anime-style cross/vein mark (#)
+  gfx->drawLine(cx - s, cy - s/3, cx + s, cy + s/3, userAccentColor);
+  gfx->drawLine(cx - s, cy + s/3, cx + s, cy - s/3, userAccentColor);
+  gfx->drawLine(cx - s/3, cy - s, cx + s/3, cy + s, userAccentColor);
+  gfx->drawLine(cx + s/3, cy - s, cx - s/3, cy + s, userAccentColor);
+}
+
+void drawTeethMouth(int cx, int cy, int w, int h) {
+  // Open mouth rectangle with teeth top and bottom
+  gfx->fillRoundRect(cx - w/2, cy - h/2, w, h, 6, userFaceColor);
+  gfx->fillRoundRect(cx - w/2 + 3, cy - h/2 + 3, w - 6, h - 6, 4, COL_BG);
+  // Top teeth (white nubs)
+  int toothW = (w - 10) / 4;
+  for (int i = 0; i < 4; i++) {
+    int tx = cx - w/2 + 5 + i * toothW;
+    gfx->fillRect(tx, cy - h/2 + 3, toothW - 2, 5, userFaceColor);
+  }
+  // Bottom teeth
+  for (int i = 0; i < 4; i++) {
+    int tx = cx - w/2 + 5 + i * toothW;
+    gfx->fillRect(tx, cy + h/2 - 8, toothW - 2, 5, userFaceColor);
+  }
+}
+
+void drawHeartEye(int cx, int cy, int s) {
+  // Heart shape used as an eye
+  gfx->fillCircle(cx - s/2, cy - s/3, s/2, COL_ROSE);
+  gfx->fillCircle(cx + s/2, cy - s/3, s/2, COL_ROSE);
+  gfx->fillTriangle(cx - s, cy - s/3, cx + s, cy - s/3, cx, cy + s, COL_ROSE);
+}
+
+void drawSteamPuff(int cx, int cy, int r) {
+  // Small cloud puff for anger/frustration
+  gfx->fillCircle(cx, cy, r, userAccentColor);
+  gfx->fillCircle(cx + r, cy - r/2, r - 1, userAccentColor);
+  gfx->fillCircle(cx - r, cy - r/2, r - 1, userAccentColor);
+}
+
 // ─── Expression renderer (scaled 2× from mini, face centered at FACE_OFFSET_Y) ───
 
 void renderExpressionFrame() {
@@ -1896,11 +1949,14 @@ void renderExpressionFrame() {
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
   const int baseLX = 68, baseRX = 172;
   const int CX = SCREEN_WIDTH / 2;
-  const int LX = CX + (int)((baseLX - CX) * cScale);
-  const int RX = CX + (int)((baseRX - CX) * cScale);
+  const int eyeXShift = clampAppearanceOffset(companionEyeOffsetX) * 2;
+  const int LX = CX + (int)((baseLX - CX) * cScale) + eyeXShift;
+  const int RX = CX + (int)((baseRX - CX) * cScale) + eyeXShift;
   const int eyeYShift = clampAppearanceOffset(companionEyeOffsetY) * 2;
+  const int mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
   const int mouthYShift = clampAppearanceOffset(companionMouthOffsetY) * 2;
   const int EY = FACE_OFFSET_Y + (int)(45 * cScale) + eyeYShift;
+  const int MX = CX + mouthXShift;
   const int MY = FACE_OFFSET_Y + (int)(100 * cScale) + mouthYShift;
   const int EW = (int)(52 * cScale);
   const int EH = (int)(40 * cScale);
@@ -1914,34 +1970,52 @@ void renderExpressionFrame() {
     int s = 14 + (int)(10.0f * wave);
     drawBigHeart(SCREEN_WIDTH / 2, FACE_OFFSET_Y + 80, s);
   } else if (currentExpression == "love") {
-    drawEye(LX, EY, EW, EH, ER, 0, 0);
-    drawEye(RX, EY, EW, EH, ER, 0, 0);
+    float beat = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
+    int heartS = 14 + (int)(beat * 4.0f);
+    // Heart-shaped eyes that pulse
+    drawHeartEye(LX, EY, heartS);
+    drawHeartEye(RX, EY, heartS);
     // Blush cheeks
-    gfx->fillCircle(LX + 22, EY + 18, 7, COL_PINK);
-    gfx->fillCircle(RX - 22, EY + 18, 7, COL_PINK);
-    drawBigHeart(LX, EY, 7);
-    drawBigHeart(RX, EY, 7);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4, 52);
+    int blushR = 8 + (int)(beat * 3.0f);
+    gfx->fillCircle(LX + 28, EY + 20, blushR, COL_PINK);
+    gfx->fillCircle(RX - 28, EY + 20, blushR, COL_PINK);
+    // Wide love smile
+    drawSmile(MX, MY - 4, 52);
+    // Floating hearts from both sides
     float r1 = fmod(t * 2.0f, 1.0f);
     float r2 = fmod(t * 2.0f + 0.5f, 1.0f);
-    if (r1 < 0.8f) {
-      int y1 = MY - 8 - (int)(r1 * 75.0f);
-      drawBigHeart(30 + (int)(r1 * 18.0f), y1 + eyeYShift, 5);
+    float r3 = fmod(t * 1.5f + 0.25f, 1.0f);
+    if (r1 < 0.85f) {
+      int y1 = MY - 8 - (int)(r1 * 80.0f);
+      drawBigHeart(24 + (int)(r1 * 20.0f), y1, 5 - (int)(r1 * 2.0f));
     }
-    if (r2 < 0.8f) {
-      int y2 = MY - 8 - (int)(r2 * 68.0f);
-      drawBigHeart(210 - (int)(r2 * 18.0f), y2 + eyeYShift, 4);
+    if (r2 < 0.85f) {
+      int y2 = MY - 8 - (int)(r2 * 72.0f);
+      drawBigHeart(216 - (int)(r2 * 20.0f), y2, 4 - (int)(r2 * 2.0f));
+    }
+    if (r3 < 0.8f) {
+      int y3 = MY - 14 - (int)(r3 * 60.0f);
+      drawBigHeart(MX + (int)(sinf(r3 * 3.14159f) * 30.0f), y3, 3);
     }
   } else if (currentExpression == "surprised") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int eyeH = EH + (int)(wave * 14.0f);
     int browLift = (int)(wave * 7.0f);
-    int mouthR = 9 + (int)(wave * 5.0f);
+    int mouthR = 12 + (int)(wave * 6.0f);
     drawEye(LX, EY, EW + 7, eyeH, ER + 3, 0, 0);
     drawEye(RX, EY, EW + 7, eyeH, ER + 3, 0, 0);
     drawBrow(LX - 26, EY - 32 - browLift, LX + 26, EY - 32 - browLift);
     drawBrow(RX - 26, EY - 32 - browLift, RX + 26, EY - 32 - browLift);
-    drawOvalMouth(SCREEN_WIDTH / 2, MY, mouthR, mouthR - 1);
+    drawOvalMouth(MX, MY, mouthR, mouthR);
+    // Exclamation marks floating above
+    gfx->setTextSize(2);
+    gfx->setTextColor(userAccentColor);
+    int bounce1 = (int)(wave * 6.0f);
+    int bounce2 = (int)((1.0f - wave) * 5.0f);
+    gfx->setCursor(LX - 36, EY - 44 - bounce1);
+    gfx->print("!");
+    gfx->setCursor(RX + 22, EY - 40 - bounce2);
+    gfx->print("!");
   } else if (currentExpression == "angry") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int lidH = 7 + (int)(wave * 5.0f);
@@ -1953,15 +2027,32 @@ void renderExpressionFrame() {
     gfx->fillRect(RX - EW / 2, EY + 4 - (EH - 4) / 2, EW, lidH, COL_BG);
     drawBrow(LX - 26, EY - 30, LX + 14, EY - 11 - twitch);
     drawBrow(RX + 26, EY - 30, RX - 14, EY - 11 - twitch);
-    for (int line = 0; line < 5; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 18, MY + line + mouthShift, SCREEN_WIDTH / 2 + 18, MY + line + mouthShift, userFaceColor);
+    // Vein mark on forehead
+    drawVeinMark(RX + 20, EY - 36, 7 + (int)(wave * 2.0f));
+    // Gritted teeth mouth
+    int mouthW = 36 + (int)(wave * 4.0f);
+    drawTeethMouth(MX, MY + mouthShift, mouthW, 18);
+    // Steam puffs from sides
+    float puff = fmod(t * 3.0f, 1.0f);
+    if (puff < 0.7f) {
+      int px = LX - 36 - (int)(puff * 20.0f);
+      int py = EY - 10 - (int)(puff * 15.0f);
+      int pr = 4 + (int)((1.0f - puff) * 4.0f);
+      drawSteamPuff(px, py, pr);
+    }
+    float puff2 = fmod(t * 3.0f + 0.4f, 1.0f);
+    if (puff2 < 0.7f) {
+      int px = RX + 36 + (int)(puff2 * 20.0f);
+      int py = EY - 10 - (int)(puff2 * 15.0f);
+      int pr = 3 + (int)((1.0f - puff2) * 4.0f);
+      drawSteamPuff(px, py, pr);
     }
   } else if (currentExpression == "sad") {
     drawEye(LX, EY + 6, EW, EH - 7, ER, 0, 7);
     drawEye(RX, EY + 6, EW, EH - 7, ER, 0, 7);
     drawBrow(LX - 26, EY - 11, LX + 18, EY - 30);
     drawBrow(RX + 26, EY - 11, RX - 18, EY - 30);
-    drawSadArc(SCREEN_WIDTH / 2, MY - 4, 30);
+    drawSadArc(MX, MY - 4, 30);
     if (ph >= 12) {
       float tearT = (float)(ph - 12) / 19.0f;
       int tearY = EY + 26 + (int)(tearT * 44.0f);
@@ -1975,13 +2066,26 @@ void renderExpressionFrame() {
     }
   } else if (currentExpression == "sleepy") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int eyeH = 9 + (int)((1.0f - wave) * 9.0f);
-    drawEye(LX, EY, EW, eyeH, ER, 0, 0);
-    drawEye(RX, EY, EW, eyeH, ER, 0, 0);
+    int eyeH = 7 + (int)((1.0f - wave) * 7.0f);
+    // Heavy droopy eyes
+    drawEye(LX, EY + 4, EW, eyeH, ER, 0, 0);
+    drawEye(RX, EY + 4, EW, eyeH, ER, 0, 0);
+    // Droopy eyelid overlay
+    int lidDroop = EH/2 - eyeH/2 + 4;
+    gfx->fillRect(LX - EW/2, EY + 4 - EH/2, EW, lidDroop, COL_BG);
+    gfx->fillRect(RX - EW/2, EY + 4 - EH/2, EW, lidDroop, COL_BG);
+    // Flat sleepy mouth
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userFaceColor);
     }
-    drawZzz(186, 22 + eyeYShift, expressionPhase);
+    // Big floating Zzz
+    drawZzz(180, 18 + eyeYShift, expressionPhase);
+    // Tiny drool drop
+    float drool = fmod(t * 1.5f, 1.0f);
+    if (drool > 0.3f) {
+      int dy = MY + 6 + (int)((drool - 0.3f) * 20.0f);
+      gfx->fillCircle(MX + 10, dy, 2, userFaceColor);
+    }
   } else if (currentExpression == "thinking") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int px = 4 + (int)(wave * 9.0f);
@@ -1989,11 +2093,24 @@ void renderExpressionFrame() {
     int bubble = 4 + (int)(wave * 4.0f);
     drawEye(LX, EY, EW - 11, 22, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
-    gfx->fillCircle(204, FACE_OFFSET_Y + 72 + eyeYShift, bubble, userAccentColor);
-    gfx->fillCircle(216, FACE_OFFSET_Y + 52 + eyeYShift, bubble + 2, userAccentColor);
-    gfx->fillCircle(224, FACE_OFFSET_Y + 30 + eyeYShift, bubble + 4, userAccentColor);
+    // Thought bubble chain (small to large)
+    gfx->fillCircle(200, FACE_OFFSET_Y + 76 + eyeYShift, bubble, userAccentColor);
+    gfx->fillCircle(214, FACE_OFFSET_Y + 58 + eyeYShift, bubble + 3, userAccentColor);
+    // Large thought bubble with "..."
+    int bx = 228, by = FACE_OFFSET_Y + 32 + eyeYShift;
+    int br = bubble + 8;
+    gfx->fillCircle(bx, by, br, userAccentColor);
+    gfx->fillCircle(bx, by, br - 2, COL_BG);
+    // Dots inside bubble
+    int dotPhase = (ph / 12) % 4;
+    gfx->setTextSize(1);
+    gfx->setTextColor(userAccentColor);
+    const char* dots[] = {".", "..", "...", ".."};
+    gfx->setCursor(bx - 8, by - 4);
+    gfx->print(dots[dotPhase]);
+    // Tilted flat mouth
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 11, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 11, MY - 4 + line, userFaceColor);
     }
   } else if (currentExpression == "happy") {
     int eyeH = EH;
@@ -2008,11 +2125,17 @@ void renderExpressionFrame() {
     }
     drawEye(LX, EY, EW, eyeH, ER, 0, py);
     drawEye(RX, EY, EW, eyeH, ER, 0, py);
-    drawSmile(SCREEN_WIDTH / 2, MY - 5, 44);
+    drawSmile(MX, MY - 5, 44);
+    // Rosy cheeks
+    gfx->fillCircle(LX + 24, EY + 16, 6, COL_PINK);
+    gfx->fillCircle(RX - 24, EY + 16, 6, COL_PINK);
   } else if (currentExpression == "smile") {
     drawHappyArc(LX, EY, EW);
     drawHappyArc(RX, EY, EW);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4, 44);
+    drawSmile(MX, MY - 4, 44);
+    // Warm blush
+    gfx->fillCircle(LX + 24, EY + 16, 7, COL_PINK);
+    gfx->fillCircle(RX - 24, EY + 16, 7, COL_PINK);
   } else if (currentExpression == "confused") {
     float wave = sin(t * 3.14159f * 2.0f);
     int browTwitch = (int)(wave * 5.0f);
@@ -2020,9 +2143,16 @@ void renderExpressionFrame() {
     drawEye(RX, EY + 6, EW - 11, EH - 11, ER - 4, 4, 0);
     drawBrow(LX - 26, EY - 28 - browTwitch, LX + 18, EY - 20);
     drawBrow(RX - 14, EY - 16, RX + 26, EY - 24 + browTwitch);
+    // Crooked squiggle mouth
     for (int line = 0; line < 5; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 22, MY + 7 + line, SCREEN_WIDTH / 2 + 22, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 22, MY + 7 + line, MX + 22, MY - 4 + line, userFaceColor);
     }
+    // Floating "?" that bobs
+    gfx->setTextSize(3);
+    gfx->setTextColor(userAccentColor);
+    float bob = sin(t * 3.14159f * 2.0f) * 4.0f;
+    gfx->setCursor(RX + 18, EY - 48 + (int)bob);
+    gfx->print("?");
   } else if (currentExpression == "look_around") {
     float sx = sin(t * 3.14159f * 2.0f);
     float sy = cos(t * 3.14159f * 4.0f) * 0.4f;
@@ -2031,84 +2161,162 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, EH, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 14, MY + line, SCREEN_WIDTH / 2 + 14, MY + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userFaceColor);
     }
   } else if (currentExpression == "kiss") {
     float r1 = fmod(t * 1.5f, 1.0f);
     float r2 = fmod(t * 1.5f + 0.45f, 1.0f);
+    float r3 = fmod(t * 1.8f + 0.2f, 1.0f);
     drawBlinkEye(LX, EY, EW, 7, ER);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
-    // Blush cheeks
-    gfx->fillCircle(LX + 20, EY + 14, 6, COL_PINK);
-    gfx->fillCircle(RX - 20, EY + 14, 6, COL_PINK);
-    drawKissLips(SCREEN_WIDTH / 2, MY);
+    // Big blush cheeks
+    float blushPulse = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
+    int blushR = 8 + (int)(blushPulse * 3.0f);
+    gfx->fillCircle(LX + 22, EY + 16, blushR, COL_PINK);
+    gfx->fillCircle(RX - 22, EY + 16, blushR, COL_PINK);
+    // Pucker lips (bigger)
+    drawKissLips(MX, MY);
+    // Three streams of hearts
     if (r1 < 0.85f) {
-      int hx = SCREEN_WIDTH / 2 - 18 + (int)(sin(r1 * 3.14159f) * 14.0f);
-      int hy = MY - 18 - (int)(r1 * 70.0f);
-      drawBigHeart(hx, hy, 5);
+      int hx = MX - 20 + (int)(sin(r1 * 3.14159f) * 16.0f);
+      int hy = MY - 20 - (int)(r1 * 75.0f);
+      drawBigHeart(hx, hy, 5 - (int)(r1 * 2.0f));
     }
     if (r2 < 0.85f) {
-      int hx = SCREEN_WIDTH / 2 + 22 - (int)(sin(r2 * 3.14159f) * 11.0f);
-      int hy = MY - 14 - (int)(r2 * 62.0f);
-      drawBigHeart(hx, hy, 4);
+      int hx = MX + 24 - (int)(sin(r2 * 3.14159f) * 12.0f);
+      int hy = MY - 16 - (int)(r2 * 66.0f);
+      drawBigHeart(hx, hy, 4 - (int)(r2 * 2.0f));
+    }
+    if (r3 < 0.8f) {
+      int hx = MX + (int)(sin(r3 * 3.14159f * 2.0f) * 10.0f);
+      int hy = MY - 24 - (int)(r3 * 60.0f);
+      drawBigHeart(hx, hy, 3);
     }
   } else if (currentExpression == "wink") {
     for (int line = 0; line < 5; line++) {
       gfx->drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4, 38);
+    drawSmile(MX, MY - 4, 38);
+    // Sparkle near the winking eye
+    float twinkle = sin(t * 3.14159f * 6.0f) * 0.5f + 0.5f;
+    int sr = 4 + (int)(twinkle * 4.0f);
+    drawIconStar(LX + EW/2 + 8, EY - 12, sr);
+    // Blush on wink side
+    gfx->fillCircle(LX + 24, EY + 16, 5, COL_PINK);
   } else if (currentExpression == "laugh") {
     float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int shakeX = (int)(wave * 5.0f) - 2;
-    int mouthW = 38 + (int)(wave * 7.0f);
+    int mouthW = 42 + (int)(wave * 10.0f);
+    int mouthH = 24 + (int)(wave * 6.0f);
     drawHappyArc(LX + shakeX, EY, EW);
     drawHappyArc(RX + shakeX, EY, EW);
-    gfx->fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2, MY - 9, mouthW, 22, 7, userFaceColor);
-    gfx->fillRoundRect(SCREEN_WIDTH / 2 - mouthW / 2 + 4, MY - 5, mouthW - 8, 14, 5, COL_BG);
+    // Big open mouth with teeth
+    drawTeethMouth(MX + shakeX, MY, mouthW, mouthH);
+    // Floating "HA" text rising from mouth
+    gfx->setTextSize(1);
+    gfx->setTextColor(userAccentColor);
+    float r1 = fmod(t * 2.0f, 1.0f);
+    float r2 = fmod(t * 2.0f + 0.5f, 1.0f);
+    if (r1 < 0.85f) {
+      int ty = MY - 10 - (int)(r1 * 80.0f);
+      int tx = MX - 20 + (int)(sinf(r1 * 3.14159f) * 10.0f);
+      gfx->setCursor(tx, ty);
+      gfx->print("HA");
+    }
+    if (r2 < 0.85f) {
+      int ty = MY - 10 - (int)(r2 * 70.0f);
+      int tx = MX + 6 - (int)(sinf(r2 * 3.14159f) * 8.0f);
+      gfx->setCursor(tx, ty);
+      gfx->print("HA");
+    }
+    // Blush from laughing
+    gfx->fillCircle(LX + 24, EY + 16, 6, COL_PINK);
+    gfx->fillCircle(RX - 24, EY + 16, 6, COL_PINK);
   } else if (currentExpression == "star_eyes") {
     float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
-    int starR = 9 + (int)(twinkle * 4.0f);
+    int starR = 11 + (int)(twinkle * 6.0f);
     drawEye(LX, EY, EW, EH, ER, 0, 0);
     drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Large pulsing stars over eyes
     drawIconStar(LX, EY, starR);
     drawIconStar(RX, EY, starR);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4, 44);
+    // Big smile
+    drawSmile(MX, MY - 4, 48);
+    // Floating sparkle particles
+    float sp1 = fmod(t * 2.5f, 1.0f);
+    float sp2 = fmod(t * 2.5f + 0.4f, 1.0f);
+    float sp3 = fmod(t * 2.0f + 0.7f, 1.0f);
+    if (sp1 < 0.8f) drawIconStar(28 + (int)(sp1 * 20.0f), EY - 20 - (int)(sp1 * 40.0f), 3);
+    if (sp2 < 0.8f) drawIconStar(216 - (int)(sp2 * 16.0f), EY - 16 - (int)(sp2 * 36.0f), 3);
+    if (sp3 < 0.7f) drawIconStar(MX + (int)(sinf(sp3 * 6.28f) * 30.0f), EY - 44 - (int)(sp3 * 20.0f), 2);
   } else if (currentExpression == "excited") {
     float bounce = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
-    int eyeShift = (int)(bounce * 7.0f);
-    drawEye(LX, EY - eyeShift, EW + 7, EH + 7, ER, 0, 0);
-    drawEye(RX, EY - eyeShift, EW + 7, EH + 7, ER, 0, 0);
-    drawBrow(LX - 26, EY - 38 - eyeShift, LX + 26, EY - 38 - eyeShift);
-    drawBrow(RX - 26, EY - 38 - eyeShift, RX + 26, EY - 38 - eyeShift);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4 - (int)(bounce * 4.0f), 52);
+    int eyeShift = (int)(bounce * 9.0f);
+    drawEye(LX, EY - eyeShift, EW + 9, EH + 9, ER, 0, 0);
+    drawEye(RX, EY - eyeShift, EW + 9, EH + 9, ER, 0, 0);
+    drawBrow(LX - 26, EY - 40 - eyeShift, LX + 26, EY - 40 - eyeShift);
+    drawBrow(RX - 26, EY - 40 - eyeShift, RX + 26, EY - 40 - eyeShift);
+    // Big wide grin
+    drawSmile(MX, MY - 4 - (int)(bounce * 5.0f), 56);
+    // Sparkle stars bouncing around
+    float sp1 = fmod(t * 3.0f, 1.0f);
+    float sp2 = fmod(t * 3.0f + 0.33f, 1.0f);
+    float sp3 = fmod(t * 3.0f + 0.66f, 1.0f);
+    int sr1 = 4 + (int)((1.0f - sp1) * 5.0f);
+    int sr2 = 3 + (int)((1.0f - sp2) * 4.0f);
+    int sr3 = 3 + (int)((1.0f - sp3) * 5.0f);
+    drawIconStar(22 + (int)(sp1 * 16.0f), EY - 20 - (int)(sp1 * 40.0f), sr1);
+    drawIconStar(220 - (int)(sp2 * 14.0f), EY - 16 - (int)(sp2 * 44.0f), sr2);
+    drawIconStar(MX + (int)(sinf(sp3 * 3.14159f) * 40.0f), EY - 50 - (int)(sp3 * 20.0f), sr3);
+    // Floating "!" marks
+    gfx->setTextSize(2);
+    gfx->setTextColor(userAccentColor);
+    if (sp1 < 0.7f) {
+      gfx->setCursor(LX - 32, EY - 48 - (int)(sp1 * 20.0f));
+      gfx->print("!");
+    }
   } else if (currentExpression == "tongue") {
+    // Playful winking eye
     for (int line = 0; line < 5; line++) {
       gfx->drawLine(LX - EW / 2, EY + line, LX + EW / 2, EY + line, userEyeColor);
     }
     drawEye(RX, EY, EW, EH, ER, 0, 0);
+    // Open grin (V shape)
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 18, MY - 4 + line, SCREEN_WIDTH / 2, MY + 4 + line, userFaceColor);
-      gfx->drawLine(SCREEN_WIDTH / 2, MY + 4 + line, SCREEN_WIDTH / 2 + 18, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 18, MY - 4 + line, MX, MY + 4 + line, userFaceColor);
+      gfx->drawLine(MX, MY + 4 + line, MX + 18, MY - 4 + line, userFaceColor);
     }
+    // Animated tongue that wobbles side to side
     float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int tongueH = 14 + (int)(wobble * 5.0f);
-    gfx->fillRoundRect(SCREEN_WIDTH / 2 - 11, MY + 5, 22, tongueH, 7, userFaceColor);
-    gfx->fillCircle(SCREEN_WIDTH / 2, MY + 5 + tongueH - 5, 4, COL_BG);
+    float sway = sin(t * 3.14159f * 3.0f) * 5.0f;
+    int tongueH = 16 + (int)(wobble * 6.0f);
+    int tongueX = MX + (int)sway;
+    gfx->fillRoundRect(tongueX - 12, MY + 5, 24, tongueH, 8, userFaceColor);
+    gfx->fillCircle(tongueX, MY + 5 + tongueH - 6, 5, COL_BG);
+    // Blush
+    gfx->fillCircle(LX + 24, EY + 16, 5, COL_PINK);
 
   } else if (currentExpression == "grateful") {
-    // Soft closed eyes (arcs) + warm smile
+    // Soft closed eyes (arcs) + warm smile + glow
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     drawHappyArc(LX, EY, EW);
     drawHappyArc(RX, EY, EW);
-    // Blush
-    gfx->fillCircle(LX + 24, EY + 16, 6, COL_PINK);
-    gfx->fillCircle(RX - 24, EY + 16, 6, COL_PINK);
-    drawSmile(SCREEN_WIDTH / 2, MY - 4, 48);
-    // Gentle sparkles
+    // Warm blush
+    int blushR = 7 + (int)(wave * 3.0f);
+    gfx->fillCircle(LX + 24, EY + 16, blushR, COL_PINK);
+    gfx->fillCircle(RX - 24, EY + 16, blushR, COL_PINK);
+    // Wide warm smile
+    drawSmile(MX, MY - 4, 52);
+    // Gentle sparkles floating upward
     int sp = (int)(wave * 5.0f);
-    drawIconStar(30, FACE_OFFSET_Y + 30 + sp, 4);
-    drawIconStar(210, FACE_OFFSET_Y + 30 - sp, 3);
+    drawIconStar(26, FACE_OFFSET_Y + 30 + sp, 4);
+    drawIconStar(214, FACE_OFFSET_Y + 30 - sp, 3);
+    // Gentle light particles rising
+    float p1 = fmod(t * 1.5f, 1.0f);
+    float p2 = fmod(t * 1.5f + 0.5f, 1.0f);
+    gfx->fillCircle(50 + (int)(p1 * 12.0f), FACE_OFFSET_Y + 80 - (int)(p1 * 60.0f), 2, userAccentColor);
+    gfx->fillCircle(200 - (int)(p2 * 10.0f), FACE_OFFSET_Y + 85 - (int)(p2 * 55.0f), 2, userAccentColor);
 
   } else if (currentExpression == "crying") {
     // Squished sad eyes, heavy tears from both sides
@@ -2116,35 +2324,42 @@ void renderExpressionFrame() {
     drawEye(RX, EY + 6, EW, EH - 9, ER, 0, 7);
     drawBrow(LX - 26, EY - 11, LX + 18, EY - 30);
     drawBrow(RX + 26, EY - 11, RX - 18, EY - 30);
-    // Wobbly frown
+    // Open wailing mouth
     float wobble = sin(t * 3.14159f * 6.0f) * 2.0f;
-    drawSadArc(SCREEN_WIDTH / 2 + (int)wobble, MY - 4, 34);
-    // Left tear stream
-    for (int j = 0; j < 3; j++) {
-      float tOff = fmod(t + j * 0.33f, 1.0f);
-      int ty = EY + 26 + (int)(tOff * 60.0f);
-      if (ty < MY + 30) drawTear(LX + EW / 2 + 3, ty, 4);
+    int mouthW = 30 + (int)(fabs(wobble) * 4.0f);
+    int mouthH = 18 + (int)(fabs(wobble) * 3.0f);
+    drawOvalMouth(MX + (int)wobble, MY - 2, mouthW / 2, mouthH / 2);
+    // Heavy left tear streams (4 tears)
+    for (int j = 0; j < 4; j++) {
+      float tOff = fmod(t + j * 0.25f, 1.0f);
+      int ty = EY + 26 + (int)(tOff * 65.0f);
+      if (ty < MY + 35) drawTear(LX + EW / 2 + 3 - j * 3, ty, 5 - j);
     }
-    // Right tear stream
-    for (int j = 0; j < 3; j++) {
-      float tOff = fmod(t + j * 0.33f + 0.15f, 1.0f);
-      int ty = EY + 26 + (int)(tOff * 60.0f);
-      if (ty < MY + 30) drawTear(RX + EW / 2 + 3, ty, 4);
+    // Heavy right tear streams (4 tears)
+    for (int j = 0; j < 4; j++) {
+      float tOff = fmod(t + j * 0.25f + 0.12f, 1.0f);
+      int ty = EY + 26 + (int)(tOff * 65.0f);
+      if (ty < MY + 35) drawTear(RX + EW / 2 + 3 + j * 3, ty, 5 - j);
     }
 
   } else if (currentExpression == "blushing") {
     // Averted gaze (pupils shifted), rosy cheeks
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    int shift = 4 + (int)(wave * 3.0f);
-    drawEye(LX, EY, EW, EH - 4, ER, -shift, 3);
-    drawEye(RX, EY, EW, EH - 4, ER, -shift, 3);
-    // Big rosy blush circles
-    int blushR = 10 + (int)(wave * 3.0f);
-    gfx->fillCircle(LX + 28, EY + 18, blushR, COL_PINK);
-    gfx->fillCircle(RX - 28, EY + 18, blushR, COL_PINK);
-    // Shy small smile
+    int shift = 4 + (int)(wave * 4.0f);
+    drawEye(LX, EY, EW, EH - 6, ER, -shift, 3);
+    drawEye(RX, EY, EW, EH - 6, ER, -shift, 3);
+    // Large pulsing rosy blush circles
+    int blushR = 12 + (int)(wave * 4.0f);
+    gfx->fillCircle(LX + 30, EY + 20, blushR, COL_PINK);
+    gfx->fillCircle(RX - 30, EY + 20, blushR, COL_PINK);
+    // Shy wobbly smile
+    float smileShy = sin(t * 3.14159f * 3.0f) * 2.0f;
     for (int line = 0; line < 3; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 10, MY + line, SCREEN_WIDTH / 2 + 10, MY + line, userFaceColor);
+      gfx->drawLine(MX - 12, MY + (int)smileShy + line, MX + 12, MY - (int)smileShy + line, userFaceColor);
+    }
+    // Tiny sparkle of embarrassment
+    if (wave > 0.7f) {
+      gfx->fillCircle(LX - 20, EY - 24, 2, userAccentColor);
     }
 
   } else if (currentExpression == "nervous") {
@@ -2157,28 +2372,41 @@ void renderExpressionFrame() {
     float wave = sin(t * 3.14159f * 4.0f) * 3.0f;
     drawBrow(LX - 26, EY - 32 - (int)wave, LX + 26, EY - 30);
     drawBrow(RX - 26, EY - 30, RX + 26, EY - 32 + (int)wave);
-    // Wobbly crooked mouth
+    // Wobbly crooked small mouth
     int mShift = (int)(sin(t * 3.14159f * 8.0f) * 3.0f);
     for (int line = 0; line < 3; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 16, MY + mShift + line,
-                   SCREEN_WIDTH / 2 + 16, MY - mShift + line, userFaceColor);
+      gfx->drawLine(MX - 16, MY + mShift + line,
+                   MX + 16, MY - mShift + line, userFaceColor);
     }
-    // Sweat drop
-    if (ph < 48) drawTear(RX + EW / 2 + 10, EY - 10, 5);
+    // Sweat drops (multiple, sliding down)
+    float sweatT = fmod(t * 2.0f, 1.0f);
+    int sweatY = EY - 18 + (int)(sweatT * 30.0f);
+    drawTear(RX + EW / 2 + 10, sweatY, 5);
+    if (sweatT > 0.3f) {
+      drawTear(LX - EW / 2 - 8, sweatY - 10, 4);
+    }
+    // Slight body tremble (subtle eye jitter)
+    int jitter = (ph % 4 < 2) ? 1 : -1;
+    gfx->drawPixel(LX + jitter, EY - EH/2, COL_BG);
+    gfx->drawPixel(RX + jitter, EY - EH/2, COL_BG);
 
   } else if (currentExpression == "proud") {
     // Closed eyes lifted, confident grin
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
-    // Confident arc eyes (like happy arcs but slightly lifted)
-    drawHappyArc(LX, EY - 4, EW + 4);
-    drawHappyArc(RX, EY - 4, EW + 4);
-    // Proud wide grin
-    drawSmile(SCREEN_WIDTH / 2, MY - 6, 56);
-    // Crown/sparkle above
-    int sp = (int)(wave * 4.0f);
-    drawIconStar(SCREEN_WIDTH / 2 - 20, FACE_OFFSET_Y + 18 - sp, 5);
-    drawIconStar(SCREEN_WIDTH / 2, FACE_OFFSET_Y + 12 - sp, 7);
-    drawIconStar(SCREEN_WIDTH / 2 + 20, FACE_OFFSET_Y + 18 - sp, 5);
+    // Confident arc eyes (slightly lifted, wider)
+    drawHappyArc(LX, EY - 6, EW + 6);
+    drawHappyArc(RX, EY - 6, EW + 6);
+    // Proud wide grin with teeth showing
+    drawTeethMouth(MX, MY - 4, 48, 20);
+    // Crown sparkles above head (3 stars)
+    int sp = (int)(wave * 5.0f);
+    int starPulse = 5 + (int)(wave * 3.0f);
+    drawIconStar(CX - 24, FACE_OFFSET_Y + 14 - sp, starPulse);
+    drawIconStar(CX, FACE_OFFSET_Y + 8 - sp, starPulse + 2);
+    drawIconStar(CX + 24, FACE_OFFSET_Y + 14 - sp, starPulse);
+    // Blush of pride
+    gfx->fillCircle(LX + 26, EY + 18, 6, COL_PINK);
+    gfx->fillCircle(RX - 26, EY + 18, 6, COL_PINK);
 
   } else if (currentExpression == "skeptical") {
     // One raised brow, squinting side-eye
@@ -2192,8 +2420,8 @@ void renderExpressionFrame() {
     drawBrow(RX - 22, EY - 32 - browLift, RX + 22, EY - 28 - browLift);
     // Flat angled mouth
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 16, MY + 2 + line,
-                   SCREEN_WIDTH / 2 + 16, MY - 2 + line, userFaceColor);
+      gfx->drawLine(MX - 16, MY + 2 + line,
+                   MX + 16, MY - 2 + line, userFaceColor);
     }
 
   } else if (currentExpression == "peaceful") {
@@ -2205,8 +2433,8 @@ void renderExpressionFrame() {
     drawHappyArc(RX, EY + 2 - lift, EW - 4);
     // Gentle smile
     for (int line = 0; line < 3; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 12, MY - lift + line,
-                   SCREEN_WIDTH / 2 + 12, MY - lift + line, userFaceColor);
+      gfx->drawLine(MX - 12, MY - lift + line,
+                   MX + 12, MY - lift + line, userFaceColor);
     }
     // Tiny sparkles that slowly drift
     int sp1 = (int)(t * 40.0f) % 20;
@@ -2227,8 +2455,8 @@ void renderExpressionFrame() {
     drawBrow(RX - 22, EY - 28, RX + 22, EY - 20);
     // Firm horizontal mouth
     for (int line = 0; line < 5; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 20, MY + line,
-                   SCREEN_WIDTH / 2 + 20, MY + line, userFaceColor);
+      gfx->drawLine(MX - 20, MY + line,
+                   MX + 20, MY + line, userFaceColor);
     }
 
   } else {
@@ -2243,7 +2471,7 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, eyeH, ER, px, py);
     drawEye(RX, EY, EW, eyeH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(SCREEN_WIDTH / 2 - 13, MY + line, SCREEN_WIDTH / 2 + 13, MY + line, userFaceColor);
+      gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userFaceColor);
     }
   }
 
@@ -2281,9 +2509,12 @@ void renderIdle() {
   if (idleShowFace) {
   gfx->drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
 
-  const int leftX = 70;
-  const int rightX = 170;
+  const int eyeXShift = clampAppearanceOffset(companionEyeOffsetX) * 2;
+  const int leftX = 70 + eyeXShift;
+  const int rightX = 170 + eyeXShift;
   const int eyeY = FACE_OFFSET_Y + 60 + clampAppearanceOffset(companionEyeOffsetY) * 2;
+  const int mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
+  const int mouthCX = SCREEN_WIDTH / 2 + mouthXShift;
   const int mouthY = FACE_OFFSET_Y + 110 + clampAppearanceOffset(companionMouthOffsetY) * 2;
   const float orbitAngle = idleOrbit * (2.0f * PI / 16.0f);
   const int pupilDx = (int)(sinf(orbitAngle) * 4.0f);
@@ -2291,11 +2522,11 @@ void renderIdle() {
   if (activePetMode == "off") {
     drawEye(leftX, eyeY, 42, 26, 9, 0, 0);
     drawEye(rightX, eyeY, 42, 26, 9, 0, 0);
-    gfx->drawLine(SCREEN_WIDTH / 2 - 13, mouthY, SCREEN_WIDTH / 2 + 13, mouthY, userFaceColor);
+    gfx->drawLine(mouthCX - 13, mouthY, mouthCX + 13, mouthY, userFaceColor);
   } else if (activePetMode == "nap" || petPersonality == "sleepy") {
     drawBlinkEye(leftX, eyeY, 44, 7, 7);
     drawBlinkEye(rightX, eyeY, 44, 7, 7);
-    gfx->drawLine(SCREEN_WIDTH / 2 - 14, mouthY, SCREEN_WIDTH / 2 + 14, mouthY, userFaceColor);
+    gfx->drawLine(mouthCX - 14, mouthY, mouthCX + 14, mouthY, userFaceColor);
     gfx->setTextSize(2);
     gfx->setTextColor(userAccentColor);
     gfx->setCursor(190, FACE_OFFSET_Y + 44);
@@ -2305,23 +2536,23 @@ void renderIdle() {
   } else if (activePetMode == "cuddle" || petPersonality == "cuddly") {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx / 2, 0);
     drawEye(rightX, eyeY, 44, 30, 9, pupilDx / 2, 0);
-    drawSmile(SCREEN_WIDTH / 2, mouthY - 2, 44);
+    drawSmile(mouthCX, mouthY - 2, 44);
     drawIconHeart(120, FACE_OFFSET_Y + 145, 5);
   } else if (activePetMode == "play" || petPersonality == "playful") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, pupilDx * 2, 0);
-    drawSmile(SCREEN_WIDTH / 2, mouthY - 4, 48);
+    drawSmile(mouthCX, mouthY - 4, 48);
     gfx->fillCircle(26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
   } else if (activePetMode == "party") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, -pupilDx * 2, 0);
-    drawSmile(SCREEN_WIDTH / 2, mouthY - 4, 52);
+    drawSmile(mouthCX, mouthY - 4, 52);
     drawIconStar(30, FACE_OFFSET_Y + 28 + (int)(sinf(orbitAngle) * 3.0f), 5);
     drawIconStar(210, FACE_OFFSET_Y + 32 + (int)(cosf(orbitAngle) * 3.0f), 5);
   } else {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx * 2, 2);
     drawEye(rightX, eyeY, 44, 30, 9, -pupilDx, -2);
-    drawOvalMouth(SCREEN_WIDTH / 2, mouthY, 9, 7);
+    drawOvalMouth(mouthCX, mouthY, 9, 7);
   }
 
   drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
@@ -3854,7 +4085,9 @@ void tryStoredPrefs() {
   companionHairThickness = clampAppearancePercent(preferences.getInt("companion_hair_thickness", companionHairThickness));
   companionHairOffsetX = clampAppearanceOffset(preferences.getInt("companion_hair_offset_x", companionHairOffsetX));
   companionHairOffsetY = clampAppearanceOffset(preferences.getInt("companion_hair_offset_y", companionHairOffsetY));
+  companionEyeOffsetX = clampAppearanceOffset(preferences.getInt("companion_eye_offset_x", companionEyeOffsetX));
   companionEyeOffsetY = clampAppearanceOffset(preferences.getInt("companion_eye_offset_y", companionEyeOffsetY));
+  companionMouthOffsetX = clampAppearanceOffset(preferences.getInt("companion_mouth_offset_x", companionMouthOffsetX));
   companionMouthOffsetY = clampAppearanceOffset(preferences.getInt("companion_mouth_offset_y", companionMouthOffsetY));
   companionMustacheWidth = clampAppearancePercent(preferences.getInt("companion_mustache_width", companionMustacheWidth));
   companionMustacheHeight = clampAppearancePercent(preferences.getInt("companion_mustache_height", companionMustacheHeight));
@@ -3972,7 +4205,9 @@ void handleCommandJson(const String& body) {
     companionHairThickness = clampAppearancePercent(extractJsonIntField(body, "hairThickness", companionHairThickness));
     companionHairOffsetX = clampAppearanceOffset(extractJsonIntField(body, "hairOffsetX", companionHairOffsetX));
     companionHairOffsetY = clampAppearanceOffset(extractJsonIntField(body, "hairOffsetY", companionHairOffsetY));
+    companionEyeOffsetX = clampAppearanceOffset(extractJsonIntField(body, "eyeOffsetX", companionEyeOffsetX));
     companionEyeOffsetY = clampAppearanceOffset(extractJsonIntField(body, "eyeOffsetY", companionEyeOffsetY));
+    companionMouthOffsetX = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetX", companionMouthOffsetX));
     companionMouthOffsetY = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetY", companionMouthOffsetY));
     companionMustacheWidth = clampAppearancePercent(extractJsonIntField(body, "mustacheWidth", companionMustacheWidth));
     companionMustacheHeight = clampAppearancePercent(extractJsonIntField(body, "mustacheHeight", companionMustacheHeight));
@@ -4113,9 +4348,9 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_companion_scale") {
     int sc = extractJsonIntField(body, "scale", 100);
-    if (sc < 50) sc = 50;
-    if (sc > 200) sc = 200;
-    companionScale = (uint8_t)sc;
+    if (sc < 10) sc = 10;
+    if (sc > 300) sc = 300;
+    companionScale = (uint16_t)sc;
     if (currentMode == MODE_EXPRESSION) renderCurrentMode();
     return;
   }

@@ -29,7 +29,9 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   required int hairThickness,
   required int hairOffsetX,
   required int hairOffsetY,
+  required int eyeOffsetX,
   required int eyeOffsetY,
+  required int mouthOffsetX,
   required int mouthOffsetY,
   required int mustacheWidth,
   required int mustacheHeight,
@@ -69,7 +71,9 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
         hairThickness: hairThickness,
         hairOffsetX: hairOffsetX,
         hairOffsetY: hairOffsetY,
+        eyeOffsetX: eyeOffsetX,
         eyeOffsetY: eyeOffsetY,
+        mouthOffsetX: mouthOffsetX,
         mouthOffsetY: mouthOffsetY,
         mustacheWidth: mustacheWidth,
         mustacheHeight: mustacheHeight,
@@ -185,7 +189,9 @@ class CompanionFacePreview extends StatefulWidget {
     required this.hairThickness,
     required this.hairOffsetX,
     required this.hairOffsetY,
+    required this.eyeOffsetX,
     required this.eyeOffsetY,
+    required this.mouthOffsetX,
     required this.mouthOffsetY,
     required this.mustacheWidth,
     required this.mustacheHeight,
@@ -221,7 +227,9 @@ class CompanionFacePreview extends StatefulWidget {
   final int hairThickness;
   final int hairOffsetX;
   final int hairOffsetY;
+  final int eyeOffsetX;
   final int eyeOffsetY;
+  final int mouthOffsetX;
   final int mouthOffsetY;
   final int mustacheWidth;
   final int mustacheHeight;
@@ -315,7 +323,9 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               hairThickness: widget.hairThickness,
               hairOffsetX: widget.hairOffsetX,
               hairOffsetY: widget.hairOffsetY,
+              eyeOffsetX: widget.eyeOffsetX,
               eyeOffsetY: widget.eyeOffsetY,
+              mouthOffsetX: widget.mouthOffsetX,
               mouthOffsetY: widget.mouthOffsetY,
               mustacheWidth: widget.mustacheWidth,
               mustacheHeight: widget.mustacheHeight,
@@ -1147,7 +1157,9 @@ class _CompanionFacePainter extends CustomPainter {
     required this.hairThickness,
     required this.hairOffsetX,
     required this.hairOffsetY,
+    required this.eyeOffsetX,
     required this.eyeOffsetY,
+    required this.mouthOffsetX,
     required this.mouthOffsetY,
     required this.mustacheWidth,
     required this.mustacheHeight,
@@ -1179,7 +1191,9 @@ class _CompanionFacePainter extends CustomPainter {
   final int hairThickness;
   final int hairOffsetX;
   final int hairOffsetY;
+  final int eyeOffsetX;
   final int eyeOffsetY;
+  final int mouthOffsetX;
   final int mouthOffsetY;
   final int mustacheWidth;
   final int mustacheHeight;
@@ -1237,13 +1251,15 @@ class _CompanionFacePainter extends CustomPainter {
       stroke,
     );
 
-    const idleLeftX = 70.0;
-    const idleRightX = 170.0;
+    final idleLeftX = 70.0 + _clampOffset(eyeOffsetX) * 2.0;
+    final idleRightX = 170.0 + _clampOffset(eyeOffsetX) * 2.0;
     final idleEyeY = 100.0 + _clampOffset(eyeOffsetY) * 2.0 + breathY;
+    final idleMouthX = 120.0 + _clampOffset(mouthOffsetX) * 2.0;
     final idleMouthY = 150.0 + _clampOffset(mouthOffsetY) * 2.0 + breathY;
-    const expressionLeftX = 68.0;
-    const expressionRightX = 172.0;
+    final expressionLeftX = 68.0 + _clampOffset(eyeOffsetX) * 2.0;
+    final expressionRightX = 172.0 + _clampOffset(eyeOffsetX) * 2.0;
     final expressionEyeY = 85.0 + _clampOffset(eyeOffsetY) * 2.0;
+    final expressionMouthX = 120.0 + _clampOffset(mouthOffsetX) * 2.0;
     final expressionMouthY = 140.0 + _clampOffset(mouthOffsetY) * 2.0;
 
     final normalizedExpression = expression?.trim();
@@ -1365,7 +1381,7 @@ class _CompanionFacePainter extends CustomPainter {
 
   int _clampPercent(int value) => value.clamp(70, 170);
 
-  int _clampOffset(int value) => value.clamp(-24, 24);
+  int _clampOffset(int value) => value.clamp(-60, 60);
 
   double _scaleValue(num base, int percent) => base * _clampPercent(percent) / 100.0;
 
@@ -2123,7 +2139,9 @@ class _CompanionFacePainter extends CustomPainter {
         hairThickness != oldDelegate.hairThickness ||
         hairOffsetX != oldDelegate.hairOffsetX ||
         hairOffsetY != oldDelegate.hairOffsetY ||
+        eyeOffsetX != oldDelegate.eyeOffsetX ||
         eyeOffsetY != oldDelegate.eyeOffsetY ||
+        mouthOffsetX != oldDelegate.mouthOffsetX ||
         mouthOffsetY != oldDelegate.mouthOffsetY ||
         mustacheWidth != oldDelegate.mustacheWidth ||
         mustacheHeight != oldDelegate.mustacheHeight ||

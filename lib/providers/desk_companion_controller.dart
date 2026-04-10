@@ -58,7 +58,9 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _hairThicknessKey = 'companionHairThickness';
   static const String _hairOffsetXKey = 'companionHairOffsetX';
   static const String _hairOffsetYKey = 'companionHairOffsetY';
+  static const String _eyeOffsetXKey = 'companionEyeOffsetX';
   static const String _eyeOffsetYKey = 'companionEyeOffsetY';
+  static const String _mouthOffsetXKey = 'companionMouthOffsetX';
   static const String _mouthOffsetYKey = 'companionMouthOffsetY';
   static const String _mustacheWidthKey = 'companionMustacheWidth';
   static const String _mustacheHeightKey = 'companionMustacheHeight';
@@ -90,7 +92,9 @@ class DeskCompanionController extends ChangeNotifier {
   int _companionHairThickness = 100;
   int _companionHairOffsetX = 0;
   int _companionHairOffsetY = 0;
+  int _companionEyeOffsetX = 0;
   int _companionEyeOffsetY = 0;
+  int _companionMouthOffsetX = 0;
   int _companionMouthOffsetY = 0;
   int _companionMustacheWidth = 100;
   int _companionMustacheHeight = 100;
@@ -162,7 +166,9 @@ class DeskCompanionController extends ChangeNotifier {
   int get companionHairThickness => _companionHairThickness;
   int get companionHairOffsetX => _companionHairOffsetX;
   int get companionHairOffsetY => _companionHairOffsetY;
+  int get companionEyeOffsetX => _companionEyeOffsetX;
   int get companionEyeOffsetY => _companionEyeOffsetY;
+  int get companionMouthOffsetX => _companionMouthOffsetX;
   int get companionMouthOffsetY => _companionMouthOffsetY;
   int get companionMustacheWidth => _companionMustacheWidth;
   int get companionMustacheHeight => _companionMustacheHeight;
@@ -330,8 +336,12 @@ class DeskCompanionController extends ChangeNotifier {
       prefs.getInt(_hairOffsetXKey) ?? _companionHairOffsetX;
     _companionHairOffsetY =
       prefs.getInt(_hairOffsetYKey) ?? _companionHairOffsetY;
+    _companionEyeOffsetX =
+      prefs.getInt(_eyeOffsetXKey) ?? _companionEyeOffsetX;
     _companionEyeOffsetY =
       prefs.getInt(_eyeOffsetYKey) ?? _companionEyeOffsetY;
+    _companionMouthOffsetX =
+      prefs.getInt(_mouthOffsetXKey) ?? _companionMouthOffsetX;
     _companionMouthOffsetY =
       prefs.getInt(_mouthOffsetYKey) ?? _companionMouthOffsetY;
     _companionMustacheWidth =
@@ -392,7 +402,9 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setInt(_hairThicknessKey, _companionHairThickness);
     await prefs.setInt(_hairOffsetXKey, _companionHairOffsetX);
     await prefs.setInt(_hairOffsetYKey, _companionHairOffsetY);
+    await prefs.setInt(_eyeOffsetXKey, _companionEyeOffsetX);
     await prefs.setInt(_eyeOffsetYKey, _companionEyeOffsetY);
+    await prefs.setInt(_mouthOffsetXKey, _companionMouthOffsetX);
     await prefs.setInt(_mouthOffsetYKey, _companionMouthOffsetY);
     await prefs.setInt(_mustacheWidthKey, _companionMustacheWidth);
     await prefs.setInt(_mustacheHeightKey, _companionMustacheHeight);
@@ -1023,7 +1035,9 @@ class DeskCompanionController extends ChangeNotifier {
     required int hairThickness,
     required int hairOffsetX,
     required int hairOffsetY,
+    required int eyeOffsetX,
     required int eyeOffsetY,
+    required int mouthOffsetX,
     required int mouthOffsetY,
     required int mustacheWidth,
     required int mustacheHeight,
@@ -1048,7 +1062,9 @@ class DeskCompanionController extends ChangeNotifier {
           'hairThickness': hairThickness,
           'hairOffsetX': hairOffsetX,
           'hairOffsetY': hairOffsetY,
+          'eyeOffsetX': eyeOffsetX,
           'eyeOffsetY': eyeOffsetY,
+          'mouthOffsetX': mouthOffsetX,
           'mouthOffsetY': mouthOffsetY,
           'mustacheWidth': mustacheWidth,
           'mustacheHeight': mustacheHeight,
@@ -1073,7 +1089,9 @@ class DeskCompanionController extends ChangeNotifier {
       _companionHairThickness = hairThickness;
       _companionHairOffsetX = hairOffsetX;
       _companionHairOffsetY = hairOffsetY;
+      _companionEyeOffsetX = eyeOffsetX;
       _companionEyeOffsetY = eyeOffsetY;
+      _companionMouthOffsetX = mouthOffsetX;
       _companionMouthOffsetY = mouthOffsetY;
       _companionMustacheWidth = mustacheWidth;
       _companionMustacheHeight = mustacheHeight;
@@ -1512,9 +1530,19 @@ class DeskCompanionController extends ChangeNotifier {
       _companionHairOffsetY = incomingHairOffsetY;
     }
 
+    final incomingEyeOffsetX = (payload['eyeOffsetX'] as num?)?.toInt();
+    if (incomingEyeOffsetX != null) {
+      _companionEyeOffsetX = incomingEyeOffsetX;
+    }
+
     final incomingEyeOffsetY = (payload['eyeOffsetY'] as num?)?.toInt();
     if (incomingEyeOffsetY != null) {
       _companionEyeOffsetY = incomingEyeOffsetY;
+    }
+
+    final incomingMouthOffsetX = (payload['mouthOffsetX'] as num?)?.toInt();
+    if (incomingMouthOffsetX != null) {
+      _companionMouthOffsetX = incomingMouthOffsetX;
     }
 
     final incomingMouthOffsetY = (payload['mouthOffsetY'] as num?)?.toInt();

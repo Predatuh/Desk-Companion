@@ -645,7 +645,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _selectedHairThickness = 100;
   double _selectedHairOffsetX = 0;
   double _selectedHairOffsetY = 0;
+  double _selectedEyeOffsetX = 0;
   double _selectedEyeOffsetY = 0;
+  double _selectedMouthOffsetX = 0;
   double _selectedMouthOffsetY = 0;
   double _selectedMustacheSize = 100;
   double _selectedMustacheWidth = 100;
@@ -767,7 +769,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _selectedHairThickness = controller.companionHairThickness.toDouble();
     _selectedHairOffsetX = controller.companionHairOffsetX.toDouble();
     _selectedHairOffsetY = controller.companionHairOffsetY.toDouble();
+    _selectedEyeOffsetX = controller.companionEyeOffsetX.toDouble();
     _selectedEyeOffsetY = controller.companionEyeOffsetY.toDouble();
+    _selectedMouthOffsetX = controller.companionMouthOffsetX.toDouble();
     _selectedMouthOffsetY = controller.companionMouthOffsetY.toDouble();
     _selectedMustacheSize = controller.companionMustacheSize.toDouble();
     _selectedMustacheWidth = controller.companionMustacheWidth.toDouble();
@@ -1275,7 +1279,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           hairThickness: _selectedHairThickness,
           hairOffsetX: _selectedHairOffsetX,
           hairOffsetY: _selectedHairOffsetY,
+          eyeOffsetX: _selectedEyeOffsetX,
           eyeOffsetY: _selectedEyeOffsetY,
+          mouthOffsetX: _selectedMouthOffsetX,
           mouthOffsetY: _selectedMouthOffsetY,
           mustacheSize: _selectedMustacheSize,
           mustacheWidth: _selectedMustacheWidth,
@@ -1283,6 +1289,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           mustacheThickness: _selectedMustacheThickness,
           mustacheOffsetX: _selectedMustacheOffsetX,
           mustacheOffsetY: _selectedMustacheOffsetY,
+          expressionSpeed: _expressionSpeed,
+          companionScale: _companionScale,
+          eyeColor: _eyeColor,
+          faceColor: _faceColor,
+          accentColor: _accentColor,
+          bodyColor: _bodyColor,
           stickFigureScale: _stickFigureScale,
           stickFigureSpacing: _stickFigureSpacing,
           stickFigureEnergy: _stickFigureEnergy,
@@ -1312,12 +1324,22 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _selectedHairThickness = result.hairThickness;
       _selectedHairOffsetX = result.hairOffsetX;
       _selectedHairOffsetY = result.hairOffsetY;
+      _selectedEyeOffsetX = result.eyeOffsetX;
+      _selectedEyeOffsetY = result.eyeOffsetY;
+      _selectedMouthOffsetX = result.mouthOffsetX;
+      _selectedMouthOffsetY = result.mouthOffsetY;
       _selectedMustacheSize = result.mustacheSize;
       _selectedMustacheWidth = result.mustacheWidth;
       _selectedMustacheHeight = result.mustacheHeight;
       _selectedMustacheThickness = result.mustacheThickness;
       _selectedMustacheOffsetX = result.mustacheOffsetX;
       _selectedMustacheOffsetY = result.mustacheOffsetY;
+      _expressionSpeed = result.expressionSpeed;
+      _companionScale = result.companionScale;
+      _eyeColor = result.eyeColor;
+      _faceColor = result.faceColor;
+      _accentColor = result.accentColor;
+      _bodyColor = result.bodyColor;
       _stickFigureScale = result.stickFigureScale;
       _stickFigureSpacing = result.stickFigureSpacing;
       _stickFigureEnergy = result.stickFigureEnergy;
@@ -1523,7 +1545,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             hairThickness: _selectedHairThickness.round(),
                             hairOffsetX: _selectedHairOffsetX.round(),
                             hairOffsetY: _selectedHairOffsetY.round(),
+                            eyeOffsetX: _selectedEyeOffsetX.round(),
                             eyeOffsetY: _selectedEyeOffsetY.round(),
+                            mouthOffsetX: _selectedMouthOffsetX.round(),
                             mouthOffsetY: _selectedMouthOffsetY.round(),
                             mustacheWidth: _selectedMustacheWidth.round(),
                             mustacheHeight: _selectedMustacheHeight.round(),
@@ -1597,109 +1621,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           ),
                   icon: const Icon(Icons.pets_outlined),
                   label: const Text('Apply behavior'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // ── Animation speed ──
-        _SectionCard(
-          title: 'Animation speed',
-          subtitle: 'How fast the companion reacts and animates on screen.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Speed: ${_expressionSpeed.round()}x', style: Theme.of(context).textTheme.bodyMedium),
-              Slider(
-                min: 1,
-                max: 8,
-                divisions: 7,
-                value: _expressionSpeed,
-                label: '${_expressionSpeed.round()}x',
-                onChanged: (v) => setState(() => _expressionSpeed = v),
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () => controller.sendExpressionSpeed(_expressionSpeed.round()),
-                            success: 'Animation speed set to ${_expressionSpeed.round()}x.',
-                          ),
-                  icon: const Icon(Icons.speed),
-                  label: const Text('Apply speed'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // ── Companion size ──
-        _SectionCard(
-          title: 'Companion size',
-          subtitle: 'Scale the companion face larger or smaller. 100% is default.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Scale: ${_companionScale.round()}%', style: Theme.of(context).textTheme.bodyMedium),
-              Slider(
-                min: 50,
-                max: 200,
-                divisions: 15,
-                value: _companionScale,
-                label: '${_companionScale.round()}%',
-                onChanged: (v) => setState(() => _companionScale = v),
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () => controller.sendCompanionScale(_companionScale.round()),
-                            success: 'Companion scaled to ${_companionScale.round()}%.',
-                          ),
-                  icon: const Icon(Icons.zoom_in),
-                  label: const Text('Apply size'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // ── Display colors (Classic scoped) ──
-        _SectionCard(
-          title: 'Display colors',
-          subtitle: 'Customise eye, face, accent and body colors on the device display.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Face / outline', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Lines', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () => controller.sendColors(
-                              eyeColor: _colorToRgb565(_eyeColor),
-                              faceColor: _colorToRgb565(_faceColor),
-                              accentColor: _colorToRgb565(_accentColor),
-                              bodyColor: _colorToRgb565(_bodyColor),
-                            ),
-                            success: 'Colors applied!',
-                          ),
-                  icon: const Icon(Icons.palette_outlined),
-                  label: const Text('Apply colors'),
                 ),
               ),
             ],
@@ -1805,7 +1726,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           hairThickness: _selectedHairThickness.round(),
                           hairOffsetX: _selectedHairOffsetX.round(),
                           hairOffsetY: _selectedHairOffsetY.round(),
+                          eyeOffsetX: _selectedEyeOffsetX.round(),
                           eyeOffsetY: _selectedEyeOffsetY.round(),
+                          mouthOffsetX: _selectedMouthOffsetX.round(),
                           mouthOffsetY: _selectedMouthOffsetY.round(),
                           mustacheWidth: _selectedMustacheWidth.round(),
                           mustacheHeight: _selectedMustacheHeight.round(),
@@ -2631,7 +2554,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           hairThickness: _selectedHairThickness.round(),
           hairOffsetX: _selectedHairOffsetX.round(),
           hairOffsetY: _selectedHairOffsetY.round(),
+          eyeOffsetX: _selectedEyeOffsetX.round(),
           eyeOffsetY: _selectedEyeOffsetY.round(),
+          mouthOffsetX: _selectedMouthOffsetX.round(),
           mouthOffsetY: _selectedMouthOffsetY.round(),
           mustacheWidth: _selectedMustacheWidth.round(),
           mustacheHeight: _selectedMustacheHeight.round(),
@@ -2670,7 +2595,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           hairThickness: _selectedHairThickness.round(),
           hairOffsetX: _selectedHairOffsetX.round(),
           hairOffsetY: _selectedHairOffsetY.round(),
+          eyeOffsetX: _selectedEyeOffsetX.round(),
           eyeOffsetY: _selectedEyeOffsetY.round(),
+          mouthOffsetX: _selectedMouthOffsetX.round(),
           mouthOffsetY: _selectedMouthOffsetY.round(),
           mustacheWidth: _selectedMustacheWidth.round(),
           mustacheHeight: _selectedMustacheHeight.round(),
@@ -3439,7 +3366,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         hairThickness: _selectedHairThickness.round(),
         hairOffsetX: _selectedHairOffsetX.round(),
         hairOffsetY: _selectedHairOffsetY.round(),
+        eyeOffsetX: _selectedEyeOffsetX.round(),
         eyeOffsetY: _selectedEyeOffsetY.round(),
+        mouthOffsetX: _selectedMouthOffsetX.round(),
         mouthOffsetY: _selectedMouthOffsetY.round(),
         mustacheWidth: _selectedMustacheWidth.round(),
         mustacheHeight: _selectedMustacheHeight.round(),
@@ -3636,7 +3565,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       hairThickness: _selectedHairThickness.round(),
       hairOffsetX: _selectedHairOffsetX.round(),
       hairOffsetY: _selectedHairOffsetY.round(),
+      eyeOffsetX: _selectedEyeOffsetX.round(),
       eyeOffsetY: _selectedEyeOffsetY.round(),
+      mouthOffsetX: _selectedMouthOffsetX.round(),
       mouthOffsetY: _selectedMouthOffsetY.round(),
       mustacheWidth: _selectedMustacheWidth.round(),
       mustacheHeight: _selectedMustacheHeight.round(),
@@ -3683,7 +3614,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       hairThickness: _selectedHairThickness.round(),
       hairOffsetX: _selectedHairOffsetX.round(),
       hairOffsetY: _selectedHairOffsetY.round(),
+      eyeOffsetX: _selectedEyeOffsetX.round(),
       eyeOffsetY: _selectedEyeOffsetY.round(),
+      mouthOffsetX: _selectedMouthOffsetX.round(),
       mouthOffsetY: _selectedMouthOffsetY.round(),
       mustacheWidth: _selectedMustacheWidth.round(),
       mustacheHeight: _selectedMustacheHeight.round(),
@@ -4503,7 +4436,7 @@ class _FullscreenDrawEditorState extends State<_FullscreenDrawEditor> {
   }
 }
 
-enum _AppearanceEditorSection { scene, silhouette, face, mustache, motion }
+enum _AppearanceEditorSection { scene, silhouette, face, mustache, motion, style }
 
 extension _AppearanceEditorSectionExt on _AppearanceEditorSection {
   String get label => switch (this) {
@@ -4512,6 +4445,7 @@ extension _AppearanceEditorSectionExt on _AppearanceEditorSection {
         _AppearanceEditorSection.face => 'Face',
         _AppearanceEditorSection.mustache => 'Mustache',
         _AppearanceEditorSection.motion => 'Motion',
+        _AppearanceEditorSection.style => 'Style',
       };
 
   IconData get icon => switch (this) {
@@ -4520,6 +4454,7 @@ extension _AppearanceEditorSectionExt on _AppearanceEditorSection {
         _AppearanceEditorSection.face => Icons.face_retouching_natural,
         _AppearanceEditorSection.mustache => Icons.brush_outlined,
         _AppearanceEditorSection.motion => Icons.animation_outlined,
+        _AppearanceEditorSection.style => Icons.palette_outlined,
       };
 }
 
@@ -4541,7 +4476,9 @@ class _AppearanceEditorResult {
     required this.hairThickness,
     required this.hairOffsetX,
     required this.hairOffsetY,
+    required this.eyeOffsetX,
     required this.eyeOffsetY,
+    required this.mouthOffsetX,
     required this.mouthOffsetY,
     required this.mustacheSize,
     required this.mustacheWidth,
@@ -4549,6 +4486,12 @@ class _AppearanceEditorResult {
     required this.mustacheThickness,
     required this.mustacheOffsetX,
     required this.mustacheOffsetY,
+    required this.expressionSpeed,
+    required this.companionScale,
+    required this.eyeColor,
+    required this.faceColor,
+    required this.accentColor,
+    required this.bodyColor,
     required this.stickFigureScale,
     required this.stickFigureSpacing,
     required this.stickFigureEnergy,
@@ -4570,7 +4513,9 @@ class _AppearanceEditorResult {
   final double hairThickness;
   final double hairOffsetX;
   final double hairOffsetY;
+  final double eyeOffsetX;
   final double eyeOffsetY;
+  final double mouthOffsetX;
   final double mouthOffsetY;
   final double mustacheSize;
   final double mustacheWidth;
@@ -4578,6 +4523,12 @@ class _AppearanceEditorResult {
   final double mustacheThickness;
   final double mustacheOffsetX;
   final double mustacheOffsetY;
+  final double expressionSpeed;
+  final double companionScale;
+  final Color eyeColor;
+  final Color faceColor;
+  final Color accentColor;
+  final Color bodyColor;
   final double stickFigureScale;
   final double stickFigureSpacing;
   final double stickFigureEnergy;
@@ -4623,7 +4574,9 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
     required this.hairThickness,
     required this.hairOffsetX,
     required this.hairOffsetY,
+    required this.eyeOffsetX,
     required this.eyeOffsetY,
+    required this.mouthOffsetX,
     required this.mouthOffsetY,
     required this.mustacheSize,
     required this.mustacheWidth,
@@ -4631,6 +4584,12 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
     required this.mustacheThickness,
     required this.mustacheOffsetX,
     required this.mustacheOffsetY,
+    required this.expressionSpeed,
+    required this.companionScale,
+    required this.eyeColor,
+    required this.faceColor,
+    required this.accentColor,
+    required this.bodyColor,
     required this.stickFigureScale,
     required this.stickFigureSpacing,
     required this.stickFigureEnergy,
@@ -4656,7 +4615,9 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
   final double hairThickness;
   final double hairOffsetX;
   final double hairOffsetY;
+  final double eyeOffsetX;
   final double eyeOffsetY;
+  final double mouthOffsetX;
   final double mouthOffsetY;
   final double mustacheSize;
   final double mustacheWidth;
@@ -4664,6 +4625,12 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
   final double mustacheThickness;
   final double mustacheOffsetX;
   final double mustacheOffsetY;
+  final double expressionSpeed;
+  final double companionScale;
+  final Color eyeColor;
+  final Color faceColor;
+  final Color accentColor;
+  final Color bodyColor;
   final double stickFigureScale;
   final double stickFigureSpacing;
   final double stickFigureEnergy;
@@ -4692,7 +4659,9 @@ class _FullscreenAppearanceEditorState
   late double _hairThickness;
   late double _hairOffsetX;
   late double _hairOffsetY;
+  late double _eyeOffsetX;
   late double _eyeOffsetY;
+  late double _mouthOffsetX;
   late double _mouthOffsetY;
   late double _mustacheSize;
   late double _mustacheWidth;
@@ -4700,6 +4669,12 @@ class _FullscreenAppearanceEditorState
   late double _mustacheThickness;
   late double _mustacheOffsetX;
   late double _mustacheOffsetY;
+  late double _expressionSpeed;
+  late double _companionScale;
+  late Color _eyeColor;
+  late Color _faceColor;
+  late Color _accentColor;
+  late Color _bodyColor;
   late double _stickFigureScale;
   late double _stickFigureSpacing;
   late double _stickFigureEnergy;
@@ -4724,7 +4699,9 @@ class _FullscreenAppearanceEditorState
     _hairThickness = widget.hairThickness;
     _hairOffsetX = widget.hairOffsetX;
     _hairOffsetY = widget.hairOffsetY;
+    _eyeOffsetX = widget.eyeOffsetX;
     _eyeOffsetY = widget.eyeOffsetY;
+    _mouthOffsetX = widget.mouthOffsetX;
     _mouthOffsetY = widget.mouthOffsetY;
     _mustacheSize = widget.mustacheSize;
     _mustacheWidth = widget.mustacheWidth;
@@ -4732,6 +4709,12 @@ class _FullscreenAppearanceEditorState
     _mustacheThickness = widget.mustacheThickness;
     _mustacheOffsetX = widget.mustacheOffsetX;
     _mustacheOffsetY = widget.mustacheOffsetY;
+    _expressionSpeed = widget.expressionSpeed;
+    _companionScale = widget.companionScale;
+    _eyeColor = widget.eyeColor;
+    _faceColor = widget.faceColor;
+    _accentColor = widget.accentColor;
+    _bodyColor = widget.bodyColor;
     _stickFigureScale = widget.stickFigureScale;
     _stickFigureSpacing = widget.stickFigureSpacing;
     _stickFigureEnergy = widget.stickFigureEnergy;
@@ -4743,6 +4726,7 @@ class _FullscreenAppearanceEditorState
             _AppearanceEditorSection.silhouette,
             _AppearanceEditorSection.face,
             _AppearanceEditorSection.mustache,
+            _AppearanceEditorSection.style,
           ],
         CompanionVisualModel.stickFigure => const [
             _AppearanceEditorSection.scene,
@@ -4894,7 +4878,9 @@ class _FullscreenAppearanceEditorState
                 hairThickness: _hairThickness.round(),
                 hairOffsetX: _hairOffsetX.round(),
                 hairOffsetY: _hairOffsetY.round(),
+                eyeOffsetX: _eyeOffsetX.round(),
                 eyeOffsetY: _eyeOffsetY.round(),
+                mouthOffsetX: _mouthOffsetX.round(),
                 mouthOffsetY: _mouthOffsetY.round(),
                 mustacheWidth: _mustacheWidth.round(),
                 mustacheHeight: _mustacheHeight.round(),
@@ -4966,6 +4952,7 @@ class _FullscreenAppearanceEditorState
           _AppearanceEditorSection.face => _buildFacePanel(context),
           _AppearanceEditorSection.mustache => _buildMustachePanel(context),
           _AppearanceEditorSection.motion => _buildMotionPanel(context),
+          _AppearanceEditorSection.style => _buildStylePanel(context),
         },
       ],
     );
@@ -5156,23 +5143,24 @@ class _FullscreenAppearanceEditorState
             (value) => value.label,
           ),
           const SizedBox(height: 12),
-          _buildSlider(
-            context,
-            'Eye line ${_eyeOffsetY.round()} px',
-            _eyeOffsetY,
-            (value) => setState(() => _eyeOffsetY = value),
-            min: -48,
-            max: 48,
-            divisions: 96,
+          _OffsetPad(
+            title: 'Eye placement',
+            offsetX: _eyeOffsetX,
+            offsetY: _eyeOffsetY,
+            onChanged: (x, y) => setState(() {
+              _eyeOffsetX = x;
+              _eyeOffsetY = y;
+            }),
           ),
-          _buildSlider(
-            context,
-            'Mouth line ${_mouthOffsetY.round()} px',
-            _mouthOffsetY,
-            (value) => setState(() => _mouthOffsetY = value),
-            min: -48,
-            max: 48,
-            divisions: 96,
+          const SizedBox(height: 12),
+          _OffsetPad(
+            title: 'Mouth placement',
+            offsetX: _mouthOffsetX,
+            offsetY: _mouthOffsetY,
+            onChanged: (x, y) => setState(() {
+              _mouthOffsetX = x;
+              _mouthOffsetY = y;
+            }),
           ),
         ],
       ),
@@ -5281,6 +5269,46 @@ class _FullscreenAppearanceEditorState
     );
   }
 
+  Widget _buildStylePanel(BuildContext context) {
+    return _EditorPanel(
+      title: 'Style & colors',
+      subtitle: 'Animation speed, companion scale, and display colors live here so the main tab stays simple.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSlider(
+            context,
+            'Animation speed ${_expressionSpeed.toStringAsFixed(1)}×',
+            _expressionSpeed,
+            (value) => setState(() => _expressionSpeed = value),
+            min: 0.5,
+            max: 8,
+            divisions: 15,
+          ),
+          _buildSlider(
+            context,
+            'Companion scale ${_companionScale.round()}%',
+            _companionScale,
+            (value) => setState(() => _companionScale = value),
+            min: 10,
+            max: 300,
+            divisions: 29,
+          ),
+          const SizedBox(height: 12),
+          Text('Display colors', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Figure', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Partner', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChoiceWrap<T>(
     BuildContext context,
     String label,
@@ -5356,7 +5384,9 @@ class _FullscreenAppearanceEditorState
         hairThickness: _hairThickness,
         hairOffsetX: _hairOffsetX,
         hairOffsetY: _hairOffsetY,
+        eyeOffsetX: _eyeOffsetX,
         eyeOffsetY: _eyeOffsetY,
+        mouthOffsetX: _mouthOffsetX,
         mouthOffsetY: _mouthOffsetY,
         mustacheSize: _mustacheSize,
         mustacheWidth: _mustacheWidth,
@@ -5364,6 +5394,12 @@ class _FullscreenAppearanceEditorState
         mustacheThickness: _mustacheThickness,
         mustacheOffsetX: _mustacheOffsetX,
         mustacheOffsetY: _mustacheOffsetY,
+        expressionSpeed: _expressionSpeed,
+        companionScale: _companionScale,
+        eyeColor: _eyeColor,
+        faceColor: _faceColor,
+        accentColor: _accentColor,
+        bodyColor: _bodyColor,
         stickFigureScale: _stickFigureScale,
         stickFigureSpacing: _stickFigureSpacing,
         stickFigureEnergy: _stickFigureEnergy,
@@ -5753,8 +5789,8 @@ class _OffsetPad extends StatelessWidget {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
               final centerX = constraints.maxWidth / 2;
               final centerY = constraints.maxHeight / 2;
-              final knobX = centerX + (offsetX / 48) * (constraints.maxWidth / 2 - 14);
-              final knobY = centerY + (offsetY / 48) * (constraints.maxHeight / 2 - 14);
+              final knobX = centerX + (offsetX / 120) * (constraints.maxWidth / 2 - 14);
+              final knobY = centerY + (offsetY / 120) * (constraints.maxHeight / 2 - 14);
               return GestureDetector(
                 onPanDown: (details) => _update(details.localPosition, size),
                 onPanUpdate: (details) => _update(details.localPosition, size),
@@ -5795,19 +5831,19 @@ class _OffsetPad extends StatelessWidget {
         Row(
           children: [
             IconButton.filledTonal(
-              onPressed: () => onChanged((offsetX - 1).clamp(-48, 48), offsetY),
+              onPressed: () => onChanged((offsetX - 1).clamp(-120, 120), offsetY),
               icon: const Icon(Icons.arrow_left),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged(offsetX, (offsetY - 1).clamp(-48, 48)),
+              onPressed: () => onChanged(offsetX, (offsetY - 1).clamp(-120, 120)),
               icon: const Icon(Icons.arrow_upward),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged(offsetX, (offsetY + 1).clamp(-48, 48)),
+              onPressed: () => onChanged(offsetX, (offsetY + 1).clamp(-120, 120)),
               icon: const Icon(Icons.arrow_downward),
             ),
             IconButton.filledTonal(
-              onPressed: () => onChanged((offsetX + 1).clamp(-48, 48), offsetY),
+              onPressed: () => onChanged((offsetX + 1).clamp(-120, 120), offsetY),
               icon: const Icon(Icons.arrow_right),
             ),
             const Spacer(),
@@ -5824,9 +5860,9 @@ class _OffsetPad extends StatelessWidget {
   void _update(Offset localPosition, Size size) {
     final safeWidth = size.width.isFinite && size.width > 0 ? size.width : 300.0;
     final safeHeight = size.height > 0 ? size.height : 140.0;
-    final dx = ((localPosition.dx / safeWidth) * 96) - 48;
-    final dy = ((localPosition.dy / safeHeight) * 96) - 48;
-    onChanged(dx.clamp(-48, 48), dy.clamp(-48, 48));
+    final dx = ((localPosition.dx / safeWidth) * 240) - 120;
+    final dy = ((localPosition.dy / safeHeight) * 240) - 120;
+    onChanged(dx.clamp(-120, 120), dy.clamp(-120, 120));
   }
 }
 
