@@ -1305,6 +1305,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           faceColor: _faceColor,
           accentColor: _accentColor,
           bodyColor: _bodyColor,
+          hairColor: _hairColor,
+          hatColor: _hatColor,
+          mustacheColor: _mustacheColor,
+          mouthColor: _mouthColor,
           stickFigureScale: _stickFigureScale,
           stickFigureSpacing: _stickFigureSpacing,
           stickFigureEnergy: _stickFigureEnergy,
@@ -1351,6 +1355,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _faceColor = result.faceColor;
       _accentColor = result.accentColor;
       _bodyColor = result.bodyColor;
+      _hairColor = result.hairColor;
+      _hatColor = result.hatColor;
+      _mustacheColor = result.mustacheColor;
+      _mouthColor = result.mouthColor;
       _stickFigureScale = result.stickFigureScale;
       _stickFigureSpacing = result.stickFigureSpacing;
       _stickFigureEnergy = result.stickFigureEnergy;
@@ -4651,6 +4659,10 @@ class _AppearanceEditorResult {
     required this.faceColor,
     required this.accentColor,
     required this.bodyColor,
+    required this.hairColor,
+    required this.hatColor,
+    required this.mustacheColor,
+    required this.mouthColor,
     required this.stickFigureScale,
     required this.stickFigureSpacing,
     required this.stickFigureEnergy,
@@ -4688,6 +4700,10 @@ class _AppearanceEditorResult {
   final Color faceColor;
   final Color accentColor;
   final Color bodyColor;
+  final Color hairColor;
+  final Color hatColor;
+  final Color mustacheColor;
+  final Color mouthColor;
   final double stickFigureScale;
   final double stickFigureSpacing;
   final double stickFigureEnergy;
@@ -4749,6 +4765,10 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
     required this.faceColor,
     required this.accentColor,
     required this.bodyColor,
+    required this.hairColor,
+    required this.hatColor,
+    required this.mustacheColor,
+    required this.mouthColor,
     required this.stickFigureScale,
     required this.stickFigureSpacing,
     required this.stickFigureEnergy,
@@ -4790,6 +4810,10 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
   final Color faceColor;
   final Color accentColor;
   final Color bodyColor;
+  final Color hairColor;
+  final Color hatColor;
+  final Color mustacheColor;
+  final Color mouthColor;
   final double stickFigureScale;
   final double stickFigureSpacing;
   final double stickFigureEnergy;
@@ -4834,6 +4858,10 @@ class _FullscreenAppearanceEditorState
   late Color _faceColor;
   late Color _accentColor;
   late Color _bodyColor;
+  late Color _hairColor;
+  late Color _hatColor;
+  late Color _mustacheColor;
+  late Color _mouthColor;
   late double _stickFigureScale;
   late double _stickFigureSpacing;
   late double _stickFigureEnergy;
@@ -4874,6 +4902,10 @@ class _FullscreenAppearanceEditorState
     _faceColor = widget.faceColor;
     _accentColor = widget.accentColor;
     _bodyColor = widget.bodyColor;
+    _hairColor = widget.hairColor;
+    _hatColor = widget.hatColor;
+    _mustacheColor = widget.mustacheColor;
+    _mouthColor = widget.mouthColor;
     _stickFigureScale = widget.stickFigureScale;
     _stickFigureSpacing = widget.stickFigureSpacing;
     _stickFigureEnergy = widget.stickFigureEnergy;
@@ -5569,6 +5601,10 @@ class _FullscreenAppearanceEditorState
         faceColor: _faceColor,
         accentColor: _accentColor,
         bodyColor: _bodyColor,
+        hairColor: _hairColor,
+        hatColor: _hatColor,
+        mustacheColor: _mustacheColor,
+        mouthColor: _mouthColor,
         stickFigureScale: _stickFigureScale,
         stickFigureSpacing: _stickFigureSpacing,
         stickFigureEnergy: _stickFigureEnergy,
