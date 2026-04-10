@@ -2315,6 +2315,20 @@ void renderIdle() {
   drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
   } // end idleShowFace
 
+  // Settings gear icon (top-right corner, tap target ~30x30)
+  {
+    const int gx = SCREEN_WIDTH - 18, gy = 14;
+    const int gr = 8;
+    gfx->drawCircle(gx, gy, gr, userFaceColor);
+    gfx->drawCircle(gx, gy, 4, userFaceColor);
+    // Gear teeth (6 short lines radiating out)
+    for (int i = 0; i < 6; i++) {
+      float a = i * 3.14159f / 3.0f;
+      gfx->drawLine(gx + (int)(gr * cosf(a)), gy + (int)(gr * sinf(a)),
+                    gx + (int)((gr + 3) * cosf(a)), gy + (int)((gr + 3) * sinf(a)), userFaceColor);
+    }
+  }
+
   // Status bar
   if (idleShowWifi) {
     drawStatusBar();
@@ -4798,12 +4812,10 @@ void handleTouch() {
     // ─── Normal mode touch handling ───
 
     if (holdDuration >= BTN_HOLD_MS) {
-      // ─ Long press: open menu (or confirm clear if in idle/note)
+      // ─ Long press: confirm clear
       menuResumeMode = currentMode;
-      menuPage = 0;
-      menuOpenedMs = now;
-      currentMode = MODE_MENU;
-      renderMenuFrame();
+      currentMode = MODE_CONFIRM_CLEAR;
+      renderConfirmClear();
 
     } else if (holdDuration >= 500) {
       // ─ Medium hold: comfort reaction
@@ -4825,6 +4837,20 @@ void handleTouch() {
         boredomLevel = clampLevel(boredomLevel - 4);
         persistPetState();
         startTransientExpression(pickReactionExpression("button_next"), 1200, "Thanks for the tap");
+
+      } else if (currentMode == MODE_SLEEP) {
+        // Wake from sleep → idle, no reaction expression
+        setIdleStatus("Ready");
+
+      } else if (currentMode == MODE_IDLE &&
+                 touchStartX >= SCREEN_WIDTH - 36 && touchStartY <= 30) {
+        // Gear icon tap → open menu
+        menuResumeMode = MODE_IDLE;
+        menuPage = 0;
+        menuOpenedMs = now;
+        currentMode = MODE_MENU;
+        renderMenuFrame();
+        return;
 
       } else if (currentMode != MODE_IDLE && currentMode != MODE_NOTE) {
         setIdleStatus("Ready");
