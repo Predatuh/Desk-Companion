@@ -280,6 +280,10 @@ bool holdFired  = false;
 unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
+int touchRawX = 0;
+int touchRawY = 0;
+int lastMenuTapX = -1;
+int lastMenuTapY = -1;
 #define MENU_OPEN_COOLDOWN_MS 400
 #define TOUCH_MIN_HOLD_MS     60
 
@@ -2427,6 +2431,16 @@ void renderMenuFrame() {
   gfx->print("<");
   gfx->setCursor(SCREEN_WIDTH - 28, 215);
   gfx->print(">");
+
+  // Debug: show last tap coordinates
+  if (lastMenuTapX >= 0) {
+    char dbg[40];
+    snprintf(dbg, sizeof(dbg), "X:%d Y:%d r(%d,%d)", lastMenuTapX, lastMenuTapY, touchRawX, touchRawY);
+    gfx->setTextSize(1);
+    gfx->setTextColor(0xFFE0); // yellow
+    gfx->setCursor(60, 225);
+    gfx->print(dbg);
+  }
 
   pushCanvas();
 }
@@ -4753,6 +4767,9 @@ void handleTouch() {
     holdFired    = false;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
+    // Store raw coordinates for debug
+    touchRawX = (int)p.x;
+    touchRawY = (int)p.y;
     // Map raw portrait touch coords → landscape screen coords for MADCTL 0x28
     touchStartX  = 319 - (int)p.y;
     touchStartY  = (int)p.x;
@@ -4805,52 +4822,56 @@ void handleTouch() {
 
     // ─── Menu mode: handle menu taps ───
     if (currentMode == MODE_MENU) {
-      Serial.printf("[MENU] tap X=%d Y=%d hold=%lums\n", touchStartX, touchStartY, holdDuration);
+      Serial.printf("[MENU] tap X=%d Y=%d raw(%d,%d) hold=%lums\n", touchStartX, touchStartY, touchRawX, touchRawY, holdDuration);
+      // Store for on-screen debug display
+      lastMenuTapX = touchStartX;
+      lastMenuTapY = touchStartY;
       // Cooldown: ignore taps within first 400ms of menu opening
       if (now - menuOpenedMs < MENU_OPEN_COOLDOWN_MS) {
         Serial.println("[MENU] cooldown - ignored");
+        renderMenuFrame(); // redraw to show coords
         return;
       }
       menuOpenedMs = now; // reset timeout on interaction
-      // Left arrow
-      if (touchStartY >= 210 && touchStartX < 50) {
-        menuPage = (menuPage + MENU_PAGES - 1) % MENU_PAGES;
-        renderMenuFrame();
-        return;
-      }
-      // Right arrow
-      if (touchStartY >= 210 && touchStartX > SCREEN_WIDTH - 50) {
-        menuPage = (menuPage + 1) % MENU_PAGES;
-        renderMenuFrame();
-        return;
-      }
-      // Menu item tap – use generous zones that fill gaps between items
-      for (uint8_t i = 0; i < MENU_ITEM_COUNT; i++) {
-        int zoneTop = (i == 0) ? 34 : 42 + i * 42 - 3;
-        int zoneBot = (i == MENU_ITEM_COUNT - 1) ? 42 + i * 42 + 42 : 42 + i * 42 + 39;
-        if (touchStartY >= zoneTop && touchStartY <= zoneBot &&
-            touchStartX >= 0 && touchStartX <= SCREEN_WIDTH) {
-          Serial.printf("[MENU] hit item %d on page %d\n", i, menuPage);
-          executeMenuAction(menuPage, i);
-          // Page 1 quick-actions change display mode → close menu
-          if (menuPage == 1) {
-            // executeMenuAction already set the mode; just render
-            renderCurrentMode();
-            return;
-          }
-          // All other pages: stay in menu
-          currentMode = MODE_MENU;
-          renderMenuFrame();
-          return;
-        }
-      }
-      // Close button zone: top area (title bar) – tap to dismiss
+
+      // Determine which band was tapped using simple vertical division:
+      //   Y < 34          → close (title bar / X button)
+      //   Y 34..209       → items 0-3 (each ~44px band)
+      //   Y >= 210        → arrow row
       if (touchStartY < 34) {
+        // Close menu
+        Serial.println("[MENU] close zone");
+        lastMenuTapX = -1;
         currentMode = menuResumeMode;
         renderCurrentMode();
         return;
       }
-      // Taps that miss items/arrows/close: stay in menu (no dismiss)
+      if (touchStartY >= 210) {
+        // Arrow row
+        if (touchStartX < SCREEN_WIDTH / 2) {
+          Serial.println("[MENU] left arrow");
+          menuPage = (menuPage + MENU_PAGES - 1) % MENU_PAGES;
+        } else {
+          Serial.println("[MENU] right arrow");
+          menuPage = (menuPage + 1) % MENU_PAGES;
+        }
+        renderMenuFrame();
+        return;
+      }
+      // Items: Y 34..209 divided into 4 equal bands of 44px
+      int itemIdx = (touchStartY - 34) / 44;
+      if (itemIdx < 0) itemIdx = 0;
+      if (itemIdx > 3) itemIdx = 3;
+      Serial.printf("[MENU] hit item %d on page %d\n", itemIdx, menuPage);
+      executeMenuAction(menuPage, itemIdx);
+      // Page 1 quick-actions change display mode → close menu
+      if (menuPage == 1) {
+        lastMenuTapX = -1;
+        renderCurrentMode();
+        return;
+      }
+      // All other pages: stay in menu
+      currentMode = MODE_MENU;
       renderMenuFrame();
       return;
     }
