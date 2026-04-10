@@ -280,6 +280,8 @@ bool holdFired  = false;
 unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
+#define MENU_OPEN_COOLDOWN_MS 400
+#define TOUCH_MIN_HOLD_MS     60
 
 // Menu state
 uint8_t menuPage = 0;
@@ -1144,6 +1146,11 @@ void persistPetState() {
 
 void restoreTransientMode() {
   if (!transientActive) return;
+  // Don't yank user out of menu or confirm-clear
+  if (currentMode == MODE_MENU || currentMode == MODE_CONFIRM_CLEAR) {
+    transientActive = false;
+    return;
+  }
   transientActive = false;
   currentMode = transientResumeMode;
   currentExpression = transientResumeExpression;
@@ -4767,6 +4774,8 @@ void handleTouch() {
     touchActive = false;
     if (holdFired) { holdFired = false; return; } // already handled
     unsigned long holdDuration = now - touchStartMs;
+    // Debounce: ignore very short touches (ghost/noise)
+    if (holdDuration < TOUCH_MIN_HOLD_MS) return;
     lastIdleInteractionMs = now;
 
     // ─── Confirm Clear mode: tap Yes or No ───
@@ -4796,6 +4805,12 @@ void handleTouch() {
 
     // ─── Menu mode: handle menu taps ───
     if (currentMode == MODE_MENU) {
+      Serial.printf("[MENU] tap X=%d Y=%d hold=%lums\n", touchStartX, touchStartY, holdDuration);
+      // Cooldown: ignore taps within first 400ms of menu opening
+      if (now - menuOpenedMs < MENU_OPEN_COOLDOWN_MS) {
+        Serial.println("[MENU] cooldown - ignored");
+        return;
+      }
       menuOpenedMs = now; // reset timeout on interaction
       // Left arrow
       if (touchStartY >= 210 && touchStartX < 50) {
@@ -4815,12 +4830,17 @@ void handleTouch() {
         int zoneBot = (i == MENU_ITEM_COUNT - 1) ? 42 + i * 42 + 42 : 42 + i * 42 + 39;
         if (touchStartY >= zoneTop && touchStartY <= zoneBot &&
             touchStartX >= 0 && touchStartX <= SCREEN_WIDTH) {
+          Serial.printf("[MENU] hit item %d on page %d\n", i, menuPage);
           executeMenuAction(menuPage, i);
-          // Stay in menu for toggles (page 2, 3), exit for actions (page 0, 1)
-          if (menuPage <= 1) {
-            currentMode = menuResumeMode;
+          // Page 1 quick-actions change display mode → close menu
+          if (menuPage == 1) {
+            // executeMenuAction already set the mode; just render
+            renderCurrentMode();
+            return;
           }
-          renderCurrentMode();
+          // All other pages: stay in menu
+          currentMode = MODE_MENU;
+          renderMenuFrame();
           return;
         }
       }
