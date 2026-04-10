@@ -179,6 +179,7 @@ enum DisplayMode {
   MODE_ANIMATED_NOTE,
   MODE_MENU,
   MODE_CONFIRM_CLEAR,
+  MODE_FIRECRACKER,
 };
 
 DisplayMode currentMode = MODE_IDLE;
@@ -206,6 +207,10 @@ uint16_t userEyeColor    = COL_FG;       // eye fill
 uint16_t userFaceColor   = COL_FG;       // face border / mouth / outline
 uint16_t userAccentColor = COL_ACCENT;   // clock text, highlight elements
 uint16_t userBodyColor   = COL_ROSE;     // stick-figure second body, cheek blush
+uint16_t userHairColor   = COL_FG;       // hair / headwear
+uint16_t userHatColor    = COL_FG;       // hat / headwear (separate from hair)
+uint16_t userMustacheColor = COL_FG;     // mustache / facial hair
+uint16_t userMouthColor  = COL_FG;       // mouth / lips
 int companionHairSize = 100;
 int companionMustacheSize = 100;
 int companionHairWidth = 100;
@@ -328,6 +333,10 @@ uint8_t fireworkSize = 1;
 bool fwManualOnly = false;
 // Multi-stage firework bursts: 1=single, 2=double, 3=triple
 uint8_t fireworkStages = 1;
+// Firecracker fuse
+unsigned long firecrackerStartMs = 0;
+unsigned long firecrackerDurationMs = 5000;
+bool firecrackerExploded = false;
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
 Ptcl noteOvPtcl[24];
@@ -790,6 +799,8 @@ const char* modeName(DisplayMode mode) {
       return "menu";
     case MODE_CONFIRM_CLEAR:
       return "confirm_clear";
+    case MODE_FIRECRACKER:
+      return "firecracker";
     case MODE_IDLE:
     default:
       return "idle";
@@ -1657,36 +1668,36 @@ void drawBlinkEye(int cx, int cy, int w, int h, int r) {
 void drawHappyArc(int cx, int cy, int w) {
   for (int t = 0; t < 8; t++) {
     int hw = w / 2;
-    gfx->drawLine(cx - hw, cy + 8 + t, cx, cy - 8 + t, userFaceColor);
-    gfx->drawLine(cx, cy - 8 + t, cx + hw, cy + 8 + t, userFaceColor);
+    gfx->drawLine(cx - hw, cy + 8 + t, cx, cy - 8 + t, userMouthColor);
+    gfx->drawLine(cx, cy - 8 + t, cx + hw, cy + 8 + t, userMouthColor);
   }
 }
 
 void drawSadArc(int cx, int cy, int w) {
   for (int t = 0; t < 5; t++) {
     int hw = w / 2;
-    gfx->drawLine(cx - hw, cy - 5 + t, cx, cy + 9 + t, userFaceColor);
-    gfx->drawLine(cx, cy + 9 + t, cx + hw, cy - 5 + t, userFaceColor);
+    gfx->drawLine(cx - hw, cy - 5 + t, cx, cy + 9 + t, userMouthColor);
+    gfx->drawLine(cx, cy + 9 + t, cx + hw, cy - 5 + t, userMouthColor);
   }
 }
 
 void drawSmile(int cx, int cy, int w) {
   for (int t = 0; t < 5; t++) {
     int hw = w / 2;
-    gfx->drawLine(cx - hw, cy + t, cx - hw / 3, cy + 12 + t, userFaceColor);
-    gfx->drawLine(cx - hw / 3, cy + 12 + t, cx + hw / 3, cy + 12 + t, userFaceColor);
-    gfx->drawLine(cx + hw / 3, cy + 12 + t, cx + hw, cy + t, userFaceColor);
+    gfx->drawLine(cx - hw, cy + t, cx - hw / 3, cy + 12 + t, userMouthColor);
+    gfx->drawLine(cx - hw / 3, cy + 12 + t, cx + hw / 3, cy + 12 + t, userMouthColor);
+    gfx->drawLine(cx + hw / 3, cy + 12 + t, cx + hw, cy + t, userMouthColor);
   }
 }
 
 void drawOvalMouth(int cx, int cy, int rw, int rh) {
   for (int t = 0; t < 3; t++) {
-    gfx->drawRoundRect(cx - rw, cy - rh + t, rw * 2, rh * 2, rh, userFaceColor);
+    gfx->drawRoundRect(cx - rw, cy - rh + t, rw * 2, rh * 2, rh, userMouthColor);
   }
 }
 
 void drawKissLips(int cx, int cy) {
-  gfx->fillCircle(cx, cy, 10, userFaceColor);
+  gfx->fillCircle(cx, cy, 10, userMouthColor);
   gfx->fillCircle(cx, cy, 5, COL_BG);
 }
 
@@ -1741,21 +1752,21 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     const int lift = scaleByPercent(22, hairHeight);
     const int spread = scaleByPercent(9, hairWidth);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      gfx->drawLine(hairCenterX - spread, hairCenterY - 22 + stroke, hairCenterX, hairCenterY - 22 - lift + stroke, userFaceColor);
-      gfx->drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + spread, hairCenterY - 22 + stroke, userFaceColor);
-      gfx->drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + 2, hairCenterY - 14 + stroke, userFaceColor);
+      gfx->drawLine(hairCenterX - spread, hairCenterY - 22 + stroke, hairCenterX, hairCenterY - 22 - lift + stroke, userHairColor);
+      gfx->drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + spread, hairCenterY - 22 + stroke, userHairColor);
+      gfx->drawLine(hairCenterX, hairCenterY - 22 - lift + stroke, hairCenterX + 2, hairCenterY - 14 + stroke, userHairColor);
     }
   } else if (companionHair == "bangs") {
     const int topY = hairCenterY - 22 - scaleByPercent(5, hairHeight);
     const int leftEdge = hairCenterX - (scaleByPercent(68, hairWidth) / 2);
     const int rightEdge = hairCenterX + (scaleByPercent(68, hairWidth) / 2);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      gfx->drawLine(leftEdge, topY + stroke, rightEdge, topY + stroke, userFaceColor);
+      gfx->drawLine(leftEdge, topY + stroke, rightEdge, topY + stroke, userHairColor);
     }
     for (int x = leftX - 26; x <= rightX + 26; x += 14) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        gfx->drawLine(shiftedX, topY + 2 + stroke, shiftedX + scaleByPercent(5, hairWidth), hairCenterY - 12 + stroke, userFaceColor);
+        gfx->drawLine(shiftedX, topY + 2 + stroke, shiftedX + scaleByPercent(5, hairWidth), hairCenterY - 12 + stroke, userHairColor);
       }
     }
   } else if (companionHair == "spiky") {
@@ -1763,52 +1774,52 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       const int peak = hairCenterY - 18 - scaleByPercent(16, hairHeight);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        gfx->drawLine(shiftedX, hairCenterY - 18 + stroke, shiftedX + scaleByPercent(7, hairWidth), peak + stroke, userFaceColor);
-        gfx->drawLine(shiftedX + scaleByPercent(7, hairWidth), peak + stroke, shiftedX + scaleByPercent(14, hairWidth), hairCenterY - 18 + stroke, userFaceColor);
+        gfx->drawLine(shiftedX, hairCenterY - 18 + stroke, shiftedX + scaleByPercent(7, hairWidth), peak + stroke, userHairColor);
+        gfx->drawLine(shiftedX + scaleByPercent(7, hairWidth), peak + stroke, shiftedX + scaleByPercent(14, hairWidth), hairCenterY - 18 + stroke, userHairColor);
       }
     }
   } else if (companionHair == "swoop") {
     const int topY = hairCenterY - 22 - scaleByPercent(11, hairHeight);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      gfx->drawLine(hairCenterX - scaleByPercent(34, hairWidth), hairCenterY - 16 + stroke, hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, userFaceColor);
-      gfx->drawLine(hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, hairCenterX + scaleByPercent(52, hairWidth), hairCenterY - 9 + stroke, userFaceColor);
-      gfx->drawLine(hairCenterX - scaleByPercent(18, hairWidth), hairCenterY - 18 + stroke, hairCenterX + scaleByPercent(7, hairWidth), topY + 3 + stroke, userFaceColor);
+      gfx->drawLine(hairCenterX - scaleByPercent(34, hairWidth), hairCenterY - 16 + stroke, hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, userHairColor);
+      gfx->drawLine(hairCenterX + scaleByPercent(22, hairWidth), topY + stroke, hairCenterX + scaleByPercent(52, hairWidth), hairCenterY - 9 + stroke, userHairColor);
+      gfx->drawLine(hairCenterX - scaleByPercent(18, hairWidth), hairCenterY - 18 + stroke, hairCenterX + scaleByPercent(7, hairWidth), topY + 3 + stroke, userHairColor);
     }
   } else if (companionHair == "bob") {
     const int topY = hairCenterY - 20 - scaleByPercent(7, hairHeight);
     const int width = scaleByPercent((rightX - leftX) + 68, hairWidth);
-    gfx->drawRoundRect(hairCenterX - width / 2, topY, width, 18 + scaleByPercent(7, hairHeight), 9, userFaceColor);
+    gfx->drawRoundRect(hairCenterX - width / 2, topY, width, 18 + scaleByPercent(7, hairHeight), 9, userHairColor);
     for (int stroke = 0; stroke < hairStroke; stroke++) {
-      gfx->drawLine(hairCenterX - width / 2, hairCenterY - 2 + stroke, hairCenterX - width / 2 + scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
-      gfx->drawLine(hairCenterX + width / 2, hairCenterY - 2 + stroke, hairCenterX + width / 2 - scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userFaceColor);
+      gfx->drawLine(hairCenterX - width / 2, hairCenterY - 2 + stroke, hairCenterX - width / 2 + scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userHairColor);
+      gfx->drawLine(hairCenterX + width / 2, hairCenterY - 2 + stroke, hairCenterX + width / 2 - scaleByPercent(11, hairWidth), hairCenterY + 12 + stroke, userHairColor);
     }
   } else if (companionHair == "messy") {
     for (int x = leftX - 18; x <= rightX + 22; x += 16) {
       const int shiftedX = hairCenterX + (x - faceCenterX);
       const int peak = hairCenterY - 14 - scaleByPercent(13, hairHeight) + ((x / 16) % 2 == 0 ? 0 : 5);
       for (int stroke = 0; stroke < hairStroke; stroke++) {
-        gfx->drawLine(shiftedX, hairCenterY - 14 + stroke, shiftedX + scaleByPercent(5, hairWidth), peak + stroke, userFaceColor);
-        gfx->drawLine(shiftedX + scaleByPercent(5, hairWidth), peak + stroke, shiftedX + scaleByPercent(11, hairWidth), hairCenterY - 16 + stroke, userFaceColor);
+        gfx->drawLine(shiftedX, hairCenterY - 14 + stroke, shiftedX + scaleByPercent(5, hairWidth), peak + stroke, userHairColor);
+        gfx->drawLine(shiftedX + scaleByPercent(5, hairWidth), peak + stroke, shiftedX + scaleByPercent(11, hairWidth), hairCenterY - 16 + stroke, userHairColor);
       }
     }
   }
 
   // Headwear (scaled 2x)
   if (companionHeadwear == "bow") {
-    gfx->drawTriangle(faceCenterX - 7, eyeY - 44, faceCenterX - 30, eyeY - 34, faceCenterX - 14, eyeY - 22, userFaceColor);
-    gfx->drawTriangle(faceCenterX + 7, eyeY - 44, faceCenterX + 30, eyeY - 34, faceCenterX + 14, eyeY - 22, userFaceColor);
-    gfx->drawCircle(faceCenterX, eyeY - 34, 4, userFaceColor);
+    gfx->drawTriangle(faceCenterX - 7, eyeY - 44, faceCenterX - 30, eyeY - 34, faceCenterX - 14, eyeY - 22, userHatColor);
+    gfx->drawTriangle(faceCenterX + 7, eyeY - 44, faceCenterX + 30, eyeY - 34, faceCenterX + 14, eyeY - 22, userHatColor);
+    gfx->drawCircle(faceCenterX, eyeY - 34, 4, userHatColor);
   } else if (companionHeadwear == "beanie") {
-    gfx->drawRoundRect(faceCenterX - 44, eyeY - 52, 88, 22, 9, userFaceColor);
-    gfx->drawLine(faceCenterX - 38, eyeY - 28, faceCenterX + 38, eyeY - 28, userFaceColor);
-    gfx->drawCircle(faceCenterX, eyeY - 56, 5, userFaceColor);
+    gfx->drawRoundRect(faceCenterX - 44, eyeY - 52, 88, 22, 9, userHatColor);
+    gfx->drawLine(faceCenterX - 38, eyeY - 28, faceCenterX + 38, eyeY - 28, userHatColor);
+    gfx->drawCircle(faceCenterX, eyeY - 56, 5, userHatColor);
   } else if (companionHeadwear == "crown") {
-    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userFaceColor);
-    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX - 22, eyeY - 56, userFaceColor);
-    gfx->drawLine(faceCenterX - 22, eyeY - 56, faceCenterX - 4, eyeY - 34, userFaceColor);
-    gfx->drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userFaceColor);
-    gfx->drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userFaceColor);
-    gfx->drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userFaceColor);
+    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userHatColor);
+    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX - 22, eyeY - 56, userHatColor);
+    gfx->drawLine(faceCenterX - 22, eyeY - 56, faceCenterX - 4, eyeY - 34, userHatColor);
+    gfx->drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userHatColor);
+    gfx->drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userHatColor);
+    gfx->drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userHatColor);
   }
 
   // Glasses (scaled 2x)
@@ -1830,48 +1841,48 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     const int inner = scaleByPercent(7, mustacheWidth);
     const int rise = scaleByPercent(7, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - inner, mustacheCenterY - 2 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + 2 + stroke, mustacheCenterX - inner, mustacheCenterY + 2 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + inner, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + inner, mustacheCenterY + 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + 2 + stroke, userFaceColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - inner, mustacheCenterY - 2 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + 2 + stroke, mustacheCenterX - inner, mustacheCenterY + 2 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + inner, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + inner, mustacheCenterY + 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + 2 + stroke, userMustacheColor);
     }
   } else if (companionMustache == "curled") {
     const int wing = scaleByPercent(22, mustacheWidth);
     const int rise = scaleByPercent(4, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - 4, mustacheCenterY - 2 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + 4, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userFaceColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - rise + stroke, mustacheCenterX - 4, mustacheCenterY - 2 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + 4, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - rise + stroke, userMustacheColor);
     }
-    gfx->drawCircle(mustacheCenterX - wing - 4, mustacheCenterY - rise - 2, 4, userFaceColor);
-    gfx->drawCircle(mustacheCenterX + wing + 4, mustacheCenterY - rise - 2, 4, userFaceColor);
+    gfx->drawCircle(mustacheCenterX - wing - 4, mustacheCenterY - rise - 2, 4, userMustacheColor);
+    gfx->drawCircle(mustacheCenterX + wing + 4, mustacheCenterY - rise - 2, 4, userMustacheColor);
   } else if (companionMustache == "handlebar") {
     const int wing = scaleByPercent(26, mustacheWidth);
     const int curl = scaleByPercent(9, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - 4, mustacheCenterY + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + 4, mustacheCenterY + stroke, mustacheCenterX + wing, mustacheCenterY - 2 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - wing - scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + wing, mustacheCenterY - 2 + stroke, mustacheCenterX + wing + scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userFaceColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - 4, mustacheCenterY + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + 4, mustacheCenterY + stroke, mustacheCenterX + wing, mustacheCenterY - 2 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 2 + stroke, mustacheCenterX - wing - scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + wing, mustacheCenterY - 2 + stroke, mustacheCenterX + wing + scaleByPercent(7, mustacheWidth), mustacheCenterY - curl + stroke, userMustacheColor);
     }
   } else if (companionMustache == "walrus") {
     const int width = scaleByPercent(26, mustacheWidth);
     const int height = scaleByPercent(7, mustacheHeight);
-    gfx->fillRoundRect(mustacheCenterX - width, mustacheCenterY - 11, width * 2, height + 4, 5, userFaceColor);
-    gfx->fillRect(mustacheCenterX - scaleByPercent(4, mustacheThickness), mustacheCenterY - 5, scaleByPercent(7, mustacheThickness), height + 7, userFaceColor);
+    gfx->fillRoundRect(mustacheCenterX - width, mustacheCenterY - 11, width * 2, height + 4, 5, userMustacheColor);
+    gfx->fillRect(mustacheCenterX - scaleByPercent(4, mustacheThickness), mustacheCenterY - 5, scaleByPercent(7, mustacheThickness), height + 7, userMustacheColor);
   } else if (companionMustache == "pencil") {
     const int width = scaleByPercent(24, mustacheWidth);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      gfx->drawLine(mustacheCenterX - width, mustacheCenterY - 4 + stroke, mustacheCenterX + width, mustacheCenterY - 4 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX - width + scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, mustacheCenterX + width - scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, userFaceColor);
+      gfx->drawLine(mustacheCenterX - width, mustacheCenterY - 4 + stroke, mustacheCenterX + width, mustacheCenterY - 4 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX - width + scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, mustacheCenterX + width - scaleByPercent(4, mustacheThickness), mustacheCenterY - 2 + stroke, userMustacheColor);
     }
   } else if (companionMustache == "imperial") {
     const int wing = scaleByPercent(22, mustacheWidth);
     const int rise = scaleByPercent(16, mustacheHeight);
     for (int stroke = 0; stroke < mustacheStroke; stroke++) {
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - 2, mustacheCenterY - 2 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + 2, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - 4 + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - wing - scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
-      gfx->drawLine(mustacheCenterX + wing, mustacheCenterY - 4 + stroke, mustacheCenterX + wing + scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userFaceColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - 2, mustacheCenterY - 2 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + 2, mustacheCenterY - 2 + stroke, mustacheCenterX + wing, mustacheCenterY - 4 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - wing - scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + wing, mustacheCenterY - 4 + stroke, mustacheCenterX + wing + scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userMustacheColor);
     }
   }
 
@@ -1908,18 +1919,18 @@ void drawVeinMark(int cx, int cy, int s) {
 
 void drawTeethMouth(int cx, int cy, int w, int h) {
   // Open mouth rectangle with teeth top and bottom
-  gfx->fillRoundRect(cx - w/2, cy - h/2, w, h, 6, userFaceColor);
+  gfx->fillRoundRect(cx - w/2, cy - h/2, w, h, 6, userMouthColor);
   gfx->fillRoundRect(cx - w/2 + 3, cy - h/2 + 3, w - 6, h - 6, 4, COL_BG);
   // Top teeth (white nubs)
   int toothW = (w - 10) / 4;
   for (int i = 0; i < 4; i++) {
     int tx = cx - w/2 + 5 + i * toothW;
-    gfx->fillRect(tx, cy - h/2 + 3, toothW - 2, 5, userFaceColor);
+    gfx->fillRect(tx, cy - h/2 + 3, toothW - 2, 5, userMouthColor);
   }
   // Bottom teeth
   for (int i = 0; i < 4; i++) {
     int tx = cx - w/2 + 5 + i * toothW;
-    gfx->fillRect(tx, cy + h/2 - 8, toothW - 2, 5, userFaceColor);
+    gfx->fillRect(tx, cy + h/2 - 8, toothW - 2, 5, userMouthColor);
   }
 }
 
@@ -2076,7 +2087,7 @@ void renderExpressionFrame() {
     gfx->fillRect(RX - EW/2, EY + 4 - EH/2, EW, lidDroop, COL_BG);
     // Flat sleepy mouth
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userMouthColor);
     }
     // Big floating Zzz
     drawZzz(180, 18 + eyeYShift, expressionPhase);
@@ -2110,7 +2121,7 @@ void renderExpressionFrame() {
     gfx->print(dots[dotPhase]);
     // Tilted flat mouth
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(MX - 14, MY + line, MX + 11, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 11, MY - 4 + line, userMouthColor);
     }
   } else if (currentExpression == "happy") {
     int eyeH = EH;
@@ -2145,7 +2156,7 @@ void renderExpressionFrame() {
     drawBrow(RX - 14, EY - 16, RX + 26, EY - 24 + browTwitch);
     // Crooked squiggle mouth
     for (int line = 0; line < 5; line++) {
-      gfx->drawLine(MX - 22, MY + 7 + line, MX + 22, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 22, MY + 7 + line, MX + 22, MY - 4 + line, userMouthColor);
     }
     // Floating "?" that bobs
     gfx->setTextSize(3);
@@ -2161,7 +2172,7 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, EH, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userFaceColor);
+      gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userMouthColor);
     }
   } else if (currentExpression == "kiss") {
     float r1 = fmod(t * 1.5f, 1.0f);
@@ -2284,8 +2295,8 @@ void renderExpressionFrame() {
     drawEye(RX, EY, EW, EH, ER, 0, 0);
     // Open grin (V shape)
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(MX - 18, MY - 4 + line, MX, MY + 4 + line, userFaceColor);
-      gfx->drawLine(MX, MY + 4 + line, MX + 18, MY - 4 + line, userFaceColor);
+      gfx->drawLine(MX - 18, MY - 4 + line, MX, MY + 4 + line, userMouthColor);
+      gfx->drawLine(MX, MY + 4 + line, MX + 18, MY - 4 + line, userMouthColor);
     }
     // Animated tongue that wobbles side to side
     float wobble = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
@@ -2355,7 +2366,7 @@ void renderExpressionFrame() {
     // Shy wobbly smile
     float smileShy = sin(t * 3.14159f * 3.0f) * 2.0f;
     for (int line = 0; line < 3; line++) {
-      gfx->drawLine(MX - 12, MY + (int)smileShy + line, MX + 12, MY - (int)smileShy + line, userFaceColor);
+      gfx->drawLine(MX - 12, MY + (int)smileShy + line, MX + 12, MY - (int)smileShy + line, userMouthColor);
     }
     // Tiny sparkle of embarrassment
     if (wave > 0.7f) {
@@ -2471,7 +2482,7 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW, eyeH, ER, px, py);
     drawEye(RX, EY, EW, eyeH, ER, px, py);
     for (int line = 0; line < 4; line++) {
-      gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userFaceColor);
+      gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userMouthColor);
     }
   }
 
@@ -2522,11 +2533,11 @@ void renderIdle() {
   if (activePetMode == "off") {
     drawEye(leftX, eyeY, 42, 26, 9, 0, 0);
     drawEye(rightX, eyeY, 42, 26, 9, 0, 0);
-    gfx->drawLine(mouthCX - 13, mouthY, mouthCX + 13, mouthY, userFaceColor);
+    gfx->drawLine(mouthCX - 13, mouthY, mouthCX + 13, mouthY, userMouthColor);
   } else if (activePetMode == "nap" || petPersonality == "sleepy") {
     drawBlinkEye(leftX, eyeY, 44, 7, 7);
     drawBlinkEye(rightX, eyeY, 44, 7, 7);
-    gfx->drawLine(mouthCX - 14, mouthY, mouthCX + 14, mouthY, userFaceColor);
+    gfx->drawLine(mouthCX - 14, mouthY, mouthCX + 14, mouthY, userMouthColor);
     gfx->setTextSize(2);
     gfx->setTextColor(userAccentColor);
     gfx->setCursor(190, FACE_OFFSET_Y + 44);
@@ -2794,6 +2805,99 @@ void executeMenuAction(uint8_t page, uint8_t item) {
   publishStatus();
 }
 
+void renderFirecrackerFrame() {
+  if (!displayAvailable) return;
+  gfx->fillScreen(COL_BG);
+
+  unsigned long elapsed = millis() - firecrackerStartMs;
+  float progress = (float)elapsed / (float)firecrackerDurationMs;
+  if (progress > 1.0f) progress = 1.0f;
+
+  if (!firecrackerExploded && progress < 1.0f) {
+    // Draw firecracker body
+    int bodyX = 140, bodyY = 80, bodyW = 40, bodyH = 80;
+    gfx->fillRoundRect(bodyX, bodyY, bodyW, bodyH, 6, COL_ROSE);
+    // Stripes
+    for (int s = 0; s < 4; s++) {
+      int sy = bodyY + 10 + s * 18;
+      gfx->fillRect(bodyX, sy, bodyW, 4, userAccentColor);
+    }
+    // Top cap
+    gfx->fillRoundRect(bodyX - 4, bodyY - 8, bodyW + 8, 14, 4, userEyeColor);
+
+    // Fuse: curves from top of firecracker upward
+    float fuseTotal = 60.0f;
+    float fuseRemaining = fuseTotal * (1.0f - progress);
+    int fuseStartX = bodyX + bodyW / 2;
+    int fuseStartY = bodyY - 8;
+    // Draw fuse as segments curving right then left
+    for (float f = 0; f < fuseRemaining; f += 2.0f) {
+      float fNorm = f / fuseTotal;
+      int fx = fuseStartX + (int)(sinf(fNorm * 6.0f) * 12.0f);
+      int fy = fuseStartY - (int)f;
+      gfx->fillCircle(fx, fy, 1, userEyeColor);
+    }
+
+    // Spark at fuse tip
+    float tipNorm = (1.0f - progress);
+    int sparkX = fuseStartX + (int)(sinf(tipNorm * 6.0f) * 12.0f);
+    int sparkY = fuseStartY - (int)(fuseRemaining);
+    uint16_t sparkColors[] = {0xFFE0, 0xFBE0, 0xFC00, 0xFD20};
+    for (int sp = 0; sp < 6; sp++) {
+      int sx = sparkX + (int)(random(11)) - 5;
+      int sy = sparkY + (int)(random(7)) - 3;
+      gfx->fillCircle(sx, sy, 1 + random(2), sparkColors[random(4)]);
+    }
+
+    // Timer text
+    int secsLeft = (int)((firecrackerDurationMs - elapsed) / 1000) + 1;
+    if (secsLeft < 1) secsLeft = 1;
+    gfx->setTextSize(4);
+    gfx->setTextColor(userEyeColor);
+    int numW = secsLeft >= 10 ? 48 : 24;
+    gfx->setCursor(160 - numW / 2, 180);
+    gfx->print(secsLeft);
+  } else {
+    // Explosion!
+    if (!firecrackerExploded) {
+      firecrackerExploded = true;
+      // Initialize explosion particles
+      for (uint8_t i = 0; i < 48; i++) {
+        float a = (float)i * 3.14159f * 2.f / 48.f + (random(100) / 200.f);
+        int spd = 4 + random(8);
+        gPtcl[i].x = 160;
+        gPtcl[i].y = 100;
+        gPtcl[i].vx = (int8_t)((float)spd * cosf(a));
+        gPtcl[i].vy = (int8_t)((float)spd * sinf(a));
+        gPtcl[i].life = 20 + random(20);
+        gPtcl[i].color = pickBurstColor();
+      }
+    }
+    // Render explosion particles
+    bool anyAlive = false;
+    for (uint8_t i = 0; i < 48; i++) {
+      if (gPtcl[i].life == 0) continue;
+      anyAlive = true;
+      gPtcl[i].x += gPtcl[i].vx;
+      gPtcl[i].y += gPtcl[i].vy;
+      gPtcl[i].vy += 1; // gravity
+      gPtcl[i].life--;
+      int r = gPtcl[i].life > 10 ? 3 : (gPtcl[i].life > 5 ? 2 : 1);
+      drawFireworkParticle(gPtcl[i].x, gPtcl[i].y, r, gPtcl[i].color);
+    }
+    // "BOOM!" text
+    gfx->setTextSize(4);
+    gfx->setTextColor(0xFFE0);
+    gfx->setCursor(100, 108);
+    gfx->print("BOOM!");
+    if (!anyAlive) {
+      // Explosion finished → go to idle
+      setIdleStatus("That was fun!");
+    }
+  }
+  pushCanvas();
+}
+
 void renderCurrentMode() {
   if (!displayAvailable) return;
   switch (currentMode) {
@@ -2851,6 +2955,9 @@ void renderCurrentMode() {
       break;
     case MODE_CONFIRM_CLEAR:
       renderConfirmClear();
+      break;
+    case MODE_FIRECRACKER:
+      renderFirecrackerFrame();
       break;
     case MODE_IDLE:
     default:
@@ -3328,7 +3435,9 @@ void drawSmallStar(int16_t cx, int16_t cy, int s, uint16_t c) {
 }
 
 void drawFireworkParticle(int16_t x, int16_t y, int r, uint16_t c) {
-  switch (fireworkShape) {
+  uint8_t shape = fireworkShape;
+  if (shape == 3) shape = random(3); // random picks 0/1/2
+  switch (shape) {
     case 1: drawSmallHeart(x, y, r, c); break;
     case 2: drawSmallStar(x, y, r, c);  break;
     default: gfx->fillCircle(x, y, r, c); break;
@@ -4112,6 +4221,8 @@ void tryStoredPrefs() {
   } else {
     statusText = petAmbientStatus();
   }
+  weatherLat = preferences.getFloat("wLat", 0.f);
+  weatherLon = preferences.getFloat("wLon", 0.f);
   preferences.end();
   Serial.printf("[BOOT] Loaded relay url='%s' token='%s' ssid='%s'\n",
                 relayUrl.c_str(), deviceToken.c_str(), currentSsid.c_str());
@@ -4242,9 +4353,10 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_firework_shape") {
     String shape = extractJsonStringField(body, "shape", "circle");
-    if      (shape == "heart") fireworkShape = 1;
-    else if (shape == "star")  fireworkShape = 2;
-    else                       fireworkShape = 0;
+    if      (shape == "heart")  fireworkShape = 1;
+    else if (shape == "star")   fireworkShape = 2;
+    else if (shape == "random") fireworkShape = 3;
+    else                        fireworkShape = 0;
     return;
   }
 
@@ -4312,6 +4424,19 @@ void handleCommandJson(const String& body) {
     if (s < 1) s = 1;
     if (s > 3) s = 3;
     fireworkStages = (uint8_t)s;
+    return;
+  }
+
+  if (type == "fire_firecracker") {
+    int dur = extractJsonIntField(body, "duration", 5);
+    if (dur < 1) dur = 1;
+    if (dur > 30) dur = 30;
+    firecrackerDurationMs = (unsigned long)dur * 1000UL;
+    firecrackerStartMs = millis();
+    firecrackerExploded = false;
+    currentMode = MODE_FIRECRACKER;
+    statusText = "Firecracker lit!";
+    publishStatus();
     return;
   }
 
@@ -4401,6 +4526,10 @@ void handleCommandJson(const String& body) {
   if (type == "set_location") {
     weatherLat = extractJsonFloatField(body, "lat", weatherLat);
     weatherLon = extractJsonFloatField(body, "lon", weatherLon);
+    preferences.begin("desk-cfg", false);
+    preferences.putFloat("wLat", weatherLat);
+    preferences.putFloat("wLon", weatherLon);
+    preferences.end();
     lastWeatherFetchMs = 0;  // force immediate refetch
     if (WiFi.status() == WL_CONNECTED) fetchWeather();
     statusText = "Location saved";
@@ -4440,15 +4569,27 @@ void handleCommandJson(const String& body) {
     int face   = extractJsonIntField(body, "faceColor",   -1);
     int accent = extractJsonIntField(body, "accentColor", -1);
     int bodycol= extractJsonIntField(body, "bodyColor",   -1);
+    int hair   = extractJsonIntField(body, "hairColor",   -1);
+    int hat    = extractJsonIntField(body, "hatColor",    -1);
+    int mustache = extractJsonIntField(body, "mustacheColor", -1);
+    int mouth  = extractJsonIntField(body, "mouthColor",  -1);
     if (eye    >= 0) userEyeColor    = (uint16_t)eye;
     if (face   >= 0) userFaceColor   = (uint16_t)face;
     if (accent >= 0) userAccentColor = (uint16_t)accent;
     if (bodycol>= 0) userBodyColor   = (uint16_t)bodycol;
+    if (hair   >= 0) userHairColor   = (uint16_t)hair;
+    if (hat    >= 0) userHatColor    = (uint16_t)hat;
+    if (mustache >= 0) userMustacheColor = (uint16_t)mustache;
+    if (mouth  >= 0) userMouthColor  = (uint16_t)mouth;
     preferences.begin("desk-cfg", false);
     preferences.putUShort("col_eye",    userEyeColor);
     preferences.putUShort("col_face",   userFaceColor);
     preferences.putUShort("col_accent", userAccentColor);
     preferences.putUShort("col_body",   userBodyColor);
+    preferences.putUShort("col_hair",   userHairColor);
+    preferences.putUShort("col_hat",    userHatColor);
+    preferences.putUShort("col_stache", userMustacheColor);
+    preferences.putUShort("col_mouth",  userMouthColor);
     preferences.end();
     gfx->fillScreen(COL_BG);
     renderCurrentMode();
@@ -4933,6 +5074,10 @@ void setupDisplay() {
   userFaceColor   = preferences.getUShort("col_face",   COL_FG);
   userAccentColor = preferences.getUShort("col_accent", COL_ACCENT);
   userBodyColor   = preferences.getUShort("col_body",   COL_ROSE);
+  userHairColor   = preferences.getUShort("col_hair",   COL_FG);
+  userHatColor    = preferences.getUShort("col_hat",    COL_FG);
+  userMustacheColor = preferences.getUShort("col_stache", COL_FG);
+  userMouthColor  = preferences.getUShort("col_mouth",  COL_FG);
   idleShowClock   = preferences.getBool("idle_clock",   true);
   idleShowWeather = preferences.getBool("idle_weather", true);
   idleShowFace    = preferences.getBool("idle_face",    true);
@@ -5120,20 +5265,16 @@ void handleTouch() {
         // Wake from sleep → idle, no reaction expression
         setIdleStatus("Ready");
 
-      } else if (currentMode == MODE_IDLE &&
-                 touchStartX >= SCREEN_WIDTH / 2 && touchStartY <= SCREEN_HEIGHT / 2) {
-        // Top-right quarter tap → open menu
-        menuResumeMode = MODE_IDLE;
+      } else if (touchStartX >= SCREEN_WIDTH / 2 && touchStartY <= SCREEN_HEIGHT / 2) {
+        // Top-right quarter tap → open menu (works in any mode except sleep/note)
+        menuResumeMode = currentMode;
         menuPage = 0;
         menuOpenedMs = now;
         currentMode = MODE_MENU;
         renderMenuFrame();
         return;
-
-      } else if (currentMode != MODE_IDLE && currentMode != MODE_NOTE) {
-        setIdleStatus("Ready");
       }
-      // Idle taps outside the gear zone: do nothing (no expressions)
+      // All other taps: do nothing — content stays on screen
     } // end short-tap block
   }
 }
@@ -5235,7 +5376,7 @@ void loop() {
 
   if (currentMode == MODE_FIREWORKS || currentMode == MODE_HEART_RAIN ||
       currentMode == MODE_SNOWFALL  || currentMode == MODE_STARFIELD ||
-      currentMode == MODE_ANIMATED_NOTE) {
+      currentMode == MODE_ANIMATED_NOTE || currentMode == MODE_FIRECRACKER) {
     const unsigned long now = millis();
     if (now - lastParticleTickMs >= 16) {
       lastParticleTickMs = now;

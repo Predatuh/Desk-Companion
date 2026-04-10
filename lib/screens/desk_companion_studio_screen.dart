@@ -80,19 +80,21 @@ extension DeskParticleExt on DeskParticle {
       };
 }
 
-enum DeskFireworkShape { circle, heart, star }
+enum DeskFireworkShape { circle, heart, star, random }
 
 extension DeskFireworkShapeExt on DeskFireworkShape {
   String get label => switch (this) {
         DeskFireworkShape.circle => 'Circle',
         DeskFireworkShape.heart => 'Heart',
         DeskFireworkShape.star => 'Star',
+        DeskFireworkShape.random => 'Random',
       };
 
   String get command => switch (this) {
         DeskFireworkShape.circle => 'circle',
         DeskFireworkShape.heart => 'heart',
         DeskFireworkShape.star => 'star',
+        DeskFireworkShape.random => 'random',
       };
 }
 
@@ -593,6 +595,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskFireworkPalette _selectedFireworkPalette = DeskFireworkPalette.rainbow;
   DeskFireworkSize _selectedFireworkSize = DeskFireworkSize.medium;
   int _selectedFireworkStages = 1; // 1=single, 2=double, 3=triple
+  int _firecrackerFuseSeconds = 5;
   DeskNoteAnimation _selectedNoteAnimation = DeskNoteAnimation.none;
   DeskCountdownEndAction _countdownEndAction = DeskCountdownEndAction.fireworks;
   int _countdownHours = 0;
@@ -606,6 +609,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Color _faceColor = Colors.white;
   Color _accentColor = const Color(0xFF00BFFF);
   Color _bodyColor = const Color(0xFFFF69B4);
+  Color _hairColor = Colors.white;
+  Color _hatColor = Colors.white;
+  Color _mustacheColor = Colors.white;
+  Color _mouthColor = Colors.white;
   final _weatherLatController = TextEditingController();
   final _weatherLonController = TextEditingController();
   final _geocodeController = TextEditingController();
@@ -1628,6 +1635,23 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        // ── Reactions ──
+        _SectionCard(
+          title: 'Reactions',
+          subtitle: 'Send a quick interaction to your companion.',
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _reactionButton(context, controller, Icons.favorite, 'Pet', 'pet'),
+              _reactionButton(context, controller, Icons.celebration, 'Cheer', 'cheer'),
+              _reactionButton(context, controller, Icons.spa, 'Comfort', 'comfort'),
+              _reactionButton(context, controller, Icons.music_note, 'Dance', 'dance'),
+              _reactionButton(context, controller, Icons.card_giftcard, 'Surprise', 'surprise'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         // ── Edit studio link ──
         SizedBox(
           width: double.infinity,
@@ -1822,6 +1846,14 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             children: [
               _ColorRow(label: 'Figure', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
               const SizedBox(height: 8),
+              _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Hat', color: _hatColor, onChanged: (c) => setState(() => _hatColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Mustache', color: _mustacheColor, onChanged: (c) => setState(() => _mustacheColor = c)),
+              const SizedBox(height: 8),
+              _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
+              const SizedBox(height: 8),
               _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
               const SizedBox(height: 8),
               _ColorRow(label: 'Partner', color: _bodyColor, onChanged: (c) => setState(() => _bodyColor = c)),
@@ -1837,6 +1869,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                               faceColor: _colorToRgb565(_faceColor),
                               accentColor: _colorToRgb565(_accentColor),
                               bodyColor: _colorToRgb565(_bodyColor),
+                              hairColor: _colorToRgb565(_hairColor),
+                              hatColor: _colorToRgb565(_hatColor),
+                              mustacheColor: _colorToRgb565(_mustacheColor),
+                              mouthColor: _colorToRgb565(_mouthColor),
                             ),
                             success: 'Colors applied!',
                           ),
@@ -2162,6 +2198,47 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ),
               icon: const Icon(Icons.stop_circle_outlined),
               label: const Text('Stop particles'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text('Firecracker', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Light a fuse and watch it burn down before it explodes!',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 20),
+              const SizedBox(width: 8),
+              Text('${_firecrackerFuseSeconds}s'),
+              Expanded(
+                child: Slider(
+                  value: _firecrackerFuseSeconds.toDouble(),
+                  min: 1,
+                  max: 30,
+                  divisions: 29,
+                  label: '${_firecrackerFuseSeconds}s',
+                  onChanged: (v) => setState(() => _firecrackerFuseSeconds = v.round()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.busy || !controller.canControlDevice
+                  ? null
+                  : () => _perform(
+                        () => controller.sendFirecracker(_firecrackerFuseSeconds),
+                        success: 'Firecracker lit! ${_firecrackerFuseSeconds}s fuse!',
+                      ),
+              icon: const Icon(Icons.local_fire_department),
+              label: const Text('Light fuse!'),
             ),
           ),
         ],
@@ -3383,8 +3460,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           faceColor: _colorToRgb565(_faceColor),
           accentColor: _colorToRgb565(_accentColor),
           bodyColor: _colorToRgb565(_bodyColor),
+          hairColor: _colorToRgb565(_hairColor),
+          hatColor: _colorToRgb565(_hatColor),
+          mustacheColor: _colorToRgb565(_mustacheColor),
+          mouthColor: _colorToRgb565(_mouthColor),
         );
         await controller.sendCompanionScale(_companionScale.round());
+        await controller.sendExpression(_selectedExpression.command);
       },
       success: 'Companion appearance applied.',
     );
@@ -3414,6 +3496,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             faceColor: _colorToRgb565(_faceColor),
             accentColor: _colorToRgb565(_accentColor),
             bodyColor: _colorToRgb565(_bodyColor),
+            hairColor: _colorToRgb565(_hairColor),
+            hatColor: _colorToRgb565(_hatColor),
+            mustacheColor: _colorToRgb565(_mustacheColor),
+            mouthColor: _colorToRgb565(_mouthColor),
           );
           await controller.sendScene(_selectedScene.command);
         },
@@ -3705,6 +3791,25 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       }
       _showMessage('$error');
     }
+  }
+
+  Widget _reactionButton(
+    BuildContext context,
+    DeskCompanionController controller,
+    IconData icon,
+    String label,
+    String action,
+  ) {
+    return ElevatedButton.icon(
+      onPressed: controller.busy || !controller.canControlDevice
+          ? null
+          : () async {
+              await controller.sendCareAction(action);
+              if (mounted) _showMessage('$label sent!');
+            },
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
   }
 
   void _showMessage(String message) {

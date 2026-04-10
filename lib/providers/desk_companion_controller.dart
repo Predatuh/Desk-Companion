@@ -894,16 +894,25 @@ class DeskCompanionController extends ChangeNotifier {
     required int faceColor,
     required int accentColor,
     required int bodyColor,
+    int? hairColor,
+    int? hatColor,
+    int? mustacheColor,
+    int? mouthColor,
   }) async {
     await _runBusy(() async {
+      final cmd = <String, dynamic>{
+        'type': 'set_colors',
+        'eyeColor': eyeColor,
+        'faceColor': faceColor,
+        'accentColor': accentColor,
+        'bodyColor': bodyColor,
+      };
+      if (hairColor != null) cmd['hairColor'] = hairColor;
+      if (hatColor != null) cmd['hatColor'] = hatColor;
+      if (mustacheColor != null) cmd['mustacheColor'] = mustacheColor;
+      if (mouthColor != null) cmd['mouthColor'] = mouthColor;
       await _sendCommand(
-        {
-          'type': 'set_colors',
-          'eyeColor': eyeColor,
-          'faceColor': faceColor,
-          'accentColor': accentColor,
-          'bodyColor': bodyColor,
-        },
+        cmd,
         mode: _mode,
         bleLabel: 'Colors sent over BLE.',
         relayLabel: 'Colors queued through relay.',
@@ -946,6 +955,17 @@ class DeskCompanionController extends ChangeNotifier {
         mode: _mode,
         bleLabel: 'Care action sent over BLE.',
         relayLabel: 'Care action queued through relay.',
+      );
+    });
+  }
+
+  Future<void> sendFirecracker(int durationSeconds) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'fire_firecracker', 'duration': durationSeconds},
+        mode: _mode,
+        bleLabel: 'Firecracker lit over BLE!',
+        relayLabel: 'Firecracker queued through relay!',
       );
     });
   }
