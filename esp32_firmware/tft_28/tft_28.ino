@@ -4826,18 +4826,12 @@ void handleTouch() {
       // Store for on-screen debug display
       lastMenuTapX = touchStartX;
       lastMenuTapY = touchStartY;
-      // Cooldown: ignore taps within first 400ms of menu opening
-      if (now - menuOpenedMs < MENU_OPEN_COOLDOWN_MS) {
-        Serial.println("[MENU] cooldown - ignored");
-        renderMenuFrame(); // redraw to show coords
-        return;
-      }
       menuOpenedMs = now; // reset timeout on interaction
 
       // Determine which band was tapped using simple vertical division:
       //   Y < 34          → close (title bar / X button)
-      //   Y 34..209       → items 0-3 (each ~44px band)
-      //   Y >= 210        → arrow row
+      //   Y 34..195       → items 0-3 (each ~40px band)
+      //   Y >= 196        → arrow row (wider zone to avoid accidental item hits)
       if (touchStartY < 34) {
         // Close menu
         Serial.println("[MENU] close zone");
@@ -4846,7 +4840,7 @@ void handleTouch() {
         renderCurrentMode();
         return;
       }
-      if (touchStartY >= 210) {
+      if (touchStartY >= 196) {
         // Arrow row
         if (touchStartX < SCREEN_WIDTH / 2) {
           Serial.println("[MENU] left arrow");
@@ -4858,8 +4852,8 @@ void handleTouch() {
         renderMenuFrame();
         return;
       }
-      // Items: Y 34..209 divided into 4 equal bands of 44px
-      int itemIdx = (touchStartY - 34) / 44;
+      // Items: Y 34..195 divided into 4 equal bands of ~40px
+      int itemIdx = (touchStartY - 34) / 41;
       if (itemIdx < 0) itemIdx = 0;
       if (itemIdx > 3) itemIdx = 3;
       Serial.printf("[MENU] hit item %d on page %d\n", itemIdx, menuPage);
