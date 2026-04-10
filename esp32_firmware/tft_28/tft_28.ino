@@ -276,6 +276,7 @@ bool colorImageTransferActive = false;
 
 // Touch state for virtual buttons
 bool touchActive = false;
+bool holdFired  = false;
 unsigned long touchStartMs = 0;
 int touchStartX = 0;
 int touchStartY = 0;
@@ -2361,12 +2362,16 @@ void renderMenuFrame() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
 
-  // Title bar
+  // Title bar with close "X"
   gfx->setTextSize(2);
   gfx->setTextColor(userAccentColor);
   const char* title = MENU_TITLES[menuPage % MENU_PAGES];
   gfx->setCursor((SCREEN_WIDTH - (int)strlen(title) * 12) / 2, 8);
   gfx->print(title);
+  // Close X in top-right corner
+  gfx->setTextColor(userFaceColor);
+  gfx->setCursor(SCREEN_WIDTH - 18, 6);
+  gfx->print("X");
 
   // Page indicator dots
   for (uint8_t p = 0; p < MENU_PAGES; p++) {
@@ -4738,6 +4743,7 @@ void handleTouch() {
 
   if (isTouched && !touchActive) {
     touchActive  = true;
+    holdFired    = false;
     touchStartMs = now;
     TouchPoint p = ft6336u_getPoint();
     // Map raw portrait touch coords → landscape screen coords for MADCTL 0x28
@@ -4745,8 +4751,21 @@ void handleTouch() {
     touchStartY  = (int)p.x;
   }
 
+  // ─── While still holding: auto-fire 3s hold ───
+  if (isTouched && touchActive && !holdFired) {
+    if (now - touchStartMs >= BTN_HOLD_MS &&
+        currentMode != MODE_CONFIRM_CLEAR && currentMode != MODE_MENU) {
+      holdFired = true;
+      menuResumeMode = currentMode;
+      currentMode = MODE_CONFIRM_CLEAR;
+      renderConfirmClear();
+      return;
+    }
+  }
+
   if (!isTouched && touchActive) {
     touchActive = false;
+    if (holdFired) { holdFired = false; return; } // already handled
     unsigned long holdDuration = now - touchStartMs;
     lastIdleInteractionMs = now;
 
@@ -4790,11 +4809,12 @@ void handleTouch() {
         renderMenuFrame();
         return;
       }
-      // Menu item tap (4 items, y=42+i*42, h=36)
+      // Menu item tap – use generous zones that fill gaps between items
       for (uint8_t i = 0; i < MENU_ITEM_COUNT; i++) {
-        int itemY = 42 + i * 42;
-        if (touchStartY >= itemY && touchStartY <= itemY + 36 &&
-            touchStartX >= 10 && touchStartX <= SCREEN_WIDTH - 10) {
+        int zoneTop = (i == 0) ? 34 : 42 + i * 42 - 3;
+        int zoneBot = (i == MENU_ITEM_COUNT - 1) ? 42 + i * 42 + 42 : 42 + i * 42 + 39;
+        if (touchStartY >= zoneTop && touchStartY <= zoneBot &&
+            touchStartX >= 0 && touchStartX <= SCREEN_WIDTH) {
           executeMenuAction(menuPage, i);
           // Stay in menu for toggles (page 2, 3), exit for actions (page 0, 1)
           if (menuPage <= 1) {
@@ -4804,22 +4824,20 @@ void handleTouch() {
           return;
         }
       }
-      // Tap outside items → dismiss menu
-      currentMode = menuResumeMode;
-      renderCurrentMode();
+      // Close button zone: top area (title bar) – tap to dismiss
+      if (touchStartY < 34) {
+        currentMode = menuResumeMode;
+        renderCurrentMode();
+        return;
+      }
+      // Taps that miss items/arrows/close: stay in menu (no dismiss)
+      renderMenuFrame();
       return;
     }
 
-    // ─── Normal mode touch handling ───
-
-    if (holdDuration >= BTN_HOLD_MS) {
-      // ─ Long press: confirm clear
-      menuResumeMode = currentMode;
-      currentMode = MODE_CONFIRM_CLEAR;
-      renderConfirmClear();
-
-    } else {
-      // ─ Short/medium tap
+    // ─── Normal mode touch handling (short taps only; long-press handled above) ───
+    {
+      // ─ Short tap
       if (currentMode == MODE_NOTE && noteQueueCount > 1) {
         noteQueueIndex      = (noteQueueIndex + 1) % noteQueueCount;
         currentNote         = noteQueue[noteQueueIndex];
@@ -4846,7 +4864,7 @@ void handleTouch() {
         setIdleStatus("Ready");
       }
       // Idle taps outside the gear zone: do nothing (no expressions)
-    }
+    } // end short-tap block
   }
 }
 
