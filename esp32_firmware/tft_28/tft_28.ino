@@ -2056,8 +2056,8 @@ void renderExpressionFrame() {
     drawHeartEye(RX, EY, heartS);
     // Blush cheeks
     int blushR = 8 + (int)(beat * 3.0f);
-    gfx->fillCircle(LX + 28, EY + 20, blushR, COL_PINK);
-    gfx->fillCircle(RX - 28, EY + 20, blushR, COL_PINK);
+    gfx->fillCircle(LX + 28, EY + 20, blushR, userBodyColor);
+    gfx->fillCircle(RX - 28, EY + 20, blushR, userBodyColor);
     // Wide love smile
     drawSmile(MX, MY - 4, 52);
     // Floating hearts from both sides
@@ -2206,15 +2206,15 @@ void renderExpressionFrame() {
     drawEye(RX, EY, EW, eyeH, ER, 0, py);
     drawSmile(MX, MY - 5, 44);
     // Rosy cheeks
-    gfx->fillCircle(LX + 24, EY + 16, 6, COL_PINK);
-    gfx->fillCircle(RX - 24, EY + 16, 6, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, 6, userBodyColor);
+    gfx->fillCircle(RX - 24, EY + 16, 6, userBodyColor);
   } else if (currentExpression == "smile") {
     drawHappyArc(LX, EY, EW);
     drawHappyArc(RX, EY, EW);
     drawSmile(MX, MY - 4, 44);
     // Warm blush
-    gfx->fillCircle(LX + 24, EY + 16, 7, COL_PINK);
-    gfx->fillCircle(RX - 24, EY + 16, 7, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, 7, userBodyColor);
+    gfx->fillCircle(RX - 24, EY + 16, 7, userBodyColor);
   } else if (currentExpression == "confused") {
     float wave = sin(t * 3.14159f * 2.0f);
     int browTwitch = (int)(wave * 5.0f);
@@ -2251,8 +2251,8 @@ void renderExpressionFrame() {
     // Big blush cheeks
     float blushPulse = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int blushR = 8 + (int)(blushPulse * 3.0f);
-    gfx->fillCircle(LX + 22, EY + 16, blushR, COL_PINK);
-    gfx->fillCircle(RX - 22, EY + 16, blushR, COL_PINK);
+    gfx->fillCircle(LX + 22, EY + 16, blushR, userBodyColor);
+    gfx->fillCircle(RX - 22, EY + 16, blushR, userBodyColor);
     // Pucker lips (bigger)
     drawKissLips(MX, MY);
     // Three streams of hearts
@@ -2282,7 +2282,7 @@ void renderExpressionFrame() {
     int sr = 4 + (int)(twinkle * 4.0f);
     drawIconStar(LX + EW/2 + 8, EY - 12, sr);
     // Blush on wink side
-    gfx->fillCircle(LX + 24, EY + 16, 5, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, 5, userBodyColor);
   } else if (currentExpression == "laugh") {
     float wave = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int shakeX = (int)(wave * 5.0f) - 2;
@@ -2310,8 +2310,8 @@ void renderExpressionFrame() {
       gfx->print("HA");
     }
     // Blush from laughing
-    gfx->fillCircle(LX + 24, EY + 16, 6, COL_PINK);
-    gfx->fillCircle(RX - 24, EY + 16, 6, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, 6, userBodyColor);
+    gfx->fillCircle(RX - 24, EY + 16, 6, userBodyColor);
   } else if (currentExpression == "star_eyes") {
     float twinkle = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int starR = 11 + (int)(twinkle * 6.0f);
@@ -2371,10 +2371,10 @@ void renderExpressionFrame() {
     float sway = sin(t * 3.14159f * 3.0f) * 5.0f;
     int tongueH = 16 + (int)(wobble * 6.0f);
     int tongueX = MX + (int)sway;
-    gfx->fillRoundRect(tongueX - 12, MY + 5, 24, tongueH, 8, userFaceColor);
+    gfx->fillRoundRect(tongueX - 12, MY + 5, 24, tongueH, 8, userMouthColor);
     gfx->fillCircle(tongueX, MY + 5 + tongueH - 6, 5, COL_BG);
     // Blush
-    gfx->fillCircle(LX + 24, EY + 16, 5, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, 5, userBodyColor);
 
   } else if (currentExpression == "grateful") {
     // Soft closed eyes (arcs) + warm smile + glow
@@ -2383,8 +2383,8 @@ void renderExpressionFrame() {
     drawHappyArc(RX, EY, EW);
     // Warm blush
     int blushR = 7 + (int)(wave * 3.0f);
-    gfx->fillCircle(LX + 24, EY + 16, blushR, COL_PINK);
-    gfx->fillCircle(RX - 24, EY + 16, blushR, COL_PINK);
+    gfx->fillCircle(LX + 24, EY + 16, blushR, userBodyColor);
+    gfx->fillCircle(RX - 24, EY + 16, blushR, userBodyColor);
     // Wide warm smile
     drawSmile(MX, MY - 4, 52);
     // Gentle sparkles floating upward
@@ -2429,8 +2429,8 @@ void renderExpressionFrame() {
     drawEye(RX, EY, EW, EH - 6, ER, -shift, 3);
     // Large pulsing rosy blush circles
     int blushR = 12 + (int)(wave * 4.0f);
-    gfx->fillCircle(LX + 30, EY + 20, blushR, COL_PINK);
-    gfx->fillCircle(RX - 30, EY + 20, blushR, COL_PINK);
+    gfx->fillCircle(LX + 30, EY + 20, blushR, userBodyColor);
+    gfx->fillCircle(RX - 30, EY + 20, blushR, userBodyColor);
     // Shy wobbly smile
     float smileShy = sin(t * 3.14159f * 3.0f) * 2.0f;
     for (int line = 0; line < 3; line++) {
@@ -2484,8 +2484,8 @@ void renderExpressionFrame() {
     drawIconStar(CX, FACE_OFFSET_Y + 8 - sp, starPulse + 2);
     drawIconStar(CX + 24, FACE_OFFSET_Y + 14 - sp, starPulse);
     // Blush of pride
-    gfx->fillCircle(LX + 26, EY + 18, 6, COL_PINK);
-    gfx->fillCircle(RX - 26, EY + 18, 6, COL_PINK);
+    gfx->fillCircle(LX + 26, EY + 18, 6, userBodyColor);
+    gfx->fillCircle(RX - 26, EY + 18, 6, userBodyColor);
 
   } else if (currentExpression == "skeptical") {
     // One raised brow, squinting side-eye
@@ -2513,7 +2513,7 @@ void renderExpressionFrame() {
     // Gentle smile
     for (int line = 0; line < 3; line++) {
       gfx->drawLine(MX - 12, MY - lift + line,
-                   MX + 12, MY - lift + line, userFaceColor);
+                   MX + 12, MY - lift + line, userMouthColor);
     }
     // Tiny sparkles that slowly drift
     int sp1 = (int)(t * 40.0f) % 20;
@@ -2535,7 +2535,7 @@ void renderExpressionFrame() {
     // Firm horizontal mouth
     for (int line = 0; line < 5; line++) {
       gfx->drawLine(MX - 20, MY + line,
-                   MX + 20, MY + line, userFaceColor);
+                   MX + 20, MY + line, userMouthColor);
     }
 
   } else {

@@ -1245,6 +1245,7 @@ class _CompanionFacePainter extends CustomPainter {
 
     final resolvedFaceColor = faceColor ?? Colors.white;
     final resolvedEyeColor = eyeColor ?? Colors.white;
+    final resolvedBodyColor = bodyColor ?? const Color(0xFFFFB6C1);
 
     final stroke = Paint()
       ..color = resolvedFaceColor
@@ -1262,7 +1263,7 @@ class _CompanionFacePainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final blushPaint = Paint()
-      ..color = const Color(0xFFFFB6C1)
+      ..color = resolvedBodyColor
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final hairPaint = Paint()
@@ -2123,8 +2124,8 @@ class _CompanionFacePainter extends CustomPainter {
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
         final blushPulse = 6.0 + math.sin(t * 2 * math.pi) * 1.5;
-        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), blushPulse, Paint()..color = _resolvedAccentColor);
-        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), blushPulse, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), blushPulse, blushPaint);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), blushPulse, blushPaint);
         _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 48);
         break;
       case 'crying':
@@ -2141,8 +2142,8 @@ class _CompanionFacePainter extends CustomPainter {
         eye(leftX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
         eye(rightX, eyeY, eyeWidth, eyeHeight - 4, eyeRadius, -5, 3);
         final blushR = 10.0 + math.sin(t * 2 * math.pi) * 2;
-        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), blushR, Paint()..color = _resolvedAccentColor);
-        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), blushR, Paint()..color = _resolvedAccentColor);
+        canvas.drawCircle(Offset(leftX + 28, eyeY + 18), blushR, blushPaint);
+        canvas.drawCircle(Offset(rightX - 28, eyeY + 18), blushR, blushPaint);
         for (var line = 0; line < 3; line++) {
           canvas.drawLine(Offset(150 + mouthDx, mouthY + line), Offset(170 + mouthDx, mouthY + line), stroke);
         }
