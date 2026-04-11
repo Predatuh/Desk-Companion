@@ -1578,6 +1578,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             faceColor: _faceColor,
                             accentColor: _accentColor,
                             bodyColor: _bodyColor,
+                            hairColor: _hairColor,
+                            hatColor: _hatColor,
+                            mustacheColor: _mustacheColor,
+                            mouthColor: _mouthColor,
                           ),
                         ),
                       ),
@@ -1643,23 +1647,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                   label: const Text('Apply behavior'),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // ── Reactions ──
-        _SectionCard(
-          title: 'Reactions',
-          subtitle: 'Send a quick interaction to your companion.',
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _reactionButton(context, controller, Icons.favorite, 'Pet', 'pet'),
-              _reactionButton(context, controller, Icons.celebration, 'Cheer', 'cheer'),
-              _reactionButton(context, controller, Icons.spa, 'Comfort', 'comfort'),
-              _reactionButton(context, controller, Icons.music_note, 'Dance', 'dance'),
-              _reactionButton(context, controller, Icons.card_giftcard, 'Surprise', 'surprise'),
             ],
           ),
         ),
@@ -1779,6 +1766,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           faceColor: _faceColor,
                           accentColor: _accentColor,
                           bodyColor: _bodyColor,
+                          hairColor: _hairColor,
+                          hatColor: _hatColor,
+                          mustacheColor: _mustacheColor,
+                          mouthColor: _mouthColor,
                         ),
                       ),
                     ),
@@ -2717,6 +2708,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           faceColor: _faceColor,
           accentColor: _accentColor,
           bodyColor: _bodyColor,
+          hairColor: _hairColor,
+          hatColor: _hatColor,
+          mustacheColor: _mustacheColor,
+          mouthColor: _mouthColor,
         ),
       );
     }
@@ -2761,6 +2756,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           faceColor: _faceColor,
           accentColor: _accentColor,
           bodyColor: _bodyColor,
+          hairColor: _hairColor,
+          hatColor: _hatColor,
+          mustacheColor: _mustacheColor,
+          mouthColor: _mouthColor,
         ),
       );
     }
@@ -3863,25 +3862,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       }
       _showMessage('$error');
     }
-  }
-
-  Widget _reactionButton(
-    BuildContext context,
-    DeskCompanionController controller,
-    IconData icon,
-    String label,
-    String action,
-  ) {
-    return ElevatedButton.icon(
-      onPressed: controller.busy || !controller.canControlDevice
-          ? null
-          : () async {
-              await controller.sendCareAction(action);
-              if (mounted) _showMessage('$label sent!');
-            },
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-    );
   }
 
   void _showMessage(String message) {
@@ -5105,6 +5085,10 @@ class _FullscreenAppearanceEditorState
                 faceColor: _faceColor,
                 accentColor: _accentColor,
                 bodyColor: _bodyColor,
+                hairColor: _hairColor,
+                hatColor: _hatColor,
+                mustacheColor: _mustacheColor,
+                mouthColor: _mouthColor,
               ),
             ),
           ),

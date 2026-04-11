@@ -1807,6 +1807,42 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
         gfx->drawLine(shiftedX + scaleByPercent(5, hairWidth), peak + stroke, shiftedX + scaleByPercent(11, hairWidth), hairCenterY - 16 + stroke, userHairColor);
       }
     }
+  } else if (companionHair == "ponytail") {
+    const int topY = hairCenterY - 22 - scaleByPercent(5, hairHeight);
+    const int leftEdge = hairCenterX - (scaleByPercent(68, hairWidth) / 2);
+    const int rightEdge = hairCenterX + (scaleByPercent(68, hairWidth) / 2);
+    for (int stroke = 0; stroke < hairStroke; stroke++) {
+      gfx->drawLine(leftEdge, topY + stroke, rightEdge, topY + stroke, userHairColor);
+    }
+    for (int stroke = 0; stroke < hairStroke; stroke++) {
+      gfx->drawLine(rightEdge, topY + stroke, rightEdge + scaleByPercent(15, hairWidth), topY + 8 + stroke, userHairColor);
+      gfx->drawLine(rightEdge + scaleByPercent(15, hairWidth), topY + 8 + stroke, rightEdge + scaleByPercent(11, hairWidth), topY + 28 + stroke, userHairColor);
+    }
+    gfx->drawCircle(rightEdge, topY + 2, 3, userHairColor);
+  } else if (companionHair == "curly") {
+    for (int i = 0; i < 5; i++) {
+      int cx = hairCenterX - scaleByPercent(22, hairWidth) + i * scaleByPercent(11, hairWidth);
+      int cy = hairCenterY - 22 - scaleByPercent(5, hairHeight) + (i % 2 == 1 ? 3 : 0);
+      int cr = scaleByPercent(6, hairHeight) + i;
+      gfx->drawCircle(cx, cy, cr, userHairColor);
+    }
+  } else if (companionHair == "pigtails") {
+    const int topY = hairCenterY - 20;
+    const int leftPigX = hairCenterX - scaleByPercent(40, hairWidth);
+    const int rightPigX = hairCenterX + scaleByPercent(40, hairWidth);
+    gfx->drawCircle(leftPigX + 8, topY - 5, 3, userHairColor);
+    gfx->drawCircle(rightPigX - 8, topY - 5, 3, userHairColor);
+    for (int stroke = 0; stroke < hairStroke; stroke++) {
+      gfx->drawLine(leftPigX + 8, topY - 2 + stroke, leftPigX, topY + scaleByPercent(18, hairHeight) + stroke, userHairColor);
+      gfx->drawLine(rightPigX - 8, topY - 2 + stroke, rightPigX, topY + scaleByPercent(18, hairHeight) + stroke, userHairColor);
+    }
+  } else if (companionHair == "mohawk") {
+    const int height = scaleByPercent(22, hairHeight);
+    for (int x = hairCenterX - scaleByPercent(11, hairWidth); x <= hairCenterX + scaleByPercent(11, hairWidth); x += 6) {
+      for (int stroke = 0; stroke < hairStroke; stroke++) {
+        gfx->drawLine(x, hairCenterY - 18 + stroke, x + 1, hairCenterY - 18 - height + stroke, userHairColor);
+      }
+    }
   }
 
   // Headwear (scaled 2x)
@@ -1825,6 +1861,21 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
     gfx->drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userHatColor);
     gfx->drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userHatColor);
     gfx->drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userHatColor);
+  } else if (companionHeadwear == "top_hat") {
+    gfx->drawRoundRect(faceCenterX - 22, eyeY - 78, 44, 44, 4, userHatColor);
+    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userHatColor);
+  } else if (companionHeadwear == "halo") {
+    gfx->drawRoundRect(faceCenterX - 40, eyeY - 56, 80, 12, 6, userHatColor);
+  } else if (companionHeadwear == "flower_crown") {
+    for (int i = 0; i < 5; i++) {
+      int fx = faceCenterX - 32 + i * 16;
+      int fy = eyeY - 38 + (i % 2 == 1 ? 3 : 0);
+      gfx->drawCircle(fx, fy, 5, userHatColor);
+      gfx->fillCircle(fx, fy, 2, userHatColor);
+    }
+  } else if (companionHeadwear == "beret") {
+    gfx->drawRoundRect(faceCenterX - 51, eyeY - 52, 88, 22, 11, userHatColor);
+    gfx->fillCircle(faceCenterX - 7, eyeY - 56, 3, userHatColor);
   }
 
   // Glasses (scaled 2x)
@@ -1889,6 +1940,18 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
       gfx->drawLine(mustacheCenterX - wing, mustacheCenterY - 4 + stroke, mustacheCenterX - wing - scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userMustacheColor);
       gfx->drawLine(mustacheCenterX + wing, mustacheCenterY - 4 + stroke, mustacheCenterX + wing + scaleByPercent(4, mustacheWidth), mustacheCenterY - rise + stroke, userMustacheColor);
     }
+  } else if (companionMustache == "goatee") {
+    const int gWidth = scaleByPercent(11, mustacheWidth);
+    const int gHeight = scaleByPercent(16, mustacheHeight);
+    // Simple pointed goatee below mouth
+    for (int stroke = 0; stroke < mustacheStroke; stroke++) {
+      gfx->drawLine(mustacheCenterX - gWidth, mustacheCenterY + 2 + stroke, mustacheCenterX, mustacheCenterY + gHeight + 4 + stroke, userMustacheColor);
+      gfx->drawLine(mustacheCenterX + gWidth, mustacheCenterY + 2 + stroke, mustacheCenterX, mustacheCenterY + gHeight + 4 + stroke, userMustacheColor);
+    }
+  } else if (companionMustache == "soul_patch") {
+    const int pWidth = scaleByPercent(5, mustacheWidth);
+    const int pHeight = scaleByPercent(8, mustacheHeight);
+    gfx->drawRoundRect(mustacheCenterX - pWidth / 2, mustacheCenterY + 4, pWidth, pHeight, 2, userMustacheColor);
   }
 
   // Piercings (scaled 2x)
