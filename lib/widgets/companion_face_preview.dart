@@ -1233,6 +1233,10 @@ class _CompanionFacePainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
+    final blushPaint = Paint()
+      ..color = const Color(0xFFFFB6C1)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
 
     // --- animation helpers ---
     final double t = animationProgress; // 0..1 repeating
@@ -1286,6 +1290,7 @@ class _CompanionFacePainter extends CustomPainter {
         stroke,
         fill,
         cut,
+        blushPaint,
         normalizedExpression,
         eyeY: expressionEyeY + breathY,
         mouthY: expressionMouthY + breathY,
@@ -1870,6 +1875,7 @@ class _CompanionFacePainter extends CustomPainter {
     Paint stroke,
     Paint fill,
     Paint cut,
+    Paint blushPaint,
     String expression, {
     required double eyeY,
     required double mouthY,
@@ -1912,6 +1918,9 @@ class _CompanionFacePainter extends CustomPainter {
         _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 52);
         _drawHeart(canvas, fill, Offset(60 + eyeDx, 82 + eyeShift), 6);
         _drawHeart(canvas, fill, Offset(260 + eyeDx, 68 + eyeShift), 4);
+        final loveBlush = 6.0 + math.sin(t * 2 * math.pi) * 2;
+        canvas.drawCircle(Offset(leftX + 28, eyeY + 20), loveBlush, blushPaint);
+        canvas.drawCircle(Offset(rightX - 28, eyeY + 20), loveBlush, blushPaint);
         break;
       case 'surprised':
         eye(leftX, eyeY, eyeWidth + 8, eyeHeight + 15, eyeRadius + 4, 0, 0);
@@ -1961,6 +1970,8 @@ class _CompanionFacePainter extends CustomPainter {
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
         _drawHappyArc(canvas, stroke, rightX, eyeY, eyeWidth);
         _drawSmile(canvas, stroke, mouthCenterX, mouthY - 4, 44);
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 7, blushPaint);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 7, blushPaint);
         break;
       case 'confused':
         eye(leftX, eyeY - 4, eyeWidth, eyeHeight + 4, eyeRadius, -4, 0);
@@ -1990,6 +2001,9 @@ class _CompanionFacePainter extends CustomPainter {
         final hFloat = math.sin(t * 3 * math.pi) * 6;
         _drawHeart(canvas, fill, Offset(135 + mouthDx, 105 + eyeShift - hFloat.abs()), 6);
         _drawHeart(canvas, fill, Offset(200 + mouthDx, 75 + eyeShift - hFloat.abs() * 0.6), 4);
+        final kissBlush = 6.0 + math.sin(t * 2 * math.pi) * 2;
+        canvas.drawCircle(Offset(leftX + 22, eyeY + 16), kissBlush, blushPaint);
+        canvas.drawCircle(Offset(rightX - 22, eyeY + 16), kissBlush, blushPaint);
         break;
       case 'wink':
         for (var line = 0; line < 5; line++) {
@@ -2010,6 +2024,8 @@ class _CompanionFacePainter extends CustomPainter {
           RRect.fromRectAndRadius(Rect.fromLTWH(140 + mouthDx, 130 + mouthShift - laughBounce, 30, 15 + laughBounce * 0.6), const Radius.circular(5)),
           cut,
         );
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 6, blushPaint);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 6, blushPaint);
         break;
       case 'star_eyes':
         eye(leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 0);
@@ -2025,6 +2041,8 @@ class _CompanionFacePainter extends CustomPainter {
         _drawBrow(canvas, stroke, Offset(55 + eyeDx, eyeShift), Offset(125 + eyeDx, eyeShift));
         _drawBrow(canvas, stroke, Offset(195 + eyeDx, eyeShift), Offset(265 + eyeDx, eyeShift));
         _drawSmile(canvas, stroke, mouthCenterX, mouthY - 8, 52);
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 10), 6, blushPaint);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 10), 6, blushPaint);
         break;
       case 'tongue':
         for (var line = 0; line < 5; line++) {
@@ -2041,6 +2059,7 @@ class _CompanionFacePainter extends CustomPainter {
           fill,
         );
         canvas.drawCircle(Offset(160 + mouthDx + tongueWiggle, 156 + mouthShift), 4, cut);
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 5, blushPaint);
         break;
       case 'grateful':
         _drawHappyArc(canvas, stroke, leftX, eyeY, eyeWidth);
@@ -2088,6 +2107,8 @@ class _CompanionFacePainter extends CustomPainter {
         _drawStar(canvas, fill, Offset(140 + eyeDx, eyeShift + 18), 5.0 + sparkle * 2);
         _drawStar(canvas, fill, Offset(160 + eyeDx, eyeShift + 12), 7.0 + sparkle * 2);
         _drawStar(canvas, fill, Offset(180 + eyeDx, eyeShift + 18), 5.0 + sparkle * 2);
+        canvas.drawCircle(Offset(leftX + 26, eyeY + 12), 6, blushPaint);
+        canvas.drawCircle(Offset(rightX - 26, eyeY + 12), 6, blushPaint);
         break;
       case 'skeptical':
         eye(leftX, eyeY + 4, eyeWidth - 8, eyeHeight - 12, eyeRadius - 2, 4, 4);
@@ -2120,6 +2141,8 @@ class _CompanionFacePainter extends CustomPainter {
         eye(leftX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
         eye(rightX, eyeY, eyeWidth, eyeHeight, eyeRadius, 0, 2);
         _drawSmile(canvas, stroke, mouthCenterX, mouthY - 6, 44);
+        canvas.drawCircle(Offset(leftX + 24, eyeY + 16), 6, blushPaint);
+        canvas.drawCircle(Offset(rightX - 24, eyeY + 16), 6, blushPaint);
         break;
     }
 
