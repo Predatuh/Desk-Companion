@@ -62,6 +62,9 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _eyeOffsetYKey = 'companionEyeOffsetY';
   static const String _mouthOffsetXKey = 'companionMouthOffsetX';
   static const String _mouthOffsetYKey = 'companionMouthOffsetY';
+  static const String _companionScaleKey = 'companionScale';
+  static const String _companionOffsetXKey = 'companionOffsetX';
+  static const String _companionOffsetYKey = 'companionOffsetY';
   static const String _mustacheWidthKey = 'companionMustacheWidth';
   static const String _mustacheHeightKey = 'companionMustacheHeight';
   static const String _mustacheThicknessKey = 'companionMustacheThickness';
@@ -96,6 +99,9 @@ class DeskCompanionController extends ChangeNotifier {
   int _companionEyeOffsetY = 0;
   int _companionMouthOffsetX = 0;
   int _companionMouthOffsetY = 0;
+  int _companionScale = 100;
+  int _companionOffsetX = 0;
+  int _companionOffsetY = 0;
   int _companionMustacheWidth = 100;
   int _companionMustacheHeight = 100;
   int _companionMustacheThickness = 100;
@@ -170,6 +176,9 @@ class DeskCompanionController extends ChangeNotifier {
   int get companionEyeOffsetY => _companionEyeOffsetY;
   int get companionMouthOffsetX => _companionMouthOffsetX;
   int get companionMouthOffsetY => _companionMouthOffsetY;
+  int get companionScale => _companionScale;
+  int get companionOffsetX => _companionOffsetX;
+  int get companionOffsetY => _companionOffsetY;
   int get companionMustacheWidth => _companionMustacheWidth;
   int get companionMustacheHeight => _companionMustacheHeight;
   int get companionMustacheThickness => _companionMustacheThickness;
@@ -344,6 +353,11 @@ class DeskCompanionController extends ChangeNotifier {
       prefs.getInt(_mouthOffsetXKey) ?? _companionMouthOffsetX;
     _companionMouthOffsetY =
       prefs.getInt(_mouthOffsetYKey) ?? _companionMouthOffsetY;
+    _companionScale = prefs.getInt(_companionScaleKey) ?? _companionScale;
+    _companionOffsetX =
+      prefs.getInt(_companionOffsetXKey) ?? _companionOffsetX;
+    _companionOffsetY =
+      prefs.getInt(_companionOffsetYKey) ?? _companionOffsetY;
     _companionMustacheWidth =
       prefs.getInt(_mustacheWidthKey) ?? _companionMustacheWidth;
     _companionMustacheHeight =
@@ -406,6 +420,9 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setInt(_eyeOffsetYKey, _companionEyeOffsetY);
     await prefs.setInt(_mouthOffsetXKey, _companionMouthOffsetX);
     await prefs.setInt(_mouthOffsetYKey, _companionMouthOffsetY);
+    await prefs.setInt(_companionScaleKey, _companionScale);
+    await prefs.setInt(_companionOffsetXKey, _companionOffsetX);
+    await prefs.setInt(_companionOffsetYKey, _companionOffsetY);
     await prefs.setInt(_mustacheWidthKey, _companionMustacheWidth);
     await prefs.setInt(_mustacheHeightKey, _companionMustacheHeight);
     await prefs.setInt(_mustacheThicknessKey, _companionMustacheThickness);
@@ -820,12 +837,16 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendCompanionScale(int scale) async {
     await _runBusy(() async {
+      final clampedScale = scale.clamp(10, 300);
       await _sendCommand(
-        {'type': 'set_companion_scale', 'scale': scale},
+        {'type': 'set_companion_scale', 'scale': clampedScale},
         mode: 'companion_scale',
         bleLabel: 'Companion scale sent over BLE.',
         relayLabel: 'Companion scale queued through relay.',
       );
+      _companionScale = clampedScale;
+      await _persistRelayPreferences();
+      notifyListeners();
     });
   }
 
@@ -1072,6 +1093,8 @@ class DeskCompanionController extends ChangeNotifier {
     required int eyeOffsetY,
     required int mouthOffsetX,
     required int mouthOffsetY,
+    required int companionOffsetX,
+    required int companionOffsetY,
     required int mustacheWidth,
     required int mustacheHeight,
     required int mustacheThickness,
@@ -1099,6 +1122,8 @@ class DeskCompanionController extends ChangeNotifier {
           'eyeOffsetY': eyeOffsetY,
           'mouthOffsetX': mouthOffsetX,
           'mouthOffsetY': mouthOffsetY,
+          'companionOffsetX': companionOffsetX,
+          'companionOffsetY': companionOffsetY,
           'mustacheWidth': mustacheWidth,
           'mustacheHeight': mustacheHeight,
           'mustacheThickness': mustacheThickness,
@@ -1126,6 +1151,8 @@ class DeskCompanionController extends ChangeNotifier {
       _companionEyeOffsetY = eyeOffsetY;
       _companionMouthOffsetX = mouthOffsetX;
       _companionMouthOffsetY = mouthOffsetY;
+      _companionOffsetX = companionOffsetX;
+      _companionOffsetY = companionOffsetY;
       _companionMustacheWidth = mustacheWidth;
       _companionMustacheHeight = mustacheHeight;
       _companionMustacheThickness = mustacheThickness;
@@ -1581,6 +1608,23 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingMouthOffsetY = (payload['mouthOffsetY'] as num?)?.toInt();
     if (incomingMouthOffsetY != null) {
       _companionMouthOffsetY = incomingMouthOffsetY;
+    }
+
+    final incomingCompanionScale = (payload['companionScale'] as num?)?.toInt();
+    if (incomingCompanionScale != null) {
+      _companionScale = incomingCompanionScale;
+    }
+
+    final incomingCompanionOffsetX =
+        (payload['companionOffsetX'] as num?)?.toInt();
+    if (incomingCompanionOffsetX != null) {
+      _companionOffsetX = incomingCompanionOffsetX;
+    }
+
+    final incomingCompanionOffsetY =
+        (payload['companionOffsetY'] as num?)?.toInt();
+    if (incomingCompanionOffsetY != null) {
+      _companionOffsetY = incomingCompanionOffsetY;
     }
 
     final incomingMustacheWidth =

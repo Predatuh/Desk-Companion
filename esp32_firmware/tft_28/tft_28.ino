@@ -222,6 +222,8 @@ int companionEyeOffsetX = 0;
 int companionEyeOffsetY = 0;
 int companionMouthOffsetX = 0;
 int companionMouthOffsetY = 0;
+int companionOffsetX = 0;
+int companionOffsetY = 0;
 int companionMustacheWidth = 100;
 int companionMustacheHeight = 100;
 int companionMustacheThickness = 100;
@@ -407,6 +409,7 @@ String petAmbientStatus();
 int clampLevel(int value);
 int clampAppearancePercent(int value);
 int clampAppearanceOffset(int value);
+int clampCompanionScale(int value);
 int scaleByPercent(int base, int percent);
 String activePetBehavior();
 String pickAutonomousPetExpression();
@@ -688,6 +691,9 @@ String buildStatusJson() {
   json += "\"eyeOffsetY\":" + String(companionEyeOffsetY) + ",";
   json += "\"mouthOffsetX\":" + String(companionMouthOffsetX) + ",";
   json += "\"mouthOffsetY\":" + String(companionMouthOffsetY) + ",";
+  json += "\"companionScale\":" + String(companionScale) + ",";
+  json += "\"companionOffsetX\":" + String(companionOffsetX) + ",";
+  json += "\"companionOffsetY\":" + String(companionOffsetY) + ",";
   json += "\"mustacheWidth\":" + String(companionMustacheWidth) + ",";
   json += "\"mustacheHeight\":" + String(companionMustacheHeight) + ",";
   json += "\"mustacheThickness\":" + String(companionMustacheThickness) + ",";
@@ -725,6 +731,9 @@ String buildBleStatusJson() {
   json += "\"eyeOffsetY\":" + String(companionEyeOffsetY) + ",";
   json += "\"mouthOffsetX\":" + String(companionMouthOffsetX) + ",";
   json += "\"mouthOffsetY\":" + String(companionMouthOffsetY) + ",";
+  json += "\"companionScale\":" + String(companionScale) + ",";
+  json += "\"companionOffsetX\":" + String(companionOffsetX) + ",";
+  json += "\"companionOffsetY\":" + String(companionOffsetY) + ",";
   json += "\"mustacheWidth\":" + String(companionMustacheWidth) + ",";
   json += "\"mustacheHeight\":" + String(companionMustacheHeight) + ",";
   json += "\"mustacheThickness\":" + String(companionMustacheThickness) + ",";
@@ -1053,6 +1062,12 @@ int clampAppearanceOffset(int value) {
   return value;
 }
 
+int clampCompanionScale(int value) {
+  if (value < 10) return 10;
+  if (value > 300) return 300;
+  return value;
+}
+
 int scaleByPercent(int base, int percent) {
   const int clampedPercent = clampAppearancePercent(percent);
   const long scaled = (static_cast<long>(base) * clampedPercent) / 100L;
@@ -1165,6 +1180,9 @@ void persistPetState() {
   preferences.putInt("companion_eye_offset_y", companionEyeOffsetY);
   preferences.putInt("companion_mouth_offset_x", companionMouthOffsetX);
   preferences.putInt("companion_mouth_offset_y", companionMouthOffsetY);
+  preferences.putInt("companion_scale", companionScale);
+  preferences.putInt("companion_offset_x", companionOffsetX);
+  preferences.putInt("companion_offset_y", companionOffsetY);
   preferences.putInt("companion_mustache_width", companionMustacheWidth);
   preferences.putInt("companion_mustache_height", companionMustacheHeight);
   preferences.putInt("companion_mustache_thickness", companionMustacheThickness);
@@ -2024,19 +2042,22 @@ void renderExpressionFrame() {
 
   // Companion scale (50-200%) applied to face size
   const float cScale = companionScale / 100.0f;
+  const int companionXShift = clampAppearanceOffset(companionOffsetX) * 2;
+  const int companionYShift = clampAppearanceOffset(companionOffsetY) * 2;
 
   // Scaled face coordinates: OLED LX=36→68, RX=92→172, EY=24→45+offset, MY=52→98+offset
   const int baseLX = 68, baseRX = 172;
-  const int CX = SCREEN_WIDTH / 2;
+  const int centerX = SCREEN_WIDTH / 2;
+  const int CX = centerX + companionXShift;
   const int eyeXShift = clampAppearanceOffset(companionEyeOffsetX) * 2;
-  const int LX = CX + (int)((baseLX - CX) * cScale) + eyeXShift;
-  const int RX = CX + (int)((baseRX - CX) * cScale) + eyeXShift;
+  const int LX = CX + (int)((baseLX - centerX) * cScale) + eyeXShift;
+  const int RX = CX + (int)((baseRX - centerX) * cScale) + eyeXShift;
   const int eyeYShift = clampAppearanceOffset(companionEyeOffsetY) * 2;
   const int mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
   const int mouthYShift = clampAppearanceOffset(companionMouthOffsetY) * 2;
-  const int EY = FACE_OFFSET_Y + (int)(45 * cScale) + eyeYShift;
+  const int EY = FACE_OFFSET_Y + companionYShift + (int)(45 * cScale) + eyeYShift;
   const int MX = CX + mouthXShift;
-  const int MY = FACE_OFFSET_Y + (int)(100 * cScale) + mouthYShift;
+  const int MY = FACE_OFFSET_Y + companionYShift + (int)(100 * cScale) + mouthYShift;
   const int EW = (int)(52 * cScale);
   const int EH = (int)(40 * cScale);
   const int ER = (int)(13 * cScale);
@@ -2047,7 +2068,7 @@ void renderExpressionFrame() {
   if (currentExpression == "heart") {
     float wave = sin(t * 3.14159f * 2.0f) * 0.5f + 0.5f;
     int s = 14 + (int)(10.0f * wave);
-    drawBigHeart(SCREEN_WIDTH / 2, FACE_OFFSET_Y + 80, s);
+    drawBigHeart(CX, FACE_OFFSET_Y + companionYShift + 80, s);
   } else if (currentExpression == "love") {
     float beat = sin(t * 3.14159f * 4.0f) * 0.5f + 0.5f;
     int heartS = 14 + (int)(beat * 4.0f);
@@ -2062,11 +2083,11 @@ void renderExpressionFrame() {
     float r3 = fmod(t * 1.5f + 0.25f, 1.0f);
     if (r1 < 0.85f) {
       int y1 = MY - 8 - (int)(r1 * 80.0f);
-      drawBigHeart(24 + (int)(r1 * 20.0f), y1, 5 - (int)(r1 * 2.0f));
+      drawBigHeart(companionXShift + 24 + (int)(r1 * 20.0f), y1, 5 - (int)(r1 * 2.0f));
     }
     if (r2 < 0.85f) {
       int y2 = MY - 8 - (int)(r2 * 72.0f);
-      drawBigHeart(216 - (int)(r2 * 20.0f), y2, 4 - (int)(r2 * 2.0f));
+      drawBigHeart(companionXShift + 216 - (int)(r2 * 20.0f), y2, 4 - (int)(r2 * 2.0f));
     }
     if (r3 < 0.8f) {
       int y3 = MY - 14 - (int)(r3 * 60.0f);
@@ -2154,7 +2175,7 @@ void renderExpressionFrame() {
       gfx->drawLine(MX - 14, MY + line, MX + 14, MY + line, userMouthColor);
     }
     // Big floating Zzz
-    drawZzz(180, 18 + eyeYShift, expressionPhase);
+    drawZzz(companionXShift + 180, companionYShift + 18 + eyeYShift, expressionPhase);
     // Tiny drool drop
     float drool = fmod(t * 1.5f, 1.0f);
     if (drool > 0.3f) {
@@ -2169,10 +2190,10 @@ void renderExpressionFrame() {
     drawEye(LX, EY, EW - 11, 22, ER, px, py);
     drawEye(RX, EY, EW, EH, ER, px, py);
     // Thought bubble chain (small to large)
-    gfx->fillCircle(200, FACE_OFFSET_Y + 76 + eyeYShift, bubble, userAccentColor);
-    gfx->fillCircle(214, FACE_OFFSET_Y + 58 + eyeYShift, bubble + 3, userAccentColor);
+    gfx->fillCircle(companionXShift + 200, FACE_OFFSET_Y + companionYShift + 76 + eyeYShift, bubble, userAccentColor);
+    gfx->fillCircle(companionXShift + 214, FACE_OFFSET_Y + companionYShift + 58 + eyeYShift, bubble + 3, userAccentColor);
     // Large thought bubble with "..."
-    int bx = 228, by = FACE_OFFSET_Y + 32 + eyeYShift;
+    int bx = companionXShift + 228, by = FACE_OFFSET_Y + companionYShift + 32 + eyeYShift;
     int br = bubble + 8;
     gfx->fillCircle(bx, by, br, userAccentColor);
     gfx->fillCircle(bx, by, br - 2, COL_BG);
@@ -2306,7 +2327,7 @@ void renderExpressionFrame() {
     float sp1 = fmod(t * 2.5f, 1.0f);
     float sp2 = fmod(t * 2.5f + 0.4f, 1.0f);
     float sp3 = fmod(t * 2.0f + 0.7f, 1.0f);
-    if (sp1 < 0.8f) drawIconStar(28 + (int)(sp1 * 20.0f), EY - 20 - (int)(sp1 * 40.0f), 3);
+    if (sp1 < 0.8f) drawIconStar(companionXShift + 28 + (int)(sp1 * 20.0f), EY - 20 - (int)(sp1 * 40.0f), 3);
     if (sp2 < 0.8f) drawIconStar(216 - (int)(sp2 * 16.0f), EY - 16 - (int)(sp2 * 36.0f), 3);
     if (sp3 < 0.7f) drawIconStar(MX + (int)(sinf(sp3 * 6.28f) * 30.0f), EY - 44 - (int)(sp3 * 20.0f), 2);
   } else if (currentExpression == "excited") {
@@ -2325,8 +2346,8 @@ void renderExpressionFrame() {
     int sr1 = 4 + (int)((1.0f - sp1) * 5.0f);
     int sr2 = 3 + (int)((1.0f - sp2) * 4.0f);
     int sr3 = 3 + (int)((1.0f - sp3) * 5.0f);
-    drawIconStar(22 + (int)(sp1 * 16.0f), EY - 20 - (int)(sp1 * 40.0f), sr1);
-    drawIconStar(220 - (int)(sp2 * 14.0f), EY - 16 - (int)(sp2 * 44.0f), sr2);
+    drawIconStar(companionXShift + 22 + (int)(sp1 * 16.0f), EY - 20 - (int)(sp1 * 40.0f), sr1);
+    drawIconStar(companionXShift + 220 - (int)(sp2 * 14.0f), EY - 16 - (int)(sp2 * 44.0f), sr2);
     drawIconStar(MX + (int)(sinf(sp3 * 3.14159f) * 40.0f), EY - 50 - (int)(sp3 * 20.0f), sr3);
     // Floating "!" marks
     gfx->setTextSize(2);
@@ -2363,13 +2384,13 @@ void renderExpressionFrame() {
     drawSmile(MX, MY - 4, 52);
     // Gentle sparkles floating upward
     int sp = (int)(wave * 5.0f);
-    drawIconStar(26, FACE_OFFSET_Y + 30 + sp, 4);
-    drawIconStar(214, FACE_OFFSET_Y + 30 - sp, 3);
+    drawIconStar(companionXShift + 26, FACE_OFFSET_Y + companionYShift + 30 + sp, 4);
+    drawIconStar(companionXShift + 214, FACE_OFFSET_Y + companionYShift + 30 - sp, 3);
     // Gentle light particles rising
     float p1 = fmod(t * 1.5f, 1.0f);
     float p2 = fmod(t * 1.5f + 0.5f, 1.0f);
-    gfx->fillCircle(50 + (int)(p1 * 12.0f), FACE_OFFSET_Y + 80 - (int)(p1 * 60.0f), 2, userAccentColor);
-    gfx->fillCircle(200 - (int)(p2 * 10.0f), FACE_OFFSET_Y + 85 - (int)(p2 * 55.0f), 2, userAccentColor);
+    gfx->fillCircle(companionXShift + 50 + (int)(p1 * 12.0f), FACE_OFFSET_Y + companionYShift + 80 - (int)(p1 * 60.0f), 2, userAccentColor);
+    gfx->fillCircle(companionXShift + 200 - (int)(p2 * 10.0f), FACE_OFFSET_Y + companionYShift + 85 - (int)(p2 * 55.0f), 2, userAccentColor);
 
   } else if (currentExpression == "crying") {
     // Squished sad eyes, heavy tears from both sides
@@ -2450,9 +2471,9 @@ void renderExpressionFrame() {
     // Crown sparkles above head (3 stars)
     int sp = (int)(wave * 5.0f);
     int starPulse = 5 + (int)(wave * 3.0f);
-    drawIconStar(CX - 24, FACE_OFFSET_Y + 14 - sp, starPulse);
-    drawIconStar(CX, FACE_OFFSET_Y + 8 - sp, starPulse + 2);
-    drawIconStar(CX + 24, FACE_OFFSET_Y + 14 - sp, starPulse);
+    drawIconStar(CX - 24, FACE_OFFSET_Y + companionYShift + 14 - sp, starPulse);
+    drawIconStar(CX, FACE_OFFSET_Y + companionYShift + 8 - sp, starPulse + 2);
+    drawIconStar(CX + 24, FACE_OFFSET_Y + companionYShift + 14 - sp, starPulse);
 
   } else if (currentExpression == "skeptical") {
     // One raised brow, squinting side-eye
@@ -2485,9 +2506,9 @@ void renderExpressionFrame() {
     // Tiny sparkles that slowly drift
     int sp1 = (int)(t * 40.0f) % 20;
     int sp2 = (int)(t * 30.0f + 10) % 20;
-    gfx->fillCircle(40, FACE_OFFSET_Y + 40 + sp1, 2, userAccentColor);
-    gfx->fillCircle(210, FACE_OFFSET_Y + 50 + sp2, 2, userAccentColor);
-    gfx->fillCircle(260, FACE_OFFSET_Y + 30 + sp1, 1, userAccentColor);
+    gfx->fillCircle(companionXShift + 40, FACE_OFFSET_Y + companionYShift + 40 + sp1, 2, userAccentColor);
+    gfx->fillCircle(companionXShift + 210, FACE_OFFSET_Y + companionYShift + 50 + sp2, 2, userAccentColor);
+    gfx->fillCircle(companionXShift + 260, FACE_OFFSET_Y + companionYShift + 30 + sp1, 1, userAccentColor);
 
   } else if (currentExpression == "determined") {
     // Focused eyes, firm set mouth
@@ -2529,6 +2550,9 @@ void renderIdle() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
 
+  const int companionXShift = clampAppearanceOffset(companionOffsetX) * 2;
+  const int companionYShift = clampAppearanceOffset(companionOffsetY) * 2;
+
   // ── Clock/header strip ──
   if (idleShowClock) {
     struct tm timeinfo;
@@ -2556,12 +2580,12 @@ void renderIdle() {
   gfx->drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
 
   const int eyeXShift = clampAppearanceOffset(companionEyeOffsetX) * 2;
-  const int leftX = 70 + eyeXShift;
-  const int rightX = 170 + eyeXShift;
-  const int eyeY = FACE_OFFSET_Y + 60 + clampAppearanceOffset(companionEyeOffsetY) * 2;
+  const int leftX = 70 + companionXShift + eyeXShift;
+  const int rightX = 170 + companionXShift + eyeXShift;
+  const int eyeY = FACE_OFFSET_Y + companionYShift + 60 + clampAppearanceOffset(companionEyeOffsetY) * 2;
   const int mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
-  const int mouthCX = SCREEN_WIDTH / 2 + mouthXShift;
-  const int mouthY = FACE_OFFSET_Y + 110 + clampAppearanceOffset(companionMouthOffsetY) * 2;
+  const int mouthCX = SCREEN_WIDTH / 2 + companionXShift + mouthXShift;
+  const int mouthY = FACE_OFFSET_Y + companionYShift + 110 + clampAppearanceOffset(companionMouthOffsetY) * 2;
   const float orbitAngle = idleOrbit * (2.0f * PI / 16.0f);
   const int pupilDx = (int)(sinf(orbitAngle) * 4.0f);
 
@@ -2575,26 +2599,26 @@ void renderIdle() {
     gfx->drawLine(mouthCX - 14, mouthY, mouthCX + 14, mouthY, userMouthColor);
     gfx->setTextSize(2);
     gfx->setTextColor(userAccentColor);
-    gfx->setCursor(190, FACE_OFFSET_Y + 44);
+    gfx->setCursor(companionXShift + 190, FACE_OFFSET_Y + companionYShift + 44);
     gfx->print("z");
-    gfx->setCursor(204, FACE_OFFSET_Y + 34);
+    gfx->setCursor(companionXShift + 204, FACE_OFFSET_Y + companionYShift + 34);
     gfx->print("z");
   } else if (activePetMode == "cuddle" || petPersonality == "cuddly") {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx / 2, 0);
     drawEye(rightX, eyeY, 44, 30, 9, pupilDx / 2, 0);
     drawSmile(mouthCX, mouthY - 2, 44);
-    drawIconHeart(120, FACE_OFFSET_Y + 145, 5);
+    drawIconHeart(companionXShift + 120, FACE_OFFSET_Y + companionYShift + 145, 5);
   } else if (activePetMode == "play" || petPersonality == "playful") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawSmile(mouthCX, mouthY - 4, 48);
-    gfx->fillCircle(26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
+    gfx->fillCircle(companionXShift + 26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + companionYShift + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
   } else if (activePetMode == "party") {
     drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
     drawEye(rightX, eyeY, 48, 34, 9, -pupilDx * 2, 0);
     drawSmile(mouthCX, mouthY - 4, 52);
-    drawIconStar(30, FACE_OFFSET_Y + 28 + (int)(sinf(orbitAngle) * 3.0f), 5);
-    drawIconStar(210, FACE_OFFSET_Y + 32 + (int)(cosf(orbitAngle) * 3.0f), 5);
+    drawIconStar(companionXShift + 30, FACE_OFFSET_Y + companionYShift + 28 + (int)(sinf(orbitAngle) * 3.0f), 5);
+    drawIconStar(companionXShift + 210, FACE_OFFSET_Y + companionYShift + 32 + (int)(cosf(orbitAngle) * 3.0f), 5);
   } else {
     drawEye(leftX, eyeY, 44, 30, 9, pupilDx * 2, 2);
     drawEye(rightX, eyeY, 44, 30, 9, -pupilDx, -2);
@@ -4302,6 +4326,9 @@ void tryStoredPrefs() {
   companionEyeOffsetY = clampAppearanceOffset(preferences.getInt("companion_eye_offset_y", companionEyeOffsetY));
   companionMouthOffsetX = clampAppearanceOffset(preferences.getInt("companion_mouth_offset_x", companionMouthOffsetX));
   companionMouthOffsetY = clampAppearanceOffset(preferences.getInt("companion_mouth_offset_y", companionMouthOffsetY));
+  companionScale = (uint16_t)clampCompanionScale(preferences.getInt("companion_scale", companionScale));
+  companionOffsetX = clampAppearanceOffset(preferences.getInt("companion_offset_x", companionOffsetX));
+  companionOffsetY = clampAppearanceOffset(preferences.getInt("companion_offset_y", companionOffsetY));
   companionMustacheWidth = clampAppearancePercent(preferences.getInt("companion_mustache_width", companionMustacheWidth));
   companionMustacheHeight = clampAppearancePercent(preferences.getInt("companion_mustache_height", companionMustacheHeight));
   companionMustacheThickness = clampAppearancePercent(preferences.getInt("companion_mustache_thickness", companionMustacheThickness));
@@ -4424,6 +4451,8 @@ void handleCommandJson(const String& body) {
     companionEyeOffsetY = clampAppearanceOffset(extractJsonIntField(body, "eyeOffsetY", companionEyeOffsetY));
     companionMouthOffsetX = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetX", companionMouthOffsetX));
     companionMouthOffsetY = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetY", companionMouthOffsetY));
+    companionOffsetX = clampAppearanceOffset(extractJsonIntField(body, "companionOffsetX", companionOffsetX));
+    companionOffsetY = clampAppearanceOffset(extractJsonIntField(body, "companionOffsetY", companionOffsetY));
     companionMustacheWidth = clampAppearancePercent(extractJsonIntField(body, "mustacheWidth", companionMustacheWidth));
     companionMustacheHeight = clampAppearancePercent(extractJsonIntField(body, "mustacheHeight", companionMustacheHeight));
     companionMustacheThickness = clampAppearancePercent(extractJsonIntField(body, "mustacheThickness", companionMustacheThickness));
@@ -4587,11 +4616,12 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_companion_scale") {
-    int sc = extractJsonIntField(body, "scale", 100);
-    if (sc < 10) sc = 10;
-    if (sc > 300) sc = 300;
-    companionScale = (uint16_t)sc;
-    if (currentMode == MODE_EXPRESSION) renderCurrentMode();
+    companionScale = (uint16_t)clampCompanionScale(
+      extractJsonIntField(body, "scale", companionScale)
+    );
+    persistPetState();
+    if (currentMode == MODE_EXPRESSION || currentMode == MODE_IDLE) renderCurrentMode();
+    publishStatus();
     return;
   }
 

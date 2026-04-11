@@ -33,6 +33,9 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   required int eyeOffsetY,
   required int mouthOffsetX,
   required int mouthOffsetY,
+  int companionScale = 100,
+  int companionOffsetX = 0,
+  int companionOffsetY = 0,
   required int mustacheWidth,
   required int mustacheHeight,
   required int mustacheThickness,
@@ -79,6 +82,9 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
         eyeOffsetY: eyeOffsetY,
         mouthOffsetX: mouthOffsetX,
         mouthOffsetY: mouthOffsetY,
+        companionScale: companionScale,
+        companionOffsetX: companionOffsetX,
+        companionOffsetY: companionOffsetY,
         mustacheWidth: mustacheWidth,
         mustacheHeight: mustacheHeight,
         mustacheThickness: mustacheThickness,
@@ -201,6 +207,9 @@ class CompanionFacePreview extends StatefulWidget {
     required this.eyeOffsetY,
     required this.mouthOffsetX,
     required this.mouthOffsetY,
+    this.companionScale = 100,
+    this.companionOffsetX = 0,
+    this.companionOffsetY = 0,
     required this.mustacheWidth,
     required this.mustacheHeight,
     required this.mustacheThickness,
@@ -243,6 +252,9 @@ class CompanionFacePreview extends StatefulWidget {
   final int eyeOffsetY;
   final int mouthOffsetX;
   final int mouthOffsetY;
+  final int companionScale;
+  final int companionOffsetX;
+  final int companionOffsetY;
   final int mustacheWidth;
   final int mustacheHeight;
   final int mustacheThickness;
@@ -343,6 +355,9 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               eyeOffsetY: widget.eyeOffsetY,
               mouthOffsetX: widget.mouthOffsetX,
               mouthOffsetY: widget.mouthOffsetY,
+              companionScale: widget.companionScale,
+              companionOffsetX: widget.companionOffsetX,
+              companionOffsetY: widget.companionOffsetY,
               mustacheWidth: widget.mustacheWidth,
               mustacheHeight: widget.mustacheHeight,
               mustacheThickness: widget.mustacheThickness,
@@ -1181,6 +1196,9 @@ class _CompanionFacePainter extends CustomPainter {
     required this.eyeOffsetY,
     required this.mouthOffsetX,
     required this.mouthOffsetY,
+    required this.companionScale,
+    required this.companionOffsetX,
+    required this.companionOffsetY,
     required this.mustacheWidth,
     required this.mustacheHeight,
     required this.mustacheThickness,
@@ -1219,6 +1237,9 @@ class _CompanionFacePainter extends CustomPainter {
   final int eyeOffsetY;
   final int mouthOffsetX;
   final int mouthOffsetY;
+  final int companionScale;
+  final int companionOffsetX;
+  final int companionOffsetY;
   final int mustacheWidth;
   final int mustacheHeight;
   final int mustacheThickness;
@@ -1246,6 +1267,9 @@ class _CompanionFacePainter extends CustomPainter {
     final resolvedFaceColor = faceColor ?? Colors.white;
     final resolvedEyeColor = eyeColor ?? Colors.white;
     final resolvedMouthColor = mouthColor ?? resolvedFaceColor;
+    final companionScaleFactor = _clampPercent(companionScale) / 100.0;
+    final companionXShift = _clampOffset(companionOffsetX) * 2.0;
+    final companionYShift = _clampOffset(companionOffsetY) * 2.0;
 
     final stroke = Paint()
       ..color = resolvedFaceColor
@@ -1315,6 +1339,12 @@ class _CompanionFacePainter extends CustomPainter {
       ),
       stroke,
     );
+
+    canvas.save();
+    canvas.translate(companionXShift, companionYShift);
+    canvas.translate(160, 120);
+    canvas.scale(companionScaleFactor, companionScaleFactor);
+    canvas.translate(-160, -120);
 
     final idleLeftX = 70.0 + _clampOffset(eyeOffsetX) * 2.0;
     final idleRightX = 170.0 + _clampOffset(eyeOffsetX) * 2.0;
@@ -1443,6 +1473,8 @@ class _CompanionFacePainter extends CustomPainter {
       accessoryBaseEyeY,
       accessoryBaseMouthY,
     );
+
+    canvas.restore();
 
     if (showScreenBoundary) {
       _drawScreenBoundary(canvas);
@@ -2246,6 +2278,9 @@ class _CompanionFacePainter extends CustomPainter {
         eyeOffsetY != oldDelegate.eyeOffsetY ||
         mouthOffsetX != oldDelegate.mouthOffsetX ||
         mouthOffsetY != oldDelegate.mouthOffsetY ||
+        companionScale != oldDelegate.companionScale ||
+        companionOffsetX != oldDelegate.companionOffsetX ||
+        companionOffsetY != oldDelegate.companionOffsetY ||
         mustacheWidth != oldDelegate.mustacheWidth ||
         mustacheHeight != oldDelegate.mustacheHeight ||
         mustacheThickness != oldDelegate.mustacheThickness ||
