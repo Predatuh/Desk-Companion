@@ -3491,20 +3491,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   Future<void> _sendExpression(DeskCompanionController controller) async {
     _stopLiveScenePlayback();
-    // For classic model without a scene, send full companion style (includes
-    // accessories, colors, scale AND the expression) so the device always
-    // matches the preview.
-    if (_selectedVisualModel.isDeviceSupported &&
-        _selectedScene == CompanionScene.none) {
-      await _sendCompanionStyle(controller);
-      return;
-    }
-    await _perform(
-      () => controller.sendExpression(_selectedExpression.command),
-      success: controller.isBleConnected
-          ? '${_selectedExpression.label} expression sent.'
-          : '${_selectedExpression.label} sent to relay.',
-    );
+    // This action belongs to the classic companion tab, which always previews
+    // the firmware-backed classic face. Send the full classic appearance
+    // payload every time so accessories, colors, scale, and expression stay in
+    // sync even if another studio section last selected a non-device model.
+    await _sendCompanionStyle(controller);
   }
 
   Future<void> _sendCompanionStyle(DeskCompanionController controller) async {
