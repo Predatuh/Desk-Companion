@@ -972,7 +972,7 @@ String normalizeCareAction(const String& value) {
 
 String normalizeCompanionHair(const String& value) {
   const String trimmed = value.length() == 0 ? "" : value;
-  if (trimmed == "none" || trimmed == "tuft" || trimmed == "bangs" || trimmed == "spiky" || trimmed == "swoop" || trimmed == "bob" || trimmed == "messy") {
+  if (trimmed == "none" || trimmed == "tuft" || trimmed == "bangs" || trimmed == "spiky" || trimmed == "swoop" || trimmed == "bob" || trimmed == "messy" || trimmed == "ponytail" || trimmed == "curly" || trimmed == "pigtails" || trimmed == "mohawk") {
     return trimmed;
   }
   return "none";
@@ -988,7 +988,7 @@ String normalizeCompanionEars(const String& value) {
 
 String normalizeCompanionMustache(const String& value) {
   const String trimmed = value.length() == 0 ? "" : value;
-  if (trimmed == "none" || trimmed == "classic" || trimmed == "curled" || trimmed == "handlebar" || trimmed == "walrus" || trimmed == "pencil" || trimmed == "imperial") {
+  if (trimmed == "none" || trimmed == "classic" || trimmed == "curled" || trimmed == "handlebar" || trimmed == "walrus" || trimmed == "pencil" || trimmed == "imperial" || trimmed == "goatee" || trimmed == "soul_patch") {
     return trimmed;
   }
   return "none";
@@ -1004,7 +1004,7 @@ String normalizeCompanionGlasses(const String& value) {
 
 String normalizeCompanionHeadwear(const String& value) {
   const String trimmed = value.length() == 0 ? "" : value;
-  if (trimmed == "none" || trimmed == "bow" || trimmed == "beanie" || trimmed == "crown") {
+  if (trimmed == "none" || trimmed == "bow" || trimmed == "beanie" || trimmed == "crown" || trimmed == "top_hat" || trimmed == "halo" || trimmed == "flower_crown" || trimmed == "beret") {
     return trimmed;
   }
   return "none";
