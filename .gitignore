@@ -48,3 +48,10 @@ app.*.map.json
 Dockerfile
 **/Dockerfile
 relay_server/data/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
