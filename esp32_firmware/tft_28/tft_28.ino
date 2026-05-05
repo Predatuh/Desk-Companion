@@ -168,7 +168,6 @@ enum DisplayMode {
   MODE_COLOR_IMAGE,
   MODE_EXPRESSION,
   MODE_FLOWER,
-  MODE_SCENE,
   MODE_FIREWORKS,
   MODE_HEART_RAIN,
   MODE_SNOWFALL,
@@ -202,6 +201,7 @@ String companionMustache = "none";
 String companionGlasses = "none";
 String companionHeadwear = "none";
 String companionPiercing = "none";
+String flowerArrangement = "single";
 // User-configurable display colors (RGB565, saved to flash)
 uint16_t userEyeColor    = COL_FG;       // eye fill
 uint16_t userFaceColor   = COL_FG;       // face border / mouth / outline
@@ -211,6 +211,17 @@ uint16_t userHairColor   = COL_FG;       // hair / headwear
 uint16_t userHatColor    = COL_FG;       // hat / headwear (separate from hair)
 uint16_t userMustacheColor = COL_FG;     // mustache / facial hair
 uint16_t userMouthColor  = COL_FG;       // mouth / lips
+uint16_t flowerPetalColor = COL_ROSE;
+uint16_t flowerCenterColor = COL_GOLD;
+uint16_t flowerStemColor = COL_MINT;
+int flowerCount = 1;
+int flowerSize = 100;
+bool flowerMixed = false;
+int companionHeadwearSize = 100;
+int companionHeadwearWidth = 100;
+int companionHeadwearHeight = 100;
+int companionHeadwearOffsetX = 0;
+int companionHeadwearOffsetY = 0;
 int companionHairSize = 100;
 int companionMustacheSize = 100;
 int companionHairWidth = 100;
@@ -429,7 +440,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
 void setBanner(const String& text, int speed);
 void setImageReady();
 void clearSavedNote();
-void setFlower(const String& flowerType);
+void setFlower(const String& flowerType, int count = 1, int size = 100, const String& arrangement = "single", bool mixed = false, int petalColor = -1, int centerColor = -1, int stemColor = -1);
 void saveRelaySettings(const String& nextRelayUrl, const String& nextDeviceToken);
 bool connectToWifi(const String& ssid, const String& password);
 bool wifiJoinInProgress();
@@ -468,6 +479,7 @@ void configureWifiStaMode() {
 
 bool isRelayBackgroundMode() {
   return currentMode == MODE_FIREWORKS ||
+      currentMode == MODE_FIRECRACKER ||
       currentMode == MODE_HEART_RAIN ||
       currentMode == MODE_SNOWFALL ||
       currentMode == MODE_STARFIELD ||
@@ -478,7 +490,7 @@ bool isRelayBackgroundMode() {
 unsigned long relayPollIntervalMs() {
   if (relayColorTransferActive() || imageTransferActive) return 150UL;
   if (currentMode == MODE_BANNER) return 8000UL;
-  if (isRelayBackgroundMode()) return 15000UL;
+  if (isRelayBackgroundMode()) return 30000UL;
   return 4000UL;
 }
 
@@ -488,9 +500,6 @@ unsigned long relayStatusIntervalMs() {
 }
 void setupDisplay();
 void handleTouch();
-void drawStickFigure(int cx, int cy, int sc, float armLA, float armRA, float legLA, float legRA, uint16_t color);
-void renderSceneFrame();
-void setScene(const String& name);
 void initFireworks();
 void initHeartRain();
 void initSnowfall();
@@ -672,14 +681,17 @@ String buildStatusJson() {
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
   json += "\"relayUrl\":\"" + jsonEscape(relayUrl) + "\",";
   json += "\"deviceToken\":\"" + jsonEscape(deviceToken) + "\",";
-  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
-  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
   json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
   json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
   json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
   json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
   json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
   json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
+  json += "\"headwearSize\":" + String(companionHeadwearSize) + ",";
+  json += "\"headwearWidth\":" + String(companionHeadwearWidth) + ",";
+  json += "\"headwearHeight\":" + String(companionHeadwearHeight) + ",";
+  json += "\"headwearOffsetX\":" + String(companionHeadwearOffsetX) + ",";
+  json += "\"headwearOffsetY\":" + String(companionHeadwearOffsetY) + ",";
   json += "\"hairSize\":" + String(companionHairSize) + ",";
   json += "\"mustacheSize\":" + String(companionMustacheSize) + ",";
   json += "\"hairWidth\":" + String(companionHairWidth) + ",";
@@ -712,14 +724,17 @@ String buildBleStatusJson() {
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
-  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
-  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
   json += "\"hair\":\"" + jsonEscape(companionHair) + "\",";
   json += "\"ears\":\"" + jsonEscape(companionEars) + "\",";
   json += "\"mustache\":\"" + jsonEscape(companionMustache) + "\",";
   json += "\"glasses\":\"" + jsonEscape(companionGlasses) + "\",";
   json += "\"headwear\":\"" + jsonEscape(companionHeadwear) + "\",";
   json += "\"piercing\":\"" + jsonEscape(companionPiercing) + "\",";
+  json += "\"headwearSize\":" + String(companionHeadwearSize) + ",";
+  json += "\"headwearWidth\":" + String(companionHeadwearWidth) + ",";
+  json += "\"headwearHeight\":" + String(companionHeadwearHeight) + ",";
+  json += "\"headwearOffsetX\":" + String(companionHeadwearOffsetX) + ",";
+  json += "\"headwearOffsetY\":" + String(companionHeadwearOffsetY) + ",";
   json += "\"hairSize\":" + String(companionHairSize) + ",";
   json += "\"mustacheSize\":" + String(companionMustacheSize) + ",";
   json += "\"hairWidth\":" + String(companionHairWidth) + ",";
@@ -752,8 +767,6 @@ String buildSlimStatusJson() {
   json += "\"status\":\"" + jsonEscape(statusText) + "\",";
   json += "\"ssid\":\"" + jsonEscape(currentSsid) + "\",";
   json += "\"ip\":\"" + jsonEscape(ipAddress) + "\",";
-  json += "\"personality\":\"" + jsonEscape(petPersonality) + "\",";
-  json += "\"petMode\":\"" + jsonEscape(activePetMode) + "\",";
   json += "\"bondLevel\":" + String(bondLevel) + ",";
   json += "\"energyLevel\":" + String(energyLevel) + ",";
   json += "\"boredomLevel\":" + String(boredomLevel);
@@ -793,8 +806,6 @@ const char* modeName(DisplayMode mode) {
       return "expression";
     case MODE_FLOWER:
       return "flower";
-    case MODE_SCENE:
-      return "scene";
     case MODE_FIREWORKS:
       return "fireworks";
     case MODE_HEART_RAIN:
@@ -853,7 +864,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     tcp = &secureTcp;
   } else {
     plainTcp.setTimeout(15);
-    plainTcp.setConnectionTimeout(10000);
+    plainTcp.setConnectionTimeout(2000);
     tcp = &plainTcp;
   }
 
@@ -884,7 +895,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
 
   unsigned long respStart = millis();
   String statusLine = "";
-  while (millis() - respStart < 10000) {
+  while (millis() - respStart < 2000) {
     if (tcp->available()) {
       statusLine = tcp->readStringUntil('\n');
       statusLine.trim();
@@ -909,7 +920,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
   }
 
-  while (millis() - respStart < 10000) {
+  while (millis() - respStart < 2000) {
     if (tcp->available()) {
       String line = tcp->readStringUntil('\n');
       line.trim();
@@ -920,7 +931,7 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
   }
 
   response = "";
-  while (millis() - respStart < 10000) {
+  while (millis() - respStart < 2000) {
     while (tcp->available()) {
       response += (char)tcp->read();
     }
@@ -1169,6 +1180,11 @@ void persistPetState() {
   preferences.putString("companion_glasses", companionGlasses);
   preferences.putString("companion_headwear", companionHeadwear);
   preferences.putString("companion_piercing", companionPiercing);
+  preferences.putInt("companion_headwear_size", companionHeadwearSize);
+  preferences.putInt("companion_headwear_width", companionHeadwearWidth);
+  preferences.putInt("companion_headwear_height", companionHeadwearHeight);
+  preferences.putInt("companion_headwear_offset_x", companionHeadwearOffsetX);
+  preferences.putInt("companion_headwear_offset_y", companionHeadwearOffsetY);
   preferences.putInt("companion_hair_size", companionHairSize);
   preferences.putInt("companion_mustache_size", companionMustacheSize);
   preferences.putInt("companion_hair_width", companionHairWidth);
@@ -1743,6 +1759,11 @@ void drawBrow(int x1, int y1, int x2, int y2) {
 
 void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
   const int faceCenterX = (leftX + rightX) / 2;
+  const int headwearSize = clampAppearancePercent(companionHeadwearSize);
+  const int headwearWidth = scaleByPercent(headwearSize, companionHeadwearWidth);
+  const int headwearHeight = scaleByPercent(headwearSize, companionHeadwearHeight);
+  const int headwearCenterX = faceCenterX + clampAppearanceOffset(companionHeadwearOffsetX) * 2;
+  const int headwearBaseY = eyeY + clampAppearanceOffset(companionHeadwearOffsetY) * 2;
   const int hairSize = clampAppearancePercent(companionHairSize);
   const int mustacheSize = clampAppearancePercent(companionMustacheSize);
   const int hairWidth = scaleByPercent(hairSize, companionHairWidth);
@@ -1865,35 +1886,46 @@ void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY) {
 
   // Headwear (scaled 2x)
   if (companionHeadwear == "bow") {
-    gfx->drawTriangle(faceCenterX - 7, eyeY - 44, faceCenterX - 30, eyeY - 34, faceCenterX - 14, eyeY - 22, userHatColor);
-    gfx->drawTriangle(faceCenterX + 7, eyeY - 44, faceCenterX + 30, eyeY - 34, faceCenterX + 14, eyeY - 22, userHatColor);
-    gfx->drawCircle(faceCenterX, eyeY - 34, 4, userHatColor);
+    const int knotR = scaleByPercent(4, headwearSize);
+    const int outerWing = scaleByPercent(30, headwearWidth) / 2;
+    const int innerWing = scaleByPercent(14, headwearWidth) / 2;
+    const int topY = headwearBaseY - scaleByPercent(18, headwearHeight);
+    const int midY = headwearBaseY - scaleByPercent(8, headwearHeight);
+    const int bottomY = headwearBaseY + scaleByPercent(4, headwearHeight);
+    gfx->drawTriangle(headwearCenterX - knotR * 2, topY, headwearCenterX - outerWing, midY, headwearCenterX - innerWing, bottomY, userHatColor);
+    gfx->drawTriangle(headwearCenterX + knotR * 2, topY, headwearCenterX + outerWing, midY, headwearCenterX + innerWing, bottomY, userHatColor);
+    gfx->drawCircle(headwearCenterX, midY, knotR, userHatColor);
   } else if (companionHeadwear == "beanie") {
-    gfx->drawRoundRect(faceCenterX - 44, eyeY - 52, 88, 22, 9, userHatColor);
-    gfx->drawLine(faceCenterX - 38, eyeY - 28, faceCenterX + 38, eyeY - 28, userHatColor);
-    gfx->drawCircle(faceCenterX, eyeY - 56, 5, userHatColor);
+    const int beanieW = scaleByPercent(88, headwearWidth);
+    const int beanieH = scaleByPercent(22, headwearHeight);
+    gfx->drawRoundRect(headwearCenterX - beanieW / 2, headwearBaseY - scaleByPercent(26, headwearHeight), beanieW, beanieH, 9, userHatColor);
+    gfx->drawLine(headwearCenterX - beanieW / 2 + scaleByPercent(6, headwearWidth), headwearBaseY - scaleByPercent(2, headwearHeight), headwearCenterX + beanieW / 2 - scaleByPercent(6, headwearWidth), headwearBaseY - scaleByPercent(2, headwearHeight), userHatColor);
+    gfx->drawCircle(headwearCenterX, headwearBaseY - scaleByPercent(30, headwearHeight), scaleByPercent(5, headwearSize), userHatColor);
   } else if (companionHeadwear == "crown") {
-    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userHatColor);
-    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX - 22, eyeY - 56, userHatColor);
-    gfx->drawLine(faceCenterX - 22, eyeY - 56, faceCenterX - 4, eyeY - 34, userHatColor);
-    gfx->drawLine(faceCenterX - 4, eyeY - 34, faceCenterX + 11, eyeY - 60, userHatColor);
-    gfx->drawLine(faceCenterX + 11, eyeY - 60, faceCenterX + 26, eyeY - 34, userHatColor);
-    gfx->drawLine(faceCenterX + 26, eyeY - 34, faceCenterX + 38, eyeY - 52, userHatColor);
+    gfx->drawLine(headwearCenterX - scaleByPercent(38, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), headwearCenterX + scaleByPercent(38, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), userHatColor);
+    gfx->drawLine(headwearCenterX - scaleByPercent(38, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), headwearCenterX - scaleByPercent(22, headwearWidth), headwearBaseY - scaleByPercent(30, headwearHeight), userHatColor);
+    gfx->drawLine(headwearCenterX - scaleByPercent(22, headwearWidth), headwearBaseY - scaleByPercent(30, headwearHeight), headwearCenterX - scaleByPercent(4, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), userHatColor);
+    gfx->drawLine(headwearCenterX - scaleByPercent(4, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), headwearCenterX + scaleByPercent(11, headwearWidth), headwearBaseY - scaleByPercent(34, headwearHeight), userHatColor);
+    gfx->drawLine(headwearCenterX + scaleByPercent(11, headwearWidth), headwearBaseY - scaleByPercent(34, headwearHeight), headwearCenterX + scaleByPercent(26, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), userHatColor);
+    gfx->drawLine(headwearCenterX + scaleByPercent(26, headwearWidth), headwearBaseY - scaleByPercent(8, headwearHeight), headwearCenterX + scaleByPercent(38, headwearWidth), headwearBaseY - scaleByPercent(26, headwearHeight), userHatColor);
   } else if (companionHeadwear == "top_hat") {
-    gfx->drawRoundRect(faceCenterX - 22, eyeY - 78, 44, 44, 4, userHatColor);
-    gfx->drawLine(faceCenterX - 38, eyeY - 34, faceCenterX + 38, eyeY - 34, userHatColor);
+    const int hatW = scaleByPercent(44, headwearWidth);
+    const int hatH = scaleByPercent(44, headwearHeight);
+    const int brimW = scaleByPercent(76, headwearWidth);
+    gfx->drawRoundRect(headwearCenterX - hatW / 2, headwearBaseY - scaleByPercent(52, headwearHeight), hatW, hatH, 4, userHatColor);
+    gfx->drawLine(headwearCenterX - brimW / 2, headwearBaseY - scaleByPercent(8, headwearHeight), headwearCenterX + brimW / 2, headwearBaseY - scaleByPercent(8, headwearHeight), userHatColor);
   } else if (companionHeadwear == "halo") {
-    gfx->drawRoundRect(faceCenterX - 40, eyeY - 56, 80, 12, 6, userHatColor);
+    gfx->drawRoundRect(headwearCenterX - scaleByPercent(40, headwearWidth), headwearBaseY - scaleByPercent(30, headwearHeight), scaleByPercent(80, headwearWidth), scaleByPercent(12, headwearHeight), 6, userHatColor);
   } else if (companionHeadwear == "flower_crown") {
     for (int i = 0; i < 5; i++) {
-      int fx = faceCenterX - 32 + i * 16;
-      int fy = eyeY - 38 + (i % 2 == 1 ? 3 : 0);
-      gfx->drawCircle(fx, fy, 5, userHatColor);
+      int fx = headwearCenterX - scaleByPercent(32, headwearWidth) + i * scaleByPercent(16, headwearWidth);
+      int fy = headwearBaseY - scaleByPercent(12, headwearHeight) + (i % 2 == 1 ? scaleByPercent(3, headwearHeight) : 0);
+      gfx->drawCircle(fx, fy, scaleByPercent(5, headwearSize), userHatColor);
       gfx->fillCircle(fx, fy, 2, userHatColor);
     }
   } else if (companionHeadwear == "beret") {
-    gfx->drawRoundRect(faceCenterX - 51, eyeY - 52, 88, 22, 11, userHatColor);
-    gfx->fillCircle(faceCenterX - 7, eyeY - 56, 3, userHatColor);
+    gfx->drawRoundRect(headwearCenterX - scaleByPercent(44, headwearWidth), headwearBaseY - scaleByPercent(26, headwearHeight), scaleByPercent(88, headwearWidth), scaleByPercent(22, headwearHeight), 11, userHatColor);
+    gfx->fillCircle(headwearCenterX - scaleByPercent(7, headwearWidth), headwearBaseY - scaleByPercent(30, headwearHeight), scaleByPercent(3, headwearSize), userHatColor);
   }
 
   // Glasses (scaled 2x)
@@ -2549,103 +2581,6 @@ void renderExpressionFrame() {
 void renderIdle() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
-
-  const int companionXShift = clampAppearanceOffset(companionOffsetX) * 2;
-  const int companionYShift = clampAppearanceOffset(companionOffsetY) * 2;
-
-  // ── Clock/header strip ──
-  if (idleShowClock) {
-    struct tm timeinfo;
-    bool timeOk = getLocalTime(&timeinfo, 10) && timeinfo.tm_year > 100;
-    if (timeOk) {
-      char tBuf[8], dBuf[14];
-      strftime(tBuf, sizeof(tBuf), "%H:%M", &timeinfo);
-      strftime(dBuf, sizeof(dBuf), "%a %b %d", &timeinfo);
-      gfx->setTextSize(2);
-      gfx->setTextColor(userAccentColor);
-      gfx->setCursor((SCREEN_WIDTH - (int)strlen(tBuf) * 12) / 2, 4);
-      gfx->print(tBuf);
-      gfx->setTextSize(1);
-      gfx->setTextColor(userFaceColor);
-      gfx->setCursor((SCREEN_WIDTH - (int)strlen(dBuf) * 6) / 2, 24);
-      gfx->print(dBuf);
-    }
-  }
-  if (idleShowWeather) {
-    drawWeatherBadge(280, 15);
-  }
-
-  // ── Face box ──
-  if (idleShowFace) {
-  gfx->drawRoundRect(0, FACE_OFFSET_Y, SCREEN_WIDTH, 180, 28, userFaceColor);
-
-  const int eyeXShift = clampAppearanceOffset(companionEyeOffsetX) * 2;
-  const int leftX = 70 + companionXShift + eyeXShift;
-  const int rightX = 170 + companionXShift + eyeXShift;
-  const int eyeY = FACE_OFFSET_Y + companionYShift + 60 + clampAppearanceOffset(companionEyeOffsetY) * 2;
-  const int mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
-  const int mouthCX = SCREEN_WIDTH / 2 + companionXShift + mouthXShift;
-  const int mouthY = FACE_OFFSET_Y + companionYShift + 110 + clampAppearanceOffset(companionMouthOffsetY) * 2;
-  const float orbitAngle = idleOrbit * (2.0f * PI / 16.0f);
-  const int pupilDx = (int)(sinf(orbitAngle) * 4.0f);
-
-  if (activePetMode == "off") {
-    drawEye(leftX, eyeY, 42, 26, 9, 0, 0);
-    drawEye(rightX, eyeY, 42, 26, 9, 0, 0);
-    gfx->drawLine(mouthCX - 13, mouthY, mouthCX + 13, mouthY, userMouthColor);
-  } else if (activePetMode == "nap" || petPersonality == "sleepy") {
-    drawBlinkEye(leftX, eyeY, 44, 7, 7);
-    drawBlinkEye(rightX, eyeY, 44, 7, 7);
-    gfx->drawLine(mouthCX - 14, mouthY, mouthCX + 14, mouthY, userMouthColor);
-    gfx->setTextSize(2);
-    gfx->setTextColor(userAccentColor);
-    gfx->setCursor(companionXShift + 190, FACE_OFFSET_Y + companionYShift + 44);
-    gfx->print("z");
-    gfx->setCursor(companionXShift + 204, FACE_OFFSET_Y + companionYShift + 34);
-    gfx->print("z");
-  } else if (activePetMode == "cuddle" || petPersonality == "cuddly") {
-    drawEye(leftX, eyeY, 44, 30, 9, pupilDx / 2, 0);
-    drawEye(rightX, eyeY, 44, 30, 9, pupilDx / 2, 0);
-    drawSmile(mouthCX, mouthY - 2, 44);
-    drawIconHeart(companionXShift + 120, FACE_OFFSET_Y + companionYShift + 145, 5);
-  } else if (activePetMode == "play" || petPersonality == "playful") {
-    drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
-    drawEye(rightX, eyeY, 48, 34, 9, pupilDx * 2, 0);
-    drawSmile(mouthCX, mouthY - 4, 48);
-    gfx->fillCircle(companionXShift + 26 + (int)(sinf(orbitAngle) * 6.0f), FACE_OFFSET_Y + companionYShift + 130 - (int)(cosf(orbitAngle) * 4.0f), 4, userAccentColor);
-  } else if (activePetMode == "party") {
-    drawEye(leftX, eyeY, 48, 34, 9, pupilDx * 2, 0);
-    drawEye(rightX, eyeY, 48, 34, 9, -pupilDx * 2, 0);
-    drawSmile(mouthCX, mouthY - 4, 52);
-    drawIconStar(companionXShift + 30, FACE_OFFSET_Y + companionYShift + 28 + (int)(sinf(orbitAngle) * 3.0f), 5);
-    drawIconStar(companionXShift + 210, FACE_OFFSET_Y + companionYShift + 32 + (int)(cosf(orbitAngle) * 3.0f), 5);
-  } else {
-    drawEye(leftX, eyeY, 44, 30, 9, pupilDx * 2, 2);
-    drawEye(rightX, eyeY, 44, 30, 9, -pupilDx, -2);
-    drawOvalMouth(mouthCX, mouthY, 9, 7);
-  }
-
-  drawCompanionAccessories(leftX, rightX, eyeY, mouthY);
-  } // end idleShowFace
-
-  // Settings gear icon (top-right corner, tap target ~30x30)
-  {
-    const int gx = SCREEN_WIDTH - 18, gy = 14;
-    const int gr = 8;
-    gfx->drawCircle(gx, gy, gr, userFaceColor);
-    gfx->drawCircle(gx, gy, 4, userFaceColor);
-    // Gear teeth (6 short lines radiating out)
-    for (int i = 0; i < 6; i++) {
-      float a = i * 3.14159f / 3.0f;
-      gfx->drawLine(gx + (int)(gr * cosf(a)), gy + (int)(gr * sinf(a)),
-                    gx + (int)((gr + 3) * cosf(a)), gy + (int)((gr + 3) * sinf(a)), userFaceColor);
-    }
-  }
-
-  // Status bar
-  if (idleShowWifi) {
-    drawStatusBar();
-  }
   pushCanvas();
 }
 
@@ -3051,9 +2986,6 @@ void renderCurrentMode() {
     case MODE_FLOWER:
       renderFlowerFrame();
       break;
-    case MODE_SCENE:
-      renderSceneFrame();
-      break;
     case MODE_FIREWORKS:
       renderFireworksFrame();
       break;
@@ -3092,158 +3024,6 @@ void renderCurrentMode() {
       renderIdle();
       break;
   }
-}
-
-// ─── Stick figure scene helpers ───
-
-void drawStickFigure(int cx, int cy, int sc,
-                     float armLA, float armRA,
-                     float legLA, float legRA,
-                     uint16_t color) {
-  // Head
-  gfx->drawCircle(cx, cy - sc * 3, sc, color);
-  // Body (neck → hips)
-  gfx->drawLine(cx, cy - sc * 2, cx, cy + sc * 2, color);
-  // Left arm (armLA = angle below left-horizontal; 0=straight out, PI/4=45° down)
-  int sY = cy - sc;
-  gfx->drawLine(cx, sY,
-               cx - (int)(sc * 3.f * cosf(armLA)),
-               sY + (int)(sc * 3.f * sinf(armLA)), color);
-  // Right arm (armRA = angle below right-horizontal)
-  gfx->drawLine(cx, sY,
-               cx + (int)(sc * 3.f * cosf(armRA)),
-               sY + (int)(sc * 3.f * sinf(armRA)), color);
-  // Left leg (legLA = spread angle from straight down)
-  int hY = cy + sc * 2;
-  gfx->drawLine(cx, hY,
-               cx - (int)(sc * 3.f * sinf(legLA)),
-               hY + (int)(sc * 3.f * cosf(legLA)), color);
-  // Right leg (legRA = spread angle from straight down)
-  gfx->drawLine(cx, hY,
-               cx + (int)(sc * 3.f * sinf(legRA)),
-               hY + (int)(sc * 3.f * cosf(legRA)), color);
-}
-
-void renderSceneFrame() {
-  if (!displayAvailable) return;
-  gfx->fillScreen(COL_BG);
-
-  float t    = (float)expressionPhase / 63.f;
-  float bob  = sinf(t * 3.14159f * 2.f) * 2.f;
-
-  if (currentScene == "wave") {
-    drawStickFigure(90, 120, 14, 0.3f, 0.3f, 0.3f, 0.3f, userFaceColor);
-    float waveA = 0.2f + sinf(t * 3.14159f * 4.f) * 0.5f;
-    drawStickFigure(220, 120 + (int)bob, 14, 0.3f, -waveA, 0.3f, 0.3f, userBodyColor);
-    int hx = 160, hy = 70 - (int)(t * 18.f);
-    gfx->fillCircle(hx - 4, hy - 2, 4, userAccentColor);
-    gfx->fillCircle(hx + 4, hy - 2, 4, userAccentColor);
-    gfx->fillTriangle(hx - 8, hy, hx + 8, hy, hx, hy + 8, userAccentColor);
-
-  } else if (currentScene == "bow") {
-    drawStickFigure(130, 120, 14, 0.5f, 0.5f, 0.25f, 0.25f, userFaceColor);
-    float bowY = sinf(t * 3.14159f) * 12.f;
-    drawStickFigure(205, 130 - (int)bowY, 14,
-                   0.25f + bowY * 0.04f, 0.25f + bowY * 0.04f,
-                   0.25f, 0.25f, userBodyColor);
-
-  } else if (currentScene == "hug") {
-    float hugP = 0.2f + sinf(t * 3.14159f * 2.f) * 0.15f;
-    drawStickFigure(140, 120, 14, 0.3f, -hugP, 0.25f, 0.25f, userFaceColor);
-    drawStickFigure(185, 120, 14,  hugP, 0.3f, 0.25f, 0.25f, userBodyColor);
-
-  } else if (currentScene == "holdHands") {
-    // Phase 1 (t 0→0.3): figures walk toward each other from edges
-    // Phase 2 (t 0.3→0.5): meet in middle, reach out hands
-    // Phase 3 (t 0.5→1.0): hold hands, walk off together into distance (shrink)
-    float walkBob = sinf(t * 3.14159f * 8.f) * 2.f;
-    if (t < 0.3f) {
-      // Walking toward each other
-      float p = t / 0.3f; // 0→1
-      float lx = 20.f + p * 120.f; // 20→140
-      float rx = 300.f - p * 120.f; // 300→180
-      float legSwing = sinf(t * 3.14159f * 12.f) * 0.25f;
-      drawStickFigure((int)lx, 125 + (int)walkBob, 14,
-                     0.3f, 0.3f, 0.3f + legSwing, 0.3f - legSwing, userFaceColor);
-      drawStickFigure((int)rx, 125 + (int)walkBob, 14,
-                     0.3f, 0.3f, 0.3f - legSwing, 0.3f + legSwing, userBodyColor);
-    } else if (t < 0.5f) {
-      // Reaching out hands to each other
-      float p = (t - 0.3f) / 0.2f; // 0→1
-      float armReach = 0.3f - p * 0.3f; // inner arm closes
-      drawStickFigure(140, 125 + (int)walkBob, 14,
-                     0.4f, armReach, 0.3f, 0.3f, userFaceColor);
-      drawStickFigure(180, 125 + (int)walkBob, 14,
-                     armReach, 0.4f, 0.3f, 0.3f, userBodyColor);
-      // Hearts appearing
-      if (p > 0.5f) {
-        gfx->fillCircle(158, 100, 3, userAccentColor);
-        gfx->fillCircle(162, 100, 3, userAccentColor);
-        gfx->fillTriangle(155, 101, 165, 101, 160, 107, userAccentColor);
-      }
-    } else {
-      // Walking off together into the distance (shrinking)
-      float p = (t - 0.5f) / 0.5f; // 0→1
-      int centerX = 160;
-      int baseY = 125;
-      float scale = 14.f * (1.f - p * 0.7f); // shrink from 14 to ~4
-      float yOff = p * -60.f; // move up (into distance)
-      float driftX = p * 30.f; // drift slightly right
-      int cy = baseY + (int)yOff + (int)(walkBob * (1.f - p));
-      int sc = (int)scale;
-      if (sc < 3) sc = 3;
-      float legSwing2 = sinf(t * 3.14159f * 12.f) * 0.2f * (1.f - p);
-      drawStickFigure(centerX - sc + (int)driftX, cy, sc,
-                     0.4f, 0.0f, 0.3f + legSwing2, 0.3f - legSwing2, userFaceColor);
-      drawStickFigure(centerX + sc + (int)driftX, cy, sc,
-                     0.0f, 0.4f, 0.3f - legSwing2, 0.3f + legSwing2, userBodyColor);
-      // Heart floating above them
-      int hy = cy - sc * 3 - 5;
-      if (hy > 10) {
-        gfx->fillCircle(centerX + (int)driftX - 3, hy, 2, userAccentColor);
-        gfx->fillCircle(centerX + (int)driftX + 3, hy, 2, userAccentColor);
-        gfx->fillTriangle(centerX + (int)driftX - 5, hy + 1,
-                          centerX + (int)driftX + 5, hy + 1,
-                          centerX + (int)driftX, hy + 6, userAccentColor);
-      }
-      // Sunset glow at horizon
-      if (p > 0.3f) {
-        uint16_t glowCol = (p > 0.6f) ? COL_GOLD : COL_PEACH;
-        int glowR = (int)(p * 40.f);
-        gfx->fillCircle(centerX + (int)driftX, SCREEN_HEIGHT - 5, glowR, glowCol);
-      }
-    }
-
-  } else if (currentScene == "kiss") {
-    float lean = sinf(t * 3.14159f) * 8.f;
-    drawStickFigure(130 + (int)lean, 120, 14, 0.5f, -0.2f, 0.25f, 0.25f, userFaceColor);
-    drawStickFigure(190 - (int)lean, 120, 14,  0.2f,  0.5f, 0.25f, 0.25f, userBodyColor);
-    if (lean > 5.f) {
-      for (int i = 0; i < 3; i++) {
-        int hx2 = 160 + (i - 1) * 14;
-        int hy2 = 76 - (int)(t * 15.f);
-        gfx->fillCircle(hx2 - 3, hy2,   3, userAccentColor);
-        gfx->fillCircle(hx2 + 3, hy2,   3, userAccentColor);
-        gfx->fillTriangle(hx2 - 6, hy2 + 1, hx2 + 6, hy2 + 1, hx2, hy2 + 7, userAccentColor);
-      }
-    }
-  } else { // shyLeanIn (default)
-    float lean2 = sinf(t * 3.14159f * 1.5f) * 5.f;
-    drawStickFigure(105, 125 - (int)lean2, 14, 0.6f, 0.1f, 0.3f, 0.3f, userFaceColor);
-    drawStickFigure(215, 125,              14, 0.3f, 0.7f, 0.3f, 0.3f, userBodyColor);
-    gfx->fillCircle(160, 95, 4, userAccentColor);
-    gfx->fillCircle(155, 85, 3, userAccentColor);
-    gfx->fillCircle(165, 80, 2, userAccentColor);
-  }
-  pushCanvas();
-}
-
-void setScene(const String& name) {
-  currentScene         = name;
-  gfx->fillScreen(COL_BG);
-  currentMode          = MODE_SCENE;
-  expressionPhase      = 0;
-  lastExpressionTickMs = 0;
 }
 
 // ─── Particle mode helpers ───
@@ -3932,12 +3712,12 @@ void renderWeatherFrame() {
   if (weatherCode < 0) {
     gfx->setTextSize(2);
     gfx->setTextColor(userFaceColor);
-    gfx->setCursor(40, 95);
-    gfx->print("No weather data");
+    gfx->setCursor(34, 95);
+    gfx->print((weatherLat == 0.f && weatherLon == 0.f) ? "Set location first" : "Waiting for weather");
     gfx->setTextSize(1);
     gfx->setTextColor(COL_ACCENT);
-    gfx->setCursor(55, 122);
-    gfx->print("Send set_location first");
+    gfx->setCursor(44, 122);
+    gfx->print((weatherLat == 0.f && weatherLon == 0.f) ? "Use the app weather controls" : "Check Wi-Fi or try again");
     pushCanvas();
     return;
   }
@@ -3962,14 +3742,15 @@ void renderWeatherFrame() {
 void fetchWeather() {
   if (weatherLat == 0.f && weatherLon == 0.f) return;
   if (WiFi.status() != WL_CONNECTED) return;
-  WiFiClient wcl;
-  if (!wcl.connect("api.open-meteo.com", 80)) return;
+  WiFiClientSecure wcl;
+  wcl.setInsecure();
+  if (!wcl.connect("api.open-meteo.com", 443)) return;
   String path = "/v1/forecast?latitude=";
   path += String(weatherLat, 4);
   path += "&longitude=";
   path += String(weatherLon, 4);
-  path += "&current=temperature_2m,weathercode";
-  wcl.print(String("GET ") + path + " HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n");
+  path += "&current=temperature_2m,weather_code&timezone=auto";
+  wcl.print(String("GET ") + path + " HTTP/1.1\r\nHost: api.open-meteo.com\r\nUser-Agent: DeskCompanion/1.0\r\nConnection: close\r\n\r\n");
   unsigned long t0 = millis();
   bool inBody = false;
   char hdr[4] = {0,0,0,0};
@@ -3990,13 +3771,15 @@ void fetchWeather() {
   }
   wcl.stop();
   if (body.length() > 10) {
-    float tempF = extractJsonFloatField(body, "temperature_2m", -999.f);
-    if (tempF > -998.f) {
-      weatherTempTenths = (int)(tempF * 10.f + (tempF >= 0.f ? 0.5f : -0.5f));
-      weatherCode = extractJsonIntField(body, "weathercode", -1);
+    float tempC = extractJsonFloatField(body, "temperature_2m", -999.f);
+    int nextWeatherCode = extractJsonIntField(body, "weather_code", extractJsonIntField(body, "weathercode", -1));
+    if (tempC > -998.f && nextWeatherCode >= 0) {
+      weatherTempTenths = (int)(tempC * 10.f + (tempC >= 0.f ? 0.5f : -0.5f));
+      weatherCode = nextWeatherCode;
     }
   }
   lastWeatherFetchMs = millis();
+  if (currentMode == MODE_WEATHER || (currentMode == MODE_IDLE && idleShowWeather)) renderCurrentMode();
 }
 
 // ─── Daily greetings + spontaneous reactions ───
@@ -4126,7 +3909,12 @@ void setSleepMode() {
 
 // ─── Flower drawing helpers (scaled 2×) ───
 
-void drawFlowerRose(int cx, int cy, int scale, int phase) {
+static String flowerTypeForIndex(int index) {
+  static const char* FLOWERS[] = { "rose", "sunflower", "king_protea", "tulip", "daisy", "lily" };
+  return String(FLOWERS[index % 6]);
+}
+
+void drawFlowerRose(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
   float spiralT = (float)phase / 63.f;
   float spiralOff = spiralT * 0.4f;
   int outerR   = 15 * scale / 8;
@@ -4144,19 +3932,19 @@ void drawFlowerRose(int cx, int cy, int scale, int phase) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff;
     int px = cx + (int)(outerDist * cosf(a));
     int py = cy + (int)(outerDist * sinf(a));
-    gfx->fillCircle(px, py, outerR, COL_ROSE);
+    gfx->fillCircle(px, py, outerR, petalColor);
   }
   for (int i = 0; i < 5; i++) {
     float a = i * 3.14159f * 2.f / 5.f + spiralOff + 0.314f;
     int px = cx + (int)(midDist * cosf(a));
     int py = cy + (int)(midDist * sinf(a));
-    gfx->fillCircle(px, py, midR, COL_PINK);
+    gfx->fillCircle(px, py, midR, petalColor);
   }
-  gfx->fillCircle(cx, cy, centerR + 2, COL_GOLD);
+  gfx->fillCircle(cx, cy, centerR + 2, centerColor);
   gfx->fillCircle(cx, cy, centerR - 1, COL_BG);
 }
 
-void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
+void drawFlowerSunflower(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
   float t = (float)phase / 63.f;
   int petalLen = 34 * scale / 8;
   int petalW   = 7  * scale / 8;
@@ -4175,10 +3963,10 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
       float perp_a = a + 3.14159f / 2.f;
       int dx = (int)(w * cosf(perp_a));
       int dy = (int)(w * sinf(perp_a));
-      gfx->drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, COL_GOLD);
+      gfx->drawLine(base_x + dx, base_y + dy, tip_x + dx, tip_y + dy, petalColor);
     }
   }
-  gfx->fillCircle(cx, cy, centerR, userFaceColor);
+  gfx->fillCircle(cx, cy, centerR, centerColor);
   int numSeeds = 21 + (int)(t * 11.f);
   for (int i = 0; i < numSeeds; i++) {
     float angle = i * 2.399f + t * 0.5f;
@@ -4191,7 +3979,7 @@ void drawFlowerSunflower(int cx, int cy, int scale, int phase) {
   }
 }
 
-void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
+void drawFlowerKingProtea(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
   float t = (float)phase / 63.f;
   float growT = t < 0.1f ? t * 10.f : 1.0f;
   int bractLen = (int)(38 * scale / 8 * growT);
@@ -4210,33 +3998,100 @@ void drawFlowerKingProtea(int cx, int cy, int scale, int phase) {
     float side_a = a + 3.14159f / 2.f;
     int sx = (int)(bractW * cosf(side_a));
     int sy = (int)(bractW * sinf(side_a));
-    gfx->fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, COL_PEACH);
+    gfx->fillTriangle(base_x + sx, base_y + sy, base_x - sx, base_y - sy, tip_x, tip_y, petalColor);
   }
-  gfx->fillCircle(cx, cy, centerR, userFaceColor);
+  gfx->fillCircle(cx, cy, centerR, centerColor);
   gfx->fillCircle(cx, cy, centerR - 5, COL_BG);
-  gfx->fillCircle(cx, cy, centerR - 11, userFaceColor);
+  gfx->fillCircle(cx, cy, centerR - 11, centerColor);
   gfx->fillCircle(cx, cy, 4, COL_BG);
+}
+
+void drawFlowerTulip(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
+  int bloomW = 18 * scale / 8;
+  int bloomH = 24 * scale / 8;
+  int sway = (int)(sinf((float)phase / 63.f * 3.14159f * 2.f) * (scale / 2.f));
+  gfx->fillTriangle(cx - bloomW, cy + bloomH / 4, cx, cy - bloomH, cx + sway, cy + bloomH / 4, petalColor);
+  gfx->fillTriangle(cx + bloomW, cy + bloomH / 4, cx, cy - bloomH, cx + sway, cy + bloomH / 4, petalColor);
+  gfx->fillCircle(cx, cy, 5 * scale / 8, centerColor);
+}
+
+void drawFlowerDaisy(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
+  int petalDist = 16 * scale / 8;
+  int petalR = 6 * scale / 8;
+  for (int i = 0; i < 10; i++) {
+    float a = i * 3.14159f * 2.f / 10.f + (float)phase / 63.f * 0.1f;
+    gfx->fillCircle(cx + (int)(petalDist * cosf(a)), cy + (int)(petalDist * sinf(a)), petalR, petalColor);
+  }
+  gfx->fillCircle(cx, cy, 8 * scale / 8, centerColor);
+}
+
+void drawFlowerLily(int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
+  int petalLen = 22 * scale / 8;
+  int petalW = 6 * scale / 8;
+  float spin = (float)phase / 63.f * 0.2f;
+  for (int i = 0; i < 6; i++) {
+    float a = i * 3.14159f * 2.f / 6.f + spin;
+    int tipX = cx + (int)(petalLen * cosf(a));
+    int tipY = cy + (int)(petalLen * sinf(a));
+    int sideX = (int)(petalW * cosf(a + 3.14159f / 2.f));
+    int sideY = (int)(petalW * sinf(a + 3.14159f / 2.f));
+    gfx->fillTriangle(cx - sideX, cy - sideY, cx + sideX, cy + sideY, tipX, tipY, petalColor);
+  }
+  gfx->fillCircle(cx, cy, 7 * scale / 8, centerColor);
+}
+
+void drawFlowerByType(const String& flowerType, int cx, int cy, int scale, int phase, uint16_t petalColor, uint16_t centerColor) {
+  if (flowerType == "sunflower") {
+    drawFlowerSunflower(cx, cy, scale, phase, petalColor, centerColor);
+  } else if (flowerType == "king_protea") {
+    drawFlowerKingProtea(cx, cy, scale, phase, petalColor, centerColor);
+  } else if (flowerType == "tulip") {
+    drawFlowerTulip(cx, cy, scale, phase, petalColor, centerColor);
+  } else if (flowerType == "daisy") {
+    drawFlowerDaisy(cx, cy, scale, phase, petalColor, centerColor);
+  } else if (flowerType == "lily") {
+    drawFlowerLily(cx, cy, scale, phase, petalColor, centerColor);
+  } else {
+    drawFlowerRose(cx, cy, scale, phase, petalColor, centerColor);
+  }
 }
 
 void renderFlowerFrame() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
-  int cx = 120, cy = 100;
-  // Stem
-  gfx->drawLine(cx,     cy + 42, cx,     SCREEN_HEIGHT - 10, userFaceColor);
-  gfx->drawLine(cx + 1, cy + 42, cx + 1, SCREEN_HEIGHT - 10, userFaceColor);
-  gfx->drawLine(cx + 2, cy + 42, cx + 2, SCREEN_HEIGHT - 10, userFaceColor);
-  // Leaf
-  for (int i = 0; i < 14; i++) {
-    gfx->drawLine(cx + 2, cy + 80 + i, cx + 2 + 14 - i, cy + 80 + i, userFaceColor);
-  }
+  int count = flowerCount;
+  if (count < 1) count = 1;
+  if (count > 7) count = 7;
+  int baseScale = 8 * flowerSize / 100;
+  if (baseScale < 4) baseScale = 4;
+  if (baseScale > 14) baseScale = 14;
 
-  if (currentFlower == "sunflower") {
-    drawFlowerSunflower(cx, cy, 8, expressionPhase);
-  } else if (currentFlower == "king_protea") {
-    drawFlowerKingProtea(cx, cy, 8, expressionPhase);
-  } else {
-    drawFlowerRose(cx, cy, 8, expressionPhase);
+  for (int i = 0; i < count; i++) {
+    int cx = SCREEN_WIDTH / 2;
+    int cy = 108;
+    int stemEndX = cx;
+    int sway = (int)(sinf((expressionPhase + i * 11) * 0.12f) * (4 + i));
+    if (flowerArrangement == "bouquet") {
+      cx = SCREEN_WIDTH / 2 - (count - 1) * 12 + i * 24 + sway / 2;
+      cy = 116 - abs(i - count / 2) * 8;
+      stemEndX = SCREEN_WIDTH / 2 + (i - count / 2) * 5;
+    } else if (flowerArrangement == "row") {
+      cx = 42 + i * ((SCREEN_WIDTH - 84) / (count > 1 ? count - 1 : 1)) + sway / 3;
+      cy = 100 + ((i & 1) ? 10 : 0);
+    } else {
+      cx = SCREEN_WIDTH / 2 + sway;
+      cy = 100;
+    }
+
+    int stemStartY = cy + scaleByPercent(42, flowerSize);
+    gfx->drawLine(cx, stemStartY, stemEndX, SCREEN_HEIGHT - 10, flowerStemColor);
+    gfx->drawLine(cx + 1, stemStartY, stemEndX + 1, SCREEN_HEIGHT - 10, flowerStemColor);
+    for (int leaf = 0; leaf < 12; leaf++) {
+      gfx->drawLine(cx, stemStartY + 28 + leaf, cx + 12 - leaf, stemStartY + 28 + leaf, flowerStemColor);
+    }
+
+    String flowerType = flowerMixed ? flowerTypeForIndex(i) : currentFlower;
+    drawFlowerByType(flowerType, cx, cy, baseScale - (count > 1 ? (i % 2) : 0), expressionPhase + i * 5, flowerPetalColor, flowerCenterColor);
   }
   pushCanvas();
 }
@@ -4248,13 +4103,7 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
   const int flowerCX = 60;
   const int flowerCY = 100;
   const int flowerScale = 6;
-  if (flowerType == "sunflower") {
-    drawFlowerSunflower(flowerCX, flowerCY, flowerScale, expressionPhase);
-  } else if (flowerType == "king_protea") {
-    drawFlowerKingProtea(flowerCX, flowerCY, flowerScale, expressionPhase);
-  } else {
-    drawFlowerRose(flowerCX, flowerCY, flowerScale, expressionPhase);
-  }
+  drawFlowerByType(flowerType, flowerCX, flowerCY, flowerScale, expressionPhase, flowerPetalColor, flowerCenterColor);
 
   // Vertical divider
   gfx->drawLine(125, 6, 125, SCREEN_HEIGHT - 6, userFaceColor);
@@ -4315,6 +4164,11 @@ void tryStoredPrefs() {
   companionGlasses = normalizeCompanionGlasses(preferences.getString("companion_glasses", companionGlasses));
   companionHeadwear = normalizeCompanionHeadwear(preferences.getString("companion_headwear", companionHeadwear));
   companionPiercing = normalizeCompanionPiercing(preferences.getString("companion_piercing", companionPiercing));
+  companionHeadwearSize = clampAppearancePercent(preferences.getInt("companion_headwear_size", companionHeadwearSize));
+  companionHeadwearWidth = clampAppearancePercent(preferences.getInt("companion_headwear_width", companionHeadwearWidth));
+  companionHeadwearHeight = clampAppearancePercent(preferences.getInt("companion_headwear_height", companionHeadwearHeight));
+  companionHeadwearOffsetX = clampAppearanceOffset(preferences.getInt("companion_headwear_offset_x", companionHeadwearOffsetX));
+  companionHeadwearOffsetY = clampAppearanceOffset(preferences.getInt("companion_headwear_offset_y", companionHeadwearOffsetY));
   companionHairSize = clampAppearancePercent(preferences.getInt("companion_hair_size", companionHairSize));
   companionMustacheSize = clampAppearancePercent(preferences.getInt("companion_mustache_size", companionMustacheSize));
   companionHairWidth = clampAppearancePercent(preferences.getInt("companion_hair_width", companionHairWidth));
@@ -4423,16 +4277,6 @@ void handleCommandJson(const String& body) {
     return;
   }
 
-  if (type == "set_personality") {
-    setPetPersonality(extractJsonStringField(body, "personality", "curious"));
-    return;
-  }
-
-  if (type == "trigger_pet_mode") {
-    triggerPetMode(extractJsonStringField(body, "petMode", "hangout"));
-    return;
-  }
-
   if (type == "set_companion_style") {
     companionHair = normalizeCompanionHair(extractJsonStringField(body, "hair", companionHair));
     companionEars = normalizeCompanionEars(extractJsonStringField(body, "ears", companionEars));
@@ -4440,6 +4284,11 @@ void handleCommandJson(const String& body) {
     companionGlasses = normalizeCompanionGlasses(extractJsonStringField(body, "glasses", companionGlasses));
     companionHeadwear = normalizeCompanionHeadwear(extractJsonStringField(body, "headwear", companionHeadwear));
     companionPiercing = normalizeCompanionPiercing(extractJsonStringField(body, "piercing", companionPiercing));
+    companionHeadwearSize = clampAppearancePercent(extractJsonIntField(body, "headwearSize", companionHeadwearSize));
+    companionHeadwearWidth = clampAppearancePercent(extractJsonIntField(body, "headwearWidth", companionHeadwearWidth));
+    companionHeadwearHeight = clampAppearancePercent(extractJsonIntField(body, "headwearHeight", companionHeadwearHeight));
+    companionHeadwearOffsetX = clampAppearanceOffset(extractJsonIntField(body, "headwearOffsetX", companionHeadwearOffsetX));
+    companionHeadwearOffsetY = clampAppearanceOffset(extractJsonIntField(body, "headwearOffsetY", companionHeadwearOffsetY));
     companionHairSize = clampAppearancePercent(extractJsonIntField(body, "hairSize", companionHairSize));
     companionMustacheSize = clampAppearancePercent(extractJsonIntField(body, "mustacheSize", companionMustacheSize));
     companionHairWidth = clampAppearancePercent(extractJsonIntField(body, "hairWidth", companionHairWidth));
@@ -4459,23 +4308,13 @@ void handleCommandJson(const String& body) {
     companionMustacheOffsetX = clampAppearanceOffset(extractJsonIntField(body, "mustacheOffsetX", companionMustacheOffsetX));
     companionMustacheOffsetY = clampAppearanceOffset(extractJsonIntField(body, "mustacheOffsetY", companionMustacheOffsetY));
     persistPetState();
-    if (currentMode == MODE_IDLE) renderCurrentMode();
+    renderCurrentMode();
     publishStatus();
-    return;
-  }
-
-  if (type == "care_action") {
-    sendCareAction(extractJsonStringField(body, "action", "pet"));
     return;
   }
 
   if (type == "set_relay") {
     saveRelaySettings(extractJsonStringField(body, "relayUrl"), extractJsonStringField(body, "deviceToken"));
-    return;
-  }
-
-  if (type == "set_scene") {
-    setScene(extractJsonStringField(body, "scene", "wave"));
     return;
   }
 
@@ -4683,6 +4522,7 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "show_weather") {
+    if (WiFi.status() == WL_CONNECTED) fetchWeather();
     currentMode = MODE_WEATHER;
     renderCurrentMode();
     publishStatus();
@@ -4744,7 +4584,16 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_flower") {
-    setFlower(extractJsonStringField(body, "flower", "rose"));
+    setFlower(
+      extractJsonStringField(body, "flower", "rose"),
+      extractJsonIntField(body, "count", flowerCount),
+      extractJsonIntField(body, "size", flowerSize),
+      extractJsonStringField(body, "arrangement", flowerArrangement),
+      extractJsonIntField(body, "mixed", flowerMixed ? 1 : 0) != 0,
+      extractJsonIntField(body, "petalColor", flowerPetalColor),
+      extractJsonIntField(body, "centerColor", flowerCenterColor),
+      extractJsonIntField(body, "stemColor", flowerStemColor)
+    );
     return;
   }
 
@@ -4949,8 +4798,15 @@ void setImageReady() {
   publishStatus();
 }
 
-void setFlower(const String& flowerType) {
+void setFlower(const String& flowerType, int count, int size, const String& arrangement, bool mixed, int petalColor, int centerColor, int stemColor) {
   currentFlower = flowerType;
+  flowerCount = count < 1 ? 1 : (count > 7 ? 7 : count);
+  flowerSize = size < 40 ? 40 : (size > 180 ? 180 : size);
+  flowerArrangement = (arrangement == "bouquet" || arrangement == "row") ? arrangement : "single";
+  flowerMixed = mixed;
+  if (petalColor >= 0) flowerPetalColor = (uint16_t)petalColor;
+  if (centerColor >= 0) flowerCenterColor = (uint16_t)centerColor;
+  if (stemColor >= 0) flowerStemColor = (uint16_t)stemColor;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
   gfx->fillScreen(COL_BG);
@@ -5557,10 +5413,6 @@ void loop() {
       (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= 600000UL)) {
     fetchWeather();
   }
-
-  checkTimeGreetings();
-
-  updatePetBehavior();
 
   if (bootWifiRestorePending &&
       !currentSsid.isEmpty() &&

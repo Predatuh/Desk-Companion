@@ -17,25 +17,50 @@ import '../widgets/display_drawing_pad.dart';
 
 const int kMaxNoteCharacters = 80;
 
-enum DeskFlower { rose, sunflower, kingProtea }
+enum DeskFlower { rose, sunflower, kingProtea, tulip, daisy, lily }
+
+enum DeskFlowerArrangement { single, bouquet, row }
 
 extension DeskFlowerExt on DeskFlower {
   String get label => switch (this) {
         DeskFlower.rose => 'Rose',
         DeskFlower.sunflower => 'Sunflower',
         DeskFlower.kingProtea => 'King Protea',
+        DeskFlower.tulip => 'Tulip',
+        DeskFlower.daisy => 'Daisy',
+        DeskFlower.lily => 'Lily',
       };
 
   String get command => switch (this) {
         DeskFlower.rose => 'rose',
         DeskFlower.sunflower => 'sunflower',
         DeskFlower.kingProtea => 'king_protea',
+      DeskFlower.tulip => 'tulip',
+      DeskFlower.daisy => 'daisy',
+      DeskFlower.lily => 'lily',
       };
 
   String get description => switch (this) {
         DeskFlower.rose => 'Petals unfurl outward in a layered spiral bloom.',
         DeskFlower.sunflower => 'Seed spiral glows at the center, petals radiate like rays of sun.',
         DeskFlower.kingProtea => 'Bold spiky bracts fan out around a dense center — South Africa\'s wild queen.',
+        DeskFlower.tulip => 'Cupped petals rise upward with a clean spring silhouette.',
+        DeskFlower.daisy => 'Bright ring petals circle a cheerful center.',
+        DeskFlower.lily => 'Long petals flare outward into a star-like bloom.',
+      };
+}
+
+extension DeskFlowerArrangementExt on DeskFlowerArrangement {
+  String get label => switch (this) {
+        DeskFlowerArrangement.single => 'Single',
+        DeskFlowerArrangement.bouquet => 'Bouquet',
+        DeskFlowerArrangement.row => 'Row',
+      };
+
+  String get command => switch (this) {
+        DeskFlowerArrangement.single => 'single',
+        DeskFlowerArrangement.bouquet => 'bouquet',
+        DeskFlowerArrangement.row => 'row',
       };
 }
 
@@ -505,7 +530,6 @@ extension DeskPiercingStyleExt on DeskPiercingStyle {
 
 enum _StudioTab {
   companion,
-  stickFigure,
   notes,
   banner,
   flowers,
@@ -521,7 +545,6 @@ enum _StudioTab {
 extension _StudioTabExt on _StudioTab {
   String get label => switch (this) {
         _StudioTab.companion => 'Companion',
-        _StudioTab.stickFigure => 'Stick Figure',
         _StudioTab.notes => 'Notes',
         _StudioTab.banner => 'Banner',
         _StudioTab.flowers => 'Flowers',
@@ -536,7 +559,6 @@ extension _StudioTabExt on _StudioTab {
 
   IconData get icon => switch (this) {
         _StudioTab.companion => Icons.auto_awesome,
-        _StudioTab.stickFigure => Icons.directions_walk,
         _StudioTab.notes => Icons.sticky_note_2_outlined,
         _StudioTab.banner => Icons.text_rotation_none,
         _StudioTab.flowers => Icons.local_florist_outlined,
@@ -643,8 +665,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   _StudioTab _activeTab = _StudioTab.companion;
   DeskExpression _selectedExpression = DeskExpression.happy;
   CompanionScene _selectedScene = CompanionScene.none;
-  DeskPersonality _selectedPersonality = DeskPersonality.curious;
-  DeskPetMode _selectedPetMode = DeskPetMode.hangout;
   CompanionVisualModel _selectedVisualModel = CompanionVisualModel.classic;
   DeskHairStyle _selectedHairStyle = DeskHairStyle.none;
   DeskEarsStyle _selectedEarsStyle = DeskEarsStyle.none;
@@ -652,6 +672,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   DeskGlassesStyle _selectedGlassesStyle = DeskGlassesStyle.none;
   DeskHeadwearStyle _selectedHeadwearStyle = DeskHeadwearStyle.none;
   DeskPiercingStyle _selectedPiercingStyle = DeskPiercingStyle.none;
+  double _selectedHeadwearSize = 100;
+  double _selectedHeadwearWidth = 100;
+  double _selectedHeadwearHeight = 100;
+  double _selectedHeadwearOffsetX = 0;
+  double _selectedHeadwearOffsetY = 0;
   double _selectedHairSize = 100;
   double _selectedHairWidth = 100;
   double _selectedHairHeight = 100;
@@ -668,6 +693,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   double _selectedMustacheThickness = 100;
   double _selectedMustacheOffsetX = 0;
   double _selectedMustacheOffsetY = 0;
+  DeskFlowerArrangement _selectedFlowerArrangement = DeskFlowerArrangement.single;
+  double _selectedFlowerCount = 1;
+  double _selectedFlowerSize = 100;
+  bool _selectedFlowerMix = false;
+  Color _flowerPetalColor = const Color(0xFFFF69B4);
+  Color _flowerCenterColor = const Color(0xFFFFD54F);
+  Color _flowerStemColor = const Color(0xFF5DBB63);
   double _stickFigureScale = 100;
   double _stickFigureSpacing = 100;
   double _stickFigureEnergy = 55;
@@ -743,15 +775,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (mounted) setState(() {});
   }
 
-  void _syncBehaviorDraft(
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) {
-    _selectedPersonality = currentPersonality;
-    _selectedPetMode = currentPetMode;
-  }
-
   void _syncAppearanceDraft(DeskCompanionController controller) {
     if (_appearanceDraftDirty) {
       return;
@@ -776,6 +799,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _selectedPiercingStyle =
         _piercingStyleFromCommand(controller.companionPiercing) ??
             _selectedPiercingStyle;
+    _selectedHeadwearSize = controller.companionHeadwearSize.toDouble();
+    _selectedHeadwearWidth = controller.companionHeadwearWidth.toDouble();
+    _selectedHeadwearHeight = controller.companionHeadwearHeight.toDouble();
+    _selectedHeadwearOffsetX = controller.companionHeadwearOffsetX.toDouble();
+    _selectedHeadwearOffsetY = controller.companionHeadwearOffsetY.toDouble();
     _selectedHairSize = controller.companionHairSize.toDouble();
     _selectedHairWidth = controller.companionHairWidth.toDouble();
     _selectedHairHeight = controller.companionHairHeight.toDouble();
@@ -849,12 +877,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     final controller = context.watch<DeskCompanionController>();
     _syncTextController(_relayBaseUrlController, controller.relayBaseUrl);
     _syncTextController(_deviceTokenController, controller.deviceToken);
-    final currentPersonality =
-      _personalityFromCommand(controller.petPersonality) ??
-        _selectedPersonality;
-    final currentPetMode =
-      _petModeFromCommand(controller.activePetMode) ?? _selectedPetMode;
-    _syncBehaviorDraft(controller, currentPersonality, currentPetMode);
     _syncAppearanceDraft(controller);
 
     return Scaffold(
@@ -907,7 +929,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       ? const NeverScrollableScrollPhysics()
                       : const BouncingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  child: _buildActiveTabContent(context, controller, currentPersonality, currentPetMode),
+                  child: _buildActiveTabContent(context, controller),
                 ),
               ),
             ],
@@ -1269,16 +1291,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   Future<void> _openAppearanceEditor() async {
     final controller = context.read<DeskCompanionController>();
-    final currentPersonality =
-        _personalityFromCommand(controller.petPersonality) ??
-            _selectedPersonality;
-    final currentPetMode =
-        _petModeFromCommand(controller.activePetMode) ?? _selectedPetMode;
     final result = await Navigator.of(context).push<_AppearanceEditorResult>(
       MaterialPageRoute(
         builder: (_) => _FullscreenAppearanceEditor(
-          personality: currentPersonality,
-          petMode: currentPetMode,
+          personality: DeskPersonality.curious,
+          petMode: DeskPetMode.off,
           initialVisualModel: _selectedVisualModel,
           initialScene: _selectedScene,
           initialReferencePose: _appearancePreviewReferencePose,
@@ -1289,6 +1306,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           glassesStyle: _selectedGlassesStyle,
           headwearStyle: _selectedHeadwearStyle,
           piercingStyle: _selectedPiercingStyle,
+          headwearSize: _selectedHeadwearSize,
+          headwearWidth: _selectedHeadwearWidth,
+          headwearHeight: _selectedHeadwearHeight,
+          headwearOffsetX: _selectedHeadwearOffsetX,
+          headwearOffsetY: _selectedHeadwearOffsetY,
           hairSize: _selectedHairSize,
           hairWidth: _selectedHairWidth,
           hairHeight: _selectedHairHeight,
@@ -1341,6 +1363,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _selectedGlassesStyle = result.glassesStyle;
       _selectedHeadwearStyle = result.headwearStyle;
       _selectedPiercingStyle = result.piercingStyle;
+      _selectedHeadwearSize = result.headwearSize;
+      _selectedHeadwearWidth = result.headwearWidth;
+      _selectedHeadwearHeight = result.headwearHeight;
+      _selectedHeadwearOffsetX = result.headwearOffsetX;
+      _selectedHeadwearOffsetY = result.headwearOffsetY;
       _selectedHairSize = result.hairSize;
       _selectedHairWidth = result.hairWidth;
       _selectedHairHeight = result.hairHeight;
@@ -1423,7 +1450,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             label: Text(tab.label),
             selected: active,
             onSelected: (_) {
-              if (tab != _StudioTab.companion && tab != _StudioTab.stickFigure) {
+              if (tab != _StudioTab.companion) {
                 _stopLiveScenePlayback();
               }
               setState(() => _activeTab = tab);
@@ -1477,12 +1504,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget _buildActiveTabContent(
     BuildContext context,
     DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
   ) {
     return switch (_activeTab) {
-      _StudioTab.companion => _buildCompanionTab(context, controller, currentPersonality, currentPetMode),
-      _StudioTab.stickFigure => _buildStickFigureTab(context, controller, currentPersonality, currentPetMode),
+      _StudioTab.companion => _buildCompanionTab(context, controller),
       _StudioTab.notes => _buildNotesTab(context, controller),
       _StudioTab.banner => _buildBannerTab(context, controller),
       _StudioTab.flowers => _buildFlowersTab(context, controller),
@@ -1491,7 +1515,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       _StudioTab.draw => _buildDrawTab(context, controller),
       _StudioTab.countdown => _buildCountdownTab(context, controller),
       _StudioTab.goodnight => _buildGoodnightTab(context, controller),
-      _StudioTab.liveView => _buildLiveViewTab(context, controller, currentPersonality, currentPetMode),
+      _StudioTab.liveView => _buildLiveViewTab(context, controller),
       _StudioTab.settings => _buildSettingsTab(context, controller),
     };
   }
@@ -1503,8 +1527,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget _buildCompanionTab(
     BuildContext context,
     DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1554,8 +1576,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                           child: CompanionFacePreview(
                             visualModel: CompanionVisualModel.classic,
                             scene: CompanionScene.none,
-                            personality: currentPersonality.command,
-                            petMode: currentPetMode.command,
+                            personality: 'curious',
+                            petMode: 'off',
                             expression: _appearancePreviewReferencePose
                                 ? null
                                 : _selectedExpression.command,
@@ -1565,6 +1587,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                             glasses: _selectedGlassesStyle.command,
                             headwear: _selectedHeadwearStyle.command,
                             piercing: _selectedPiercingStyle.command,
+                            headwearSize: _selectedHeadwearSize.round(),
+                            headwearWidth: _selectedHeadwearWidth.round(),
+                            headwearHeight: _selectedHeadwearHeight.round(),
+                            headwearOffsetX: _selectedHeadwearOffsetX.round(),
+                            headwearOffsetY: _selectedHeadwearOffsetY.round(),
                             hairSize: _selectedHairSize.round(),
                             mustacheSize: _selectedMustacheSize.round(),
                             hairWidth: _selectedHairWidth.round(),
@@ -1613,53 +1640,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // ── Personality & Pet mode ──
-        _SectionCard(
-          title: 'Personality & pet mode',
-          subtitle: 'Personality drives idle animations. Pet mode changes interaction style.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildStudioDropdown(
-                context,
-                label: 'Personality',
-                value: _selectedPersonality,
-                values: DeskPersonality.values,
-                labelBuilder: (value) => value.label,
-                enabled: !controller.busy,
-                onChanged: (value) => setState(() => _selectedPersonality = value),
-              ),
-              const SizedBox(height: 10),
-              _buildStudioDropdown(
-                context,
-                label: 'Pet mode',
-                value: _selectedPetMode,
-                values: DeskPetMode.values,
-                labelBuilder: (value) => value.label,
-                enabled: !controller.busy,
-                onChanged: (value) => setState(() => _selectedPetMode = value),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () async {
-                              await controller.setPetPersonality(_selectedPersonality.command);
-                              await controller.triggerPetMode(_selectedPetMode.command);
-                            },
-                            success: 'Personality & pet mode applied!',
-                          ),
-                  icon: const Icon(Icons.pets_outlined),
-                  label: const Text('Apply behavior'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         // ── Edit studio link ──
         SizedBox(
           width: double.infinity,
@@ -1673,272 +1653,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
-  Widget _buildStickFigureTab(
-    BuildContext context,
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) {
-    final supportsLiveBleScene = controller.isBleConnected;
-    final streamsLiveBleScene = supportsLiveBleScene && !_appearancePreviewReferencePose;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionCard(
-          title: 'Stick figure scenes',
-          subtitle: 'Pick a scene for the stick-figure duo and tune their motion.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildStudioDropdown(
-                context,
-                label: 'Visual model',
-                value: _selectedVisualModel,
-                values: CompanionVisualModel.values.where((v) => v != CompanionVisualModel.classic).toList(),
-                labelBuilder: (value) => value.label,
-                enabled: !controller.busy,
-                onChanged: (value) {
-                  _appearanceDraftDirty = true;
-                  _updateSelectedVisualModel(controller, value);
-                },
-              ),
-              const SizedBox(height: 10),
-              _buildStudioDropdown(
-                context,
-                label: 'Scene',
-                value: _selectedScene,
-                values: CompanionScene.values,
-                labelBuilder: (value) => value.label,
-                enabled: !controller.busy,
-                onChanged: (value) => setState(() {
-                  _appearanceDraftDirty = true;
-                  _selectedScene = value;
-                  _persistStudioPreviewState(controller);
-                }),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _selectedScene.description,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white24),
-                    borderRadius: BorderRadius.circular(8),
-                    color: const Color(0xFF1A1A2E),
-                  ),
-                  width: 160,
-                  height: 120,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: FittedBox(
-                      child: SizedBox(
-                        width: 320,
-                        height: 240,
-                        child: CompanionFacePreview(
-                          visualModel: _selectedVisualModel,
-                          scene: _selectedScene,
-                          personality: _selectedPersonality.command,
-                          petMode: _selectedPetMode.command,
-                          expression: _appearancePreviewReferencePose
-                              ? null
-                              : _selectedExpression.command,
-                          hair: _selectedHairStyle.command,
-                          ears: _selectedEarsStyle.command,
-                          mustache: _selectedMustacheStyle.command,
-                          glasses: _selectedGlassesStyle.command,
-                          headwear: _selectedHeadwearStyle.command,
-                          piercing: _selectedPiercingStyle.command,
-                          hairSize: _selectedHairSize.round(),
-                          mustacheSize: _selectedMustacheSize.round(),
-                          hairWidth: _selectedHairWidth.round(),
-                          hairHeight: _selectedHairHeight.round(),
-                          hairThickness: _selectedHairThickness.round(),
-                          hairOffsetX: _selectedHairOffsetX.round(),
-                          hairOffsetY: _selectedHairOffsetY.round(),
-                          eyeOffsetX: _selectedEyeOffsetX.round(),
-                          eyeOffsetY: _selectedEyeOffsetY.round(),
-                          mouthOffsetX: _selectedMouthOffsetX.round(),
-                          mouthOffsetY: _selectedMouthOffsetY.round(),
-                          companionScale: _companionScale.round(),
-                          companionOffsetX: _companionOffsetX.round(),
-                          companionOffsetY: _companionOffsetY.round(),
-                          mustacheWidth: _selectedMustacheWidth.round(),
-                          mustacheHeight: _selectedMustacheHeight.round(),
-                          mustacheThickness: _selectedMustacheThickness.round(),
-                          mustacheOffsetX: _selectedMustacheOffsetX.round(),
-                          mustacheOffsetY: _selectedMustacheOffsetY.round(),
-                          stickFigureScale: _stickFigureScale.round(),
-                          stickFigureSpacing: _stickFigureSpacing.round(),
-                          stickFigureEnergy: _stickFigureEnergy.round(),
-                          eyeColor: _eyeColor,
-                          faceColor: _faceColor,
-                          accentColor: _accentColor,
-                          bodyColor: _bodyColor,
-                          hairColor: _hairColor,
-                          hatColor: _hatColor,
-                          mustacheColor: _mustacheColor,
-                          mouthColor: _mouthColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildStudioSlider(
-                context,
-                'Figure scale ${_stickFigureScale.round()}%',
-                _stickFigureScale,
-                (value) => setState(() {
-                  _appearanceDraftDirty = true;
-                  _stickFigureScale = value;
-                  _persistStudioPreviewState(controller);
-                }),
-              ),
-              _buildStudioSlider(
-                context,
-                'Partner spacing ${_stickFigureSpacing.round()}%',
-                _stickFigureSpacing,
-                (value) => setState(() {
-                  _appearanceDraftDirty = true;
-                  _stickFigureSpacing = value;
-                  _persistStudioPreviewState(controller);
-                }),
-              ),
-              _buildStudioSlider(
-                context,
-                'Scene energy ${_stickFigureEnergy.round()}%',
-                _stickFigureEnergy,
-                (value) => setState(() {
-                  _appearanceDraftDirty = true;
-                  _stickFigureEnergy = value;
-                  _persistStudioPreviewState(controller);
-                }),
-                min: 0,
-                max: 100,
-                divisions: 20,
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _toggleStudioSceneSend(
-                            controller,
-                            currentPersonality,
-                            currentPetMode,
-                          ),
-                  icon: Icon(
-                    streamsLiveBleScene
-                        ? (_scenePlaybackActive
-                            ? Icons.stop_circle_outlined
-                            : Icons.play_circle_outline)
-                        : Icons.monitor_outlined,
-                  ),
-                  label: Text(
-                    streamsLiveBleScene
-                        ? (_scenePlaybackActive
-                            ? 'Stop live scene'
-                            : 'Start live scene')
-                        : 'Send scene snapshot',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionCard(
-          title: 'Display colors',
-          subtitle: 'Customise companion colors on the device display.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Face', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Hat', color: _hatColor, onChanged: (c) => setState(() => _hatColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Mustache', color: _mustacheColor, onChanged: (c) => setState(() => _mustacheColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
-              const SizedBox(height: 8),
-              _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () => controller.sendColors(
-                              eyeColor: _colorToRgb565(_eyeColor),
-                              faceColor: _colorToRgb565(_faceColor),
-                              accentColor: _colorToRgb565(_accentColor),
-                              bodyColor: _colorToRgb565(_bodyColor),
-                              hairColor: _colorToRgb565(_hairColor),
-                              hatColor: _colorToRgb565(_hatColor),
-                              mustacheColor: _colorToRgb565(_mustacheColor),
-                              mouthColor: _colorToRgb565(_mouthColor),
-                            ),
-                            success: 'Colors applied!',
-                          ),
-                  icon: const Icon(Icons.palette_outlined),
-                  label: const Text('Apply colors'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionCard(
-          title: 'Live scenes',
-          subtitle: 'Send a duo animation directly to the device display.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: DeskScene.values
-                    .map(
-                      (scene) => ChoiceChip(
-                        label: Text(scene.label),
-                        selected: _selectedDeskScene == scene,
-                        onSelected: (_) =>
-                            setState(() => _selectedDeskScene = scene),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: controller.busy || !controller.canControlDevice
-                      ? null
-                      : () => _perform(
-                            () => controller.sendScene(_selectedDeskScene.command),
-                            success: '${_selectedDeskScene.label} scene started!',
-                          ),
-                  icon: const Icon(Icons.people_outline),
-                  label: Text('Start ${_selectedDeskScene.label}'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildNotesTab(BuildContext context, DeskCompanionController controller) {
     return _buildStickyNoteSection(context, controller);
@@ -1984,7 +1699,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget _buildFlowersTab(BuildContext context, DeskCompanionController controller) {
     return _SectionCard(
       title: 'Flowers',
-      subtitle: 'Full-screen animated flowers — a little gift that fills the whole display.',
+      subtitle: 'Build a single bloom, a row, or a bouquet with custom flower colors and mixed stems.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2003,17 +1718,70 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: DeskFlowerArrangement.values
+                .map(
+                  (arrangement) => ChoiceChip(
+                    label: Text(arrangement.label),
+                    selected: _selectedFlowerArrangement == arrangement,
+                    onSelected: (_) => setState(() => _selectedFlowerArrangement = arrangement),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Mixed bouquet'),
+            subtitle: const Text('Cycle through multiple flower types instead of repeating one bloom.'),
+            value: _selectedFlowerMix,
+            onChanged: controller.busy ? null : (value) => setState(() => _selectedFlowerMix = value),
+          ),
+          _buildStudioSlider(
+            context,
+            'Flower count ${_selectedFlowerCount.round()}',
+            _selectedFlowerCount,
+            controller.busy ? (_) {} : (value) => setState(() => _selectedFlowerCount = value),
+            min: 1,
+            max: 7,
+            divisions: 6,
+          ),
+          _buildStudioSlider(
+            context,
+            'Flower size ${_selectedFlowerSize.round()}%',
+            _selectedFlowerSize,
+            controller.busy ? (_) {} : (value) => setState(() => _selectedFlowerSize = value),
+            min: 40,
+            max: 180,
+            divisions: 14,
+          ),
+          const SizedBox(height: 8),
+          _ColorRow(label: 'Petals', color: _flowerPetalColor, onChanged: (c) => setState(() => _flowerPetalColor = c)),
+          _ColorRow(label: 'Center', color: _flowerCenterColor, onChanged: (c) => setState(() => _flowerCenterColor = c)),
+          _ColorRow(label: 'Stem', color: _flowerStemColor, onChanged: (c) => setState(() => _flowerStemColor = c)),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: controller.busy || !controller.canControlDevice
                   ? null
                   : () => _perform(
-                        () => controller.sendFlower(_selectedFlower.command),
-                        success: '${_selectedFlower.label} blooming on the display!',
+                        () => controller.sendFlowerConfig(
+                          flower: _selectedFlower.command,
+                          count: _selectedFlowerCount.round(),
+                          size: _selectedFlowerSize.round(),
+                          arrangement: _selectedFlowerArrangement.command,
+                          mixed: _selectedFlowerMix,
+                          petalColor: _colorToRgb565(_flowerPetalColor),
+                          centerColor: _colorToRgb565(_flowerCenterColor),
+                          stemColor: _colorToRgb565(_flowerStemColor),
+                        ),
+                        success: '${_selectedFlowerArrangement.label} ${_selectedFlower.label.toLowerCase()} display queued.',
                       ),
               icon: const Icon(Icons.local_florist_outlined),
-              label: Text('Send ${_selectedFlower.label}'),
+              label: Text('Send flower scene'),
             ),
           ),
         ],
@@ -2638,8 +2406,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget _buildLiveViewTab(
     BuildContext context,
     DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
   ) {
     final mode = controller.currentDeviceMode;
     return _SectionCard(
@@ -2658,7 +2424,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               ),
             )
           else
-            _buildLiveViewContent(context, controller, currentPersonality, currentPetMode, mode),
+            _buildLiveViewContent(context, controller, mode),
           const SizedBox(height: 12),
           _ChipLabel(label: mode.isEmpty ? 'Disconnected' : mode),
         ],
@@ -2669,8 +2435,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   Widget _buildLiveViewContent(
     BuildContext context,
     DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
     String mode,
   ) {
     // Decide what to show based on the device's actual current mode.
@@ -2691,8 +2455,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         child: CompanionFacePreview(
           visualModel: CompanionVisualModel.classic,
           scene: CompanionScene.none,
-          personality: currentPersonality.command,
-          petMode: currentPetMode.command,
+          personality: 'curious',
+          petMode: 'off',
           expression: _selectedExpression.command,
           hair: _selectedHairStyle.command,
           ears: _selectedEarsStyle.command,
@@ -2700,6 +2464,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           glasses: _selectedGlassesStyle.command,
           headwear: _selectedHeadwearStyle.command,
           piercing: _selectedPiercingStyle.command,
+          headwearSize: _selectedHeadwearSize.round(),
+          headwearWidth: _selectedHeadwearWidth.round(),
+          headwearHeight: _selectedHeadwearHeight.round(),
+          headwearOffsetX: _selectedHeadwearOffsetX.round(),
+          headwearOffsetY: _selectedHeadwearOffsetY.round(),
           hairSize: _selectedHairSize.round(),
           mustacheSize: _selectedMustacheSize.round(),
           hairWidth: _selectedHairWidth.round(),
@@ -2739,8 +2508,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               ? CompanionVisualModel.stickFigure
               : _selectedVisualModel,
           scene: _selectedScene,
-          personality: currentPersonality.command,
-          petMode: currentPetMode.command,
+          personality: 'curious',
+          petMode: 'off',
           expression: _selectedExpression.command,
           hair: _selectedHairStyle.command,
           ears: _selectedEarsStyle.command,
@@ -2748,6 +2517,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           glasses: _selectedGlassesStyle.command,
           headwear: _selectedHeadwearStyle.command,
           piercing: _selectedPiercingStyle.command,
+          headwearSize: _selectedHeadwearSize.round(),
+          headwearWidth: _selectedHeadwearWidth.round(),
+          headwearHeight: _selectedHeadwearHeight.round(),
+          headwearOffsetX: _selectedHeadwearOffsetX.round(),
+          headwearOffsetY: _selectedHeadwearOffsetY.round(),
           hairSize: _selectedHairSize.round(),
           mustacheSize: _selectedMustacheSize.round(),
           hairWidth: _selectedHairWidth.round(),
@@ -2909,7 +2683,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
               ],
               if (controller.hasRelayTarget) ...[
                 const SizedBox(height: 10),
-                Text('Token: ${controller.deviceToken} | Pending: ${controller.relayPendingCount}', style: Theme.of(context).textTheme.bodySmall),
+                Text('Token: ${controller.deviceToken} | Relay cmds pending: ${controller.relayPendingCount}', style: Theme.of(context).textTheme.bodySmall),
                 if (controller.relayLastCommandAt != null)
                   Text('Last command queued: ${_relativeTimeLabel(controller.relayLastCommandAt!)}', style: Theme.of(context).textTheme.bodySmall),
                 if (controller.relayLastSeenAt != null)
@@ -3476,19 +3250,30 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         .trim();
     if (text.isEmpty) return;
 
-    // Render notes as full-color cards for both BLE and relay so the device
-    // matches the on-screen preview exactly.
+    // Use the native note command unless a custom text color requires the
+    // preview-accurate color-image path.
     await _perform(
       () async {
-        final rgb565 = await NoteCardPreview.renderToRgb565(
-          text: text,
-          fontSize: _noteFontSize.round(),
-          border: _noteBorderStyle,
-          icons: List.unmodifiable(_noteIcons),
-          flowerAccent: _noteFlowerAccent,
-          textColor: _noteTextColor,
-        );
-        await controller.sendNoteAsImage(rgb565);
+        final canUseNativeNote = _noteTextColor == Colors.white;
+        if (canUseNativeNote) {
+          await controller.sendNote(
+            text,
+            fontSize: _noteFontSize.round(),
+            border: _noteBorderStyle,
+            icons: _noteIcons.join(','),
+            flowerAccent: _noteFlowerAccent ?? '',
+          );
+        } else {
+          final rgb565 = await NoteCardPreview.renderToRgb565(
+            text: text,
+            fontSize: _noteFontSize.round(),
+            border: _noteBorderStyle,
+            icons: List.unmodifiable(_noteIcons),
+            flowerAccent: _noteFlowerAccent,
+            textColor: _noteTextColor,
+          );
+          await controller.sendNoteAsImage(rgb565);
+        }
         if (_selectedNoteAnimation != DeskNoteAnimation.none) {
           await controller.sendNoteAnimation(_selectedNoteAnimation.command);
         }
@@ -3526,6 +3311,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           glasses: _selectedGlassesStyle.command,
           headwear: _selectedHeadwearStyle.command,
           piercing: _selectedPiercingStyle.command,
+          headwearSize: _selectedHeadwearSize.round(),
+          headwearWidth: _selectedHeadwearWidth.round(),
+          headwearHeight: _selectedHeadwearHeight.round(),
+          headwearOffsetX: _selectedHeadwearOffsetX.round(),
+          headwearOffsetY: _selectedHeadwearOffsetY.round(),
           hairSize: _selectedHairSize.round(),
           mustacheSize: _selectedMustacheSize.round(),
           hairWidth: _selectedHairWidth.round(),
@@ -3563,125 +3353,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _appearanceDraftDirty = false;
   }
 
-  Future<void> _toggleStudioSceneSend(
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) async {
-    if (_selectedVisualModel.isDeviceSupported &&
-        _selectedScene == CompanionScene.none) {
-      await _sendCompanionStyle(controller);
-      return;
-    }
-
-    // Stick-figure scenes run natively on the firmware at 60fps — send the
-    // set_scene command instead of streaming monochrome bitmaps over BLE.
-    if (_selectedVisualModel == CompanionVisualModel.stickFigure &&
-        _selectedScene != CompanionScene.none) {
-      // Send colors first so the firmware can use them
-      await _perform(
-        () async {
-          await controller.sendColors(
-            eyeColor: _colorToRgb565(_eyeColor),
-            faceColor: _colorToRgb565(_faceColor),
-            accentColor: _colorToRgb565(_accentColor),
-            bodyColor: _colorToRgb565(_bodyColor),
-            hairColor: _colorToRgb565(_hairColor),
-            hatColor: _colorToRgb565(_hatColor),
-            mustacheColor: _colorToRgb565(_mustacheColor),
-            mouthColor: _colorToRgb565(_mouthColor),
-          );
-          await controller.sendScene(_selectedScene.command);
-        },
-        success: '${_selectedScene.label} scene started on device.',
-      );
-      return;
-    }
-
-    if (!controller.isBleConnected) {
-      await _sendStudioPreviewSnapshot(
-        controller,
-        currentPersonality,
-        currentPetMode,
-      );
-      return;
-    }
-
-    if (_appearancePreviewReferencePose) {
-      await _sendStudioPreviewSnapshot(
-        controller,
-        currentPersonality,
-        currentPetMode,
-      );
-      return;
-    }
-
-    if (_scenePlaybackActive) {
-      _stopLiveScenePlayback();
-      _showMessage('Live scene streaming stopped.');
-      return;
-    }
-
-    setState(() => _scenePlaybackActive = true);
-    unawaited(
-      _runLiveScenePlayback(
-        controller,
-        currentPersonality,
-        currentPetMode,
-      ),
-    );
-    _showMessage('Streaming the scene live over BLE.');
-  }
-
-  Duration _scenePlaybackDuration() {
-    if (_appearancePreviewReferencePose) {
-      return const Duration(milliseconds: 2400);
-    }
-
-    return switch (_selectedVisualModel) {
-      CompanionVisualModel.classic => const Duration(milliseconds: 2400),
-      CompanionVisualModel.stickFigure => switch (_selectedScene) {
-          CompanionScene.holdHands => const Duration(milliseconds: 7200),
-          CompanionScene.hug ||
-          CompanionScene.kiss ||
-          CompanionScene.shyLeanIn => const Duration(milliseconds: 5200),
-          CompanionScene.wave ||
-          CompanionScene.bow => const Duration(milliseconds: 3600),
-          CompanionScene.none => const Duration(milliseconds: 3000),
-        },
-      CompanionVisualModel.robot => const Duration(milliseconds: 4200),
-    };
-  }
-
-  Duration _scenePlaybackFrameInterval() {
-    if (_appearancePreviewReferencePose) {
-      return const Duration(milliseconds: 160);
-    }
-
-    switch (_selectedVisualModel) {
-      case CompanionVisualModel.classic:
-        return const Duration(milliseconds: 90);
-      case CompanionVisualModel.stickFigure:
-        // Target 60fps (16ms) for smooth stick figure animations
-        return const Duration(milliseconds: 16);
-      case CompanionVisualModel.robot:
-        // Target 60fps (16ms) for smooth robot animations
-        return const Duration(milliseconds: 16);
-    }
-  }
-
-  double _currentScenePlaybackProgress() {
-    if (_appearancePreviewReferencePose) {
-      return 0;
-    }
-    final durationMs = _scenePlaybackDuration().inMilliseconds;
-    if (durationMs <= 0) {
-      return 0;
-    }
-    final elapsedMs = _scenePlaybackClock.elapsedMilliseconds % durationMs;
-    return elapsedMs / durationMs;
-  }
-
   void _stopLiveScenePlayback({bool updateUi = true}) {
     _scenePlaybackToken += 1;
     _scenePlaybackClock.stop();
@@ -3691,140 +3362,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     } else {
       _scenePlaybackActive = false;
     }
-  }
-
-  Future<void> _runLiveScenePlayback(
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) async {
-    final playbackToken = ++_scenePlaybackToken;
-    _scenePlaybackClock
-      ..reset()
-      ..start();
-
-    while (mounted &&
-        _scenePlaybackActive &&
-        _scenePlaybackToken == playbackToken &&
-        controller.isBleConnected) {
-      await _pushLiveSceneFrame(
-        controller,
-        currentPersonality,
-        currentPetMode,
-      );
-      await Future<void>.delayed(_scenePlaybackFrameInterval());
-    }
-
-    if (_scenePlaybackToken == playbackToken) {
-      _stopLiveScenePlayback();
-    }
-  }
-
-  Future<void> _pushLiveSceneFrame(
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) async {
-    final payload = await renderCompanionFacePreviewPayload(
-      visualModel: _selectedVisualModel,
-      scene: _selectedScene,
-      personality: _appearancePreviewReferencePose
-          ? _selectedPersonality.command
-          : currentPersonality.command,
-      petMode: _appearancePreviewReferencePose
-          ? _selectedPetMode.command
-          : currentPetMode.command,
-      referencePose: _appearancePreviewReferencePose,
-      expression: _appearancePreviewReferencePose
-          ? null
-          : _selectedExpression.command,
-      hair: _selectedHairStyle.command,
-      ears: _selectedEarsStyle.command,
-      mustache: _selectedMustacheStyle.command,
-      glasses: _selectedGlassesStyle.command,
-      headwear: _selectedHeadwearStyle.command,
-      piercing: _selectedPiercingStyle.command,
-      hairSize: _selectedHairSize.round(),
-      mustacheSize: _selectedMustacheSize.round(),
-      hairWidth: _selectedHairWidth.round(),
-      hairHeight: _selectedHairHeight.round(),
-      hairThickness: _selectedHairThickness.round(),
-      hairOffsetX: _selectedHairOffsetX.round(),
-      hairOffsetY: _selectedHairOffsetY.round(),
-      eyeOffsetX: _selectedEyeOffsetX.round(),
-      eyeOffsetY: _selectedEyeOffsetY.round(),
-      mouthOffsetX: _selectedMouthOffsetX.round(),
-      mouthOffsetY: _selectedMouthOffsetY.round(),
-      companionScale: _companionScale.round(),
-      companionOffsetX: _companionOffsetX.round(),
-      companionOffsetY: _companionOffsetY.round(),
-      mustacheWidth: _selectedMustacheWidth.round(),
-      mustacheHeight: _selectedMustacheHeight.round(),
-      mustacheThickness: _selectedMustacheThickness.round(),
-      mustacheOffsetX: _selectedMustacheOffsetX.round(),
-      mustacheOffsetY: _selectedMustacheOffsetY.round(),
-      stickFigureScale: _stickFigureScale.round(),
-      stickFigureSpacing: _stickFigureSpacing.round(),
-      stickFigureEnergy: _stickFigureEnergy.round(),
-      animationProgress: _currentScenePlaybackProgress(),
-      name: 'studio_live_${_selectedVisualModel.command}_${_selectedScene.command}',
-    );
-    await controller.sendLiveBitmap(payload.bitmap);
-  }
-
-  Future<void> _sendStudioPreviewSnapshot(
-    DeskCompanionController controller,
-    DeskPersonality currentPersonality,
-    DeskPetMode currentPetMode,
-  ) async {
-    final payload = await renderCompanionFacePreviewPayload(
-      visualModel: _selectedVisualModel,
-      scene: _selectedScene,
-      personality: _appearancePreviewReferencePose
-          ? _selectedPersonality.command
-          : currentPersonality.command,
-      petMode: _appearancePreviewReferencePose
-          ? _selectedPetMode.command
-          : currentPetMode.command,
-      referencePose: _appearancePreviewReferencePose,
-      expression: _appearancePreviewReferencePose
-          ? null
-          : _selectedExpression.command,
-      hair: _selectedHairStyle.command,
-      ears: _selectedEarsStyle.command,
-      mustache: _selectedMustacheStyle.command,
-      glasses: _selectedGlassesStyle.command,
-      headwear: _selectedHeadwearStyle.command,
-      piercing: _selectedPiercingStyle.command,
-      hairSize: _selectedHairSize.round(),
-      mustacheSize: _selectedMustacheSize.round(),
-      hairWidth: _selectedHairWidth.round(),
-      hairHeight: _selectedHairHeight.round(),
-      hairThickness: _selectedHairThickness.round(),
-      hairOffsetX: _selectedHairOffsetX.round(),
-      hairOffsetY: _selectedHairOffsetY.round(),
-      eyeOffsetX: _selectedEyeOffsetX.round(),
-      eyeOffsetY: _selectedEyeOffsetY.round(),
-      mouthOffsetX: _selectedMouthOffsetX.round(),
-      mouthOffsetY: _selectedMouthOffsetY.round(),
-      companionScale: _companionScale.round(),
-      companionOffsetX: _companionOffsetX.round(),
-      companionOffsetY: _companionOffsetY.round(),
-      mustacheWidth: _selectedMustacheWidth.round(),
-      mustacheHeight: _selectedMustacheHeight.round(),
-      mustacheThickness: _selectedMustacheThickness.round(),
-      mustacheOffsetX: _selectedMustacheOffsetX.round(),
-      mustacheOffsetY: _selectedMustacheOffsetY.round(),
-      stickFigureScale: _stickFigureScale.round(),
-      stickFigureSpacing: _stickFigureSpacing.round(),
-      stickFigureEnergy: _stickFigureEnergy.round(),
-      name: 'studio_${_selectedVisualModel.command}_${_selectedScene.command}',
-    );
-
-    await _perform(
-      () => controller.sendImage(payload),
-      success: 'Scene snapshot delivered to the display.',
-    );
   }
 
   Future<void> _sendCanvas(DeskCompanionController controller) async {
@@ -3959,24 +3496,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       return '${age.inMinutes}m ago';
     }
     return '${age.inHours}h ago';
-  }
-
-  DeskPersonality? _personalityFromCommand(String value) {
-    for (final personality in DeskPersonality.values) {
-      if (personality.command == value.trim()) {
-        return personality;
-      }
-    }
-    return null;
-  }
-
-  DeskPetMode? _petModeFromCommand(String value) {
-    for (final petMode in DeskPetMode.values) {
-      if (petMode.command == value.trim()) {
-        return petMode;
-      }
-    }
-    return null;
   }
 
   DeskHairStyle? _hairStyleFromCommand(String value) {
@@ -4662,6 +4181,11 @@ class _AppearanceEditorResult {
     required this.glassesStyle,
     required this.headwearStyle,
     required this.piercingStyle,
+    required this.headwearSize,
+    required this.headwearWidth,
+    required this.headwearHeight,
+    required this.headwearOffsetX,
+    required this.headwearOffsetY,
     required this.hairSize,
     required this.hairWidth,
     required this.hairHeight,
@@ -4705,6 +4229,11 @@ class _AppearanceEditorResult {
   final DeskGlassesStyle glassesStyle;
   final DeskHeadwearStyle headwearStyle;
   final DeskPiercingStyle piercingStyle;
+  final double headwearSize;
+  final double headwearWidth;
+  final double headwearHeight;
+  final double headwearOffsetX;
+  final double headwearOffsetY;
   final double hairSize;
   final double hairWidth;
   final double hairHeight;
@@ -4772,6 +4301,11 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
     required this.glassesStyle,
     required this.headwearStyle,
     required this.piercingStyle,
+    required this.headwearSize,
+    required this.headwearWidth,
+    required this.headwearHeight,
+    required this.headwearOffsetX,
+    required this.headwearOffsetY,
     required this.hairSize,
     required this.hairWidth,
     required this.hairHeight,
@@ -4819,6 +4353,11 @@ class _FullscreenAppearanceEditor extends StatefulWidget {
   final DeskGlassesStyle glassesStyle;
   final DeskHeadwearStyle headwearStyle;
   final DeskPiercingStyle piercingStyle;
+  final double headwearSize;
+  final double headwearWidth;
+  final double headwearHeight;
+  final double headwearOffsetX;
+  final double headwearOffsetY;
   final double hairSize;
   final double hairWidth;
   final double hairHeight;
@@ -4869,6 +4408,11 @@ class _FullscreenAppearanceEditorState
   late DeskGlassesStyle _glassesStyle;
   late DeskHeadwearStyle _headwearStyle;
   late DeskPiercingStyle _piercingStyle;
+  late double _headwearSize;
+  late double _headwearWidth;
+  late double _headwearHeight;
+  late double _headwearOffsetX;
+  late double _headwearOffsetY;
   late double _hairSize;
   late double _hairWidth;
   late double _hairHeight;
@@ -4915,6 +4459,11 @@ class _FullscreenAppearanceEditorState
     _glassesStyle = widget.glassesStyle;
     _headwearStyle = widget.headwearStyle;
     _piercingStyle = widget.piercingStyle;
+    _headwearSize = widget.headwearSize;
+    _headwearWidth = widget.headwearWidth;
+    _headwearHeight = widget.headwearHeight;
+    _headwearOffsetX = widget.headwearOffsetX;
+    _headwearOffsetY = widget.headwearOffsetY;
     _hairSize = widget.hairSize;
     _hairWidth = widget.hairWidth;
     _hairHeight = widget.hairHeight;
@@ -5099,6 +4648,11 @@ class _FullscreenAppearanceEditorState
                 glasses: _glassesStyle.command,
                 headwear: _headwearStyle.command,
                 piercing: _piercingStyle.command,
+                headwearSize: _headwearSize.round(),
+                headwearWidth: _headwearWidth.round(),
+                headwearHeight: _headwearHeight.round(),
+                headwearOffsetX: _headwearOffsetX.round(),
+                headwearOffsetY: _headwearOffsetY.round(),
                 hairSize: _hairSize.round(),
                 mustacheSize: _mustacheSize.round(),
                 hairWidth: _hairWidth.round(),
@@ -5316,6 +4870,35 @@ class _FullscreenAppearanceEditorState
             _headwearStyle,
             (value) => setState(() => _headwearStyle = value),
             (value) => value.label,
+          ),
+          const SizedBox(height: 12),
+          _buildSlider(
+            context,
+            'Headwear size ${_headwearSize.round()}%',
+            _headwearSize,
+            (value) => setState(() => _headwearSize = value),
+          ),
+          _buildSlider(
+            context,
+            'Headwear width ${_headwearWidth.round()}%',
+            _headwearWidth,
+            (value) => setState(() => _headwearWidth = value),
+          ),
+          _buildSlider(
+            context,
+            'Headwear height ${_headwearHeight.round()}%',
+            _headwearHeight,
+            (value) => setState(() => _headwearHeight = value),
+          ),
+          const SizedBox(height: 8),
+          _OffsetPad(
+            title: 'Headwear placement',
+            offsetX: _headwearOffsetX,
+            offsetY: _headwearOffsetY,
+            onChanged: (x, y) => setState(() {
+              _headwearOffsetX = x;
+              _headwearOffsetY = y;
+            }),
           ),
           const SizedBox(height: 12),
           _buildSlider(
@@ -5634,6 +5217,11 @@ class _FullscreenAppearanceEditorState
         glassesStyle: _glassesStyle,
         headwearStyle: _headwearStyle,
         piercingStyle: _piercingStyle,
+        headwearSize: _headwearSize,
+        headwearWidth: _headwearWidth,
+        headwearHeight: _headwearHeight,
+        headwearOffsetX: _headwearOffsetX,
+        headwearOffsetY: _headwearOffsetY,
         hairSize: _hairSize,
         hairWidth: _hairWidth,
         hairHeight: _hairHeight,

@@ -383,10 +383,16 @@ class _NoteCardPainter extends CustomPainter {
 
   void _drawFlowerAccent(Canvas canvas, String accent) {
     switch (accent) {
+      case 'tulip':
+        _drawTulip(canvas, const Offset(50, 112), 4);
       case 'sunflower':
         _drawSunflower(canvas, const Offset(50, 112), 4);
+      case 'daisy':
+        _drawDaisy(canvas, const Offset(50, 112), 4);
       case 'king_protea':
         _drawKingProtea(canvas, const Offset(50, 112), 4);
+      case 'lily':
+        _drawLily(canvas, const Offset(50, 112), 4);
       default:
         _drawRose(canvas, const Offset(50, 112), 4);
     }
@@ -456,6 +462,77 @@ class _NoteCardPainter extends CustomPainter {
     canvas.drawOval(Rect.fromCenter(center: center, width: 10 * scale, height: 8 * scale), stroke);
     canvas.drawCircle(center, 2 * scale, fill);
     canvas.drawLine(Offset(center.dx, center.dy + 7 * scale), Offset(center.dx, 218), stroke);
+  }
+
+  void _drawTulip(Canvas canvas, Offset center, double scale) {
+    final fill = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 218), stroke);
+    final path = Path()
+      ..moveTo(center.dx - 8 * scale, center.dy + 2 * scale)
+      ..lineTo(center.dx, center.dy - 10 * scale)
+      ..lineTo(center.dx + 8 * scale, center.dy + 2 * scale)
+      ..close();
+    canvas.drawPath(path, stroke);
+    canvas.drawCircle(center, 2.5 * scale, fill);
+  }
+
+  void _drawDaisy(Canvas canvas, Offset center, double scale) {
+    final fill = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 218), stroke);
+    for (var index = 0; index < 10; index++) {
+      final angle = (math.pi * 2 * index) / 10;
+      final petalCenter = Offset(
+        center.dx + math.cos(angle) * 9 * scale,
+        center.dy + math.sin(angle) * 9 * scale,
+      );
+      canvas.drawCircle(petalCenter, 3 * scale, stroke);
+    }
+    canvas.drawCircle(center, 4 * scale, fill);
+  }
+
+  void _drawLily(Canvas canvas, Offset center, double scale) {
+    final fill = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(center.dx, center.dy + 6 * scale), Offset(center.dx, 218), stroke);
+    for (var index = 0; index < 6; index++) {
+      final angle = (math.pi * 2 * index) / 6;
+      final tip = Offset(
+        center.dx + math.cos(angle) * 12 * scale,
+        center.dy + math.sin(angle) * 12 * scale,
+      );
+      final left = Offset(
+        center.dx + math.cos(angle + math.pi / 2) * 2 * scale,
+        center.dy + math.sin(angle + math.pi / 2) * 2 * scale,
+      );
+      final right = Offset(
+        center.dx + math.cos(angle - math.pi / 2) * 2 * scale,
+        center.dy + math.sin(angle - math.pi / 2) * 2 * scale,
+      );
+      final path = Path()
+        ..moveTo(left.dx, left.dy)
+        ..lineTo(tip.dx, tip.dy)
+        ..lineTo(right.dx, right.dy)
+        ..close();
+      canvas.drawPath(path, stroke);
+    }
+    canvas.drawCircle(center, 3 * scale, fill);
   }
 
   void _drawIconHeart(Canvas canvas, Offset center, double size) {

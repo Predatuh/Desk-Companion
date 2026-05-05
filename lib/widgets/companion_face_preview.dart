@@ -22,6 +22,11 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
   required String glasses,
   required String headwear,
   required String piercing,
+  int headwearSize = 100,
+  int headwearWidth = 100,
+  int headwearHeight = 100,
+  int headwearOffsetX = 0,
+  int headwearOffsetY = 0,
   required int hairSize,
   required int mustacheSize,
   required int hairWidth,
@@ -71,6 +76,11 @@ Future<CompanionImagePayload> renderCompanionFacePreviewPayload({
         glasses: glasses,
         headwear: headwear,
         piercing: piercing,
+        headwearSize: headwearSize,
+        headwearWidth: headwearWidth,
+        headwearHeight: headwearHeight,
+        headwearOffsetX: headwearOffsetX,
+        headwearOffsetY: headwearOffsetY,
         hairSize: hairSize,
         mustacheSize: mustacheSize,
         hairWidth: hairWidth,
@@ -196,6 +206,11 @@ class CompanionFacePreview extends StatefulWidget {
     required this.glasses,
     required this.headwear,
     required this.piercing,
+    this.headwearSize = 100,
+    this.headwearWidth = 100,
+    this.headwearHeight = 100,
+    this.headwearOffsetX = 0,
+    this.headwearOffsetY = 0,
     required this.hairSize,
     required this.mustacheSize,
     required this.hairWidth,
@@ -241,6 +256,11 @@ class CompanionFacePreview extends StatefulWidget {
   final String glasses;
   final String headwear;
   final String piercing;
+  final int headwearSize;
+  final int headwearWidth;
+  final int headwearHeight;
+  final int headwearOffsetX;
+  final int headwearOffsetY;
   final int hairSize;
   final int mustacheSize;
   final int hairWidth;
@@ -344,6 +364,11 @@ class _CompanionFacePreviewState extends State<CompanionFacePreview>
               glasses: widget.glasses,
               headwear: widget.headwear,
               piercing: widget.piercing,
+              headwearSize: widget.headwearSize,
+              headwearWidth: widget.headwearWidth,
+              headwearHeight: widget.headwearHeight,
+              headwearOffsetX: widget.headwearOffsetX,
+              headwearOffsetY: widget.headwearOffsetY,
               hairSize: widget.hairSize,
               mustacheSize: widget.mustacheSize,
               hairWidth: widget.hairWidth,
@@ -1185,6 +1210,11 @@ class _CompanionFacePainter extends CustomPainter {
     required this.glasses,
     required this.headwear,
     required this.piercing,
+    this.headwearSize = 100,
+    this.headwearWidth = 100,
+    this.headwearHeight = 100,
+    this.headwearOffsetX = 0,
+    this.headwearOffsetY = 0,
     required this.hairSize,
     required this.mustacheSize,
     required this.hairWidth,
@@ -1226,6 +1256,11 @@ class _CompanionFacePainter extends CustomPainter {
   final String glasses;
   final String headwear;
   final String piercing;
+  final int headwearSize;
+  final int headwearWidth;
+  final int headwearHeight;
+  final int headwearOffsetX;
+  final int headwearOffsetY;
   final int hairSize;
   final int mustacheSize;
   final int hairWidth;
@@ -1342,9 +1377,9 @@ class _CompanionFacePainter extends CustomPainter {
 
     canvas.save();
     canvas.translate(companionXShift, companionYShift);
-    canvas.translate(160, 120);
+    canvas.translate(160, 40);
     canvas.scale(companionScaleFactor, companionScaleFactor);
-    canvas.translate(-160, -120);
+    canvas.translate(-160, -40);
 
     final idleLeftX = 70.0 + _clampOffset(eyeOffsetX) * 2.0;
     final idleRightX = 170.0 + _clampOffset(eyeOffsetX) * 2.0;
@@ -1616,6 +1651,11 @@ class _CompanionFacePainter extends CustomPainter {
 
   void _drawAccessories(Canvas canvas, Paint stroke, Paint fill, Paint hairPaint, Paint hatPaint, Paint mustachePaint, Paint mustacheFill, double leftX, double rightX, double eyeY, double mouthY) {
     final faceCenterX = (leftX + rightX) / 2;
+    final scaledHeadwear = _clampPercent(headwearSize);
+    final scaledHeadwearWidth = _clampPercent(headwearWidth);
+    final scaledHeadwearHeight = _clampPercent(headwearHeight);
+    final headwearCenterX = faceCenterX + _clampOffset(headwearOffsetX) * 2.0;
+    final headwearBaseY = eyeY + _clampOffset(headwearOffsetY) * 2.0;
     final scaledHair = _clampPercent(hairSize);
     final scaledMustache = _clampPercent(mustacheSize);
     final scaledHairWidth = _clampPercent(hairWidth);
@@ -1628,8 +1668,8 @@ class _CompanionFacePainter extends CustomPainter {
     final scaledMustacheHeight = _clampPercent(mustacheHeight);
     final scaledMustacheThickness = _clampPercent(mustacheThickness);
     final mustacheStroke = 1 + ((2 * scaledMustacheThickness) / 100).floor();
-    final mustacheCenterX = faceCenterX + _clampOffset(mustacheOffsetX);
-    final mustacheCenterY = mouthY + _clampOffset(mustacheOffsetY);
+    final mustacheCenterX = faceCenterX + _clampOffset(mustacheOffsetX) * 2.0;
+    final mustacheCenterY = mouthY + _clampOffset(mustacheOffsetY) * 2.0;
 
     if (ears == 'cat') {
       _triangle(canvas, stroke, Offset(leftX - 40, eyeY - 34), Offset(leftX - 20, eyeY - 56), Offset(leftX + 5, eyeY - 34));
@@ -1807,50 +1847,55 @@ class _CompanionFacePainter extends CustomPainter {
     }
 
     if (headwear == 'bow') {
-      _triangle(canvas, hatPaint, Offset(faceCenterX - 10, eyeY - 45), Offset(faceCenterX - 40, eyeY - 34), Offset(faceCenterX - 20, eyeY - 22));
-      _triangle(canvas, hatPaint, Offset(faceCenterX + 10, eyeY - 45), Offset(faceCenterX + 40, eyeY - 34), Offset(faceCenterX + 20, eyeY - 22));
-      canvas.drawCircle(Offset(faceCenterX, eyeY - 34), 4, hatPaint);
+      final knotR = _scaleValue(4, scaledHeadwear);
+      final outerWing = _scaleValue(15, scaledHeadwearWidth);
+      final innerWing = _scaleValue(7, scaledHeadwearWidth);
+      final topY = headwearBaseY - _scaleValue(18, scaledHeadwearHeight);
+      final midY = headwearBaseY - _scaleValue(8, scaledHeadwearHeight);
+      final bottomY = headwearBaseY + _scaleValue(4, scaledHeadwearHeight);
+      _triangle(canvas, hatPaint, Offset(headwearCenterX - knotR * 2, topY), Offset(headwearCenterX - outerWing, midY), Offset(headwearCenterX - innerWing, bottomY));
+      _triangle(canvas, hatPaint, Offset(headwearCenterX + knotR * 2, topY), Offset(headwearCenterX + outerWing, midY), Offset(headwearCenterX + innerWing, bottomY));
+      canvas.drawCircle(Offset(headwearCenterX, midY), knotR, hatPaint);
     } else if (headwear == 'beanie') {
+      final beanieW = _scaleValue(88, scaledHeadwearWidth);
+      final beanieH = _scaleValue(22, scaledHeadwearHeight);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(faceCenterX - 60, eyeY - 52, 120, 22), const Radius.circular(9)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(headwearCenterX - beanieW / 2, headwearBaseY - _scaleValue(26, scaledHeadwearHeight), beanieW, beanieH), const Radius.circular(9)),
         hatPaint,
       );
-      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 28), Offset(faceCenterX + 50, eyeY - 28), hatPaint);
-      canvas.drawCircle(Offset(faceCenterX, eyeY - 56), 6, hatPaint);
+      canvas.drawLine(Offset(headwearCenterX - beanieW / 2 + _scaleValue(6, scaledHeadwearWidth), headwearBaseY - _scaleValue(2, scaledHeadwearHeight)), Offset(headwearCenterX + beanieW / 2 - _scaleValue(6, scaledHeadwearWidth), headwearBaseY - _scaleValue(2, scaledHeadwearHeight)), hatPaint);
+      canvas.drawCircle(Offset(headwearCenterX, headwearBaseY - _scaleValue(30, scaledHeadwearHeight)), _scaleValue(5, scaledHeadwear), hatPaint);
     } else if (headwear == 'crown') {
       final crown = Path()
-        ..moveTo(faceCenterX - 50, eyeY - 34)
-        ..lineTo(faceCenterX - 30, eyeY - 56)
-        ..lineTo(faceCenterX - 5, eyeY - 34)
-        ..lineTo(faceCenterX + 15, eyeY - 60)
-        ..lineTo(faceCenterX + 35, eyeY - 34)
-        ..lineTo(faceCenterX + 50, eyeY - 52);
+        ..moveTo(headwearCenterX - _scaleValue(38, scaledHeadwearWidth), headwearBaseY - _scaleValue(8, scaledHeadwearHeight))
+        ..lineTo(headwearCenterX - _scaleValue(22, scaledHeadwearWidth), headwearBaseY - _scaleValue(30, scaledHeadwearHeight))
+        ..lineTo(headwearCenterX - _scaleValue(4, scaledHeadwearWidth), headwearBaseY - _scaleValue(8, scaledHeadwearHeight))
+        ..lineTo(headwearCenterX + _scaleValue(11, scaledHeadwearWidth), headwearBaseY - _scaleValue(34, scaledHeadwearHeight))
+        ..lineTo(headwearCenterX + _scaleValue(26, scaledHeadwearWidth), headwearBaseY - _scaleValue(8, scaledHeadwearHeight))
+        ..lineTo(headwearCenterX + _scaleValue(38, scaledHeadwearWidth), headwearBaseY - _scaleValue(26, scaledHeadwearHeight));
       canvas.drawPath(crown, hatPaint);
-      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 34), Offset(faceCenterX + 50, eyeY - 34), hatPaint);
+      canvas.drawLine(Offset(headwearCenterX - _scaleValue(38, scaledHeadwearWidth), headwearBaseY - _scaleValue(8, scaledHeadwearHeight)), Offset(headwearCenterX + _scaleValue(38, scaledHeadwearWidth), headwearBaseY - _scaleValue(8, scaledHeadwearHeight)), hatPaint);
     } else if (headwear == 'top_hat') {
+      final hatW = _scaleValue(44, scaledHeadwearWidth);
+      final hatH = _scaleValue(44, scaledHeadwearHeight);
+      final brimW = _scaleValue(76, scaledHeadwearWidth);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(faceCenterX - 30, eyeY - 80, 60, 48), const Radius.circular(4)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(headwearCenterX - hatW / 2, headwearBaseY - _scaleValue(52, scaledHeadwearHeight), hatW, hatH), const Radius.circular(4)),
         hatPaint,
       );
-      canvas.drawLine(Offset(faceCenterX - 50, eyeY - 32), Offset(faceCenterX + 50, eyeY - 32), hatPaint);
+      canvas.drawLine(Offset(headwearCenterX - brimW / 2, headwearBaseY - _scaleValue(8, scaledHeadwearHeight)), Offset(headwearCenterX + brimW / 2, headwearBaseY - _scaleValue(8, scaledHeadwearHeight)), hatPaint);
     } else if (headwear == 'halo') {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(faceCenterX, eyeY - 52), width: 80, height: 16),
-        hatPaint,
-      );
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(headwearCenterX, headwearBaseY - _scaleValue(24, scaledHeadwearHeight)), width: _scaleValue(80, scaledHeadwearWidth), height: _scaleValue(12, scaledHeadwearHeight)), const Radius.circular(6)), hatPaint);
     } else if (headwear == 'flower_crown') {
       for (var i = 0; i < 5; i++) {
-        final fx = faceCenterX - 40 + i * 20.0;
-        final fy = eyeY - 38 + (i.isOdd ? 4.0 : 0.0);
-        canvas.drawCircle(Offset(fx, fy), 6, hatPaint);
+        final fx = headwearCenterX - _scaleValue(32, scaledHeadwearWidth) + i * _scaleValue(16, scaledHeadwearWidth);
+        final fy = headwearBaseY - _scaleValue(12, scaledHeadwearHeight) + (i.isOdd ? _scaleValue(3, scaledHeadwearHeight) : 0.0);
+        canvas.drawCircle(Offset(fx, fy), _scaleValue(5, scaledHeadwear), hatPaint);
         canvas.drawCircle(Offset(fx, fy), 2, hatPaint);
       }
     } else if (headwear == 'beret') {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(faceCenterX - 10, eyeY - 42), width: 90, height: 28),
-        hatPaint,
-      );
-      canvas.drawCircle(Offset(faceCenterX - 10, eyeY - 56), 4, hatPaint);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(headwearCenterX - _scaleValue(44, scaledHeadwearWidth), headwearBaseY - _scaleValue(26, scaledHeadwearHeight), _scaleValue(88, scaledHeadwearWidth), _scaleValue(22, scaledHeadwearHeight)), const Radius.circular(11)), hatPaint);
+      canvas.drawCircle(Offset(headwearCenterX - _scaleValue(7, scaledHeadwearWidth), headwearBaseY - _scaleValue(30, scaledHeadwearHeight)), _scaleValue(3, scaledHeadwear), hatPaint);
     }
 
     if (glasses == 'round') {
@@ -2267,6 +2312,11 @@ class _CompanionFacePainter extends CustomPainter {
         glasses != oldDelegate.glasses ||
         headwear != oldDelegate.headwear ||
         piercing != oldDelegate.piercing ||
+        headwearSize != oldDelegate.headwearSize ||
+        headwearWidth != oldDelegate.headwearWidth ||
+        headwearHeight != oldDelegate.headwearHeight ||
+        headwearOffsetX != oldDelegate.headwearOffsetX ||
+        headwearOffsetY != oldDelegate.headwearOffsetY ||
         hairSize != oldDelegate.hairSize ||
         mustacheSize != oldDelegate.mustacheSize ||
         hairWidth != oldDelegate.hairWidth ||

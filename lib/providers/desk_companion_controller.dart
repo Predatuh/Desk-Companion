@@ -51,6 +51,11 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _glassesKey = 'companionGlasses';
   static const String _headwearKey = 'companionHeadwear';
   static const String _piercingKey = 'companionPiercing';
+  static const String _headwearSizeKey = 'companionHeadwearSize';
+  static const String _headwearWidthKey = 'companionHeadwearWidth';
+  static const String _headwearHeightKey = 'companionHeadwearHeight';
+  static const String _headwearOffsetXKey = 'companionHeadwearOffsetX';
+  static const String _headwearOffsetYKey = 'companionHeadwearOffsetY';
   static const String _hairSizeKey = 'companionHairSize';
   static const String _mustacheSizeKey = 'companionMustacheSize';
   static const String _hairWidthKey = 'companionHairWidth';
@@ -80,6 +85,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceToken = '';
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
+  DateTime? _lastStyleSentAt;
   String _companionVisualModel = CompanionVisualModel.classic.command;
   String _companionScene = CompanionScene.none.command;
   String _companionHair = 'none';
@@ -88,6 +94,11 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionGlasses = 'none';
   String _companionHeadwear = 'none';
   String _companionPiercing = 'none';
+  int _companionHeadwearSize = 100;
+  int _companionHeadwearWidth = 100;
+  int _companionHeadwearHeight = 100;
+  int _companionHeadwearOffsetX = 0;
+  int _companionHeadwearOffsetY = 0;
   int _companionHairSize = 100;
   int _companionMustacheSize = 100;
   int _companionHairWidth = 100;
@@ -165,6 +176,11 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionGlasses => _companionGlasses;
   String get companionHeadwear => _companionHeadwear;
   String get companionPiercing => _companionPiercing;
+  int get companionHeadwearSize => _companionHeadwearSize;
+  int get companionHeadwearWidth => _companionHeadwearWidth;
+  int get companionHeadwearHeight => _companionHeadwearHeight;
+  int get companionHeadwearOffsetX => _companionHeadwearOffsetX;
+  int get companionHeadwearOffsetY => _companionHeadwearOffsetY;
   int get companionHairSize => _companionHairSize;
   int get companionMustacheSize => _companionMustacheSize;
   int get companionHairWidth => _companionHairWidth;
@@ -334,6 +350,16 @@ class DeskCompanionController extends ChangeNotifier {
       (prefs.getString(_headwearKey) ?? _companionHeadwear).trim();
     _companionPiercing =
       (prefs.getString(_piercingKey) ?? _companionPiercing).trim();
+    _companionHeadwearSize =
+      prefs.getInt(_headwearSizeKey) ?? _companionHeadwearSize;
+    _companionHeadwearWidth =
+      prefs.getInt(_headwearWidthKey) ?? _companionHeadwearWidth;
+    _companionHeadwearHeight =
+      prefs.getInt(_headwearHeightKey) ?? _companionHeadwearHeight;
+    _companionHeadwearOffsetX =
+      prefs.getInt(_headwearOffsetXKey) ?? _companionHeadwearOffsetX;
+    _companionHeadwearOffsetY =
+      prefs.getInt(_headwearOffsetYKey) ?? _companionHeadwearOffsetY;
     _companionHairSize = prefs.getInt(_hairSizeKey) ?? _companionHairSize;
     _companionMustacheSize =
         prefs.getInt(_mustacheSizeKey) ?? _companionMustacheSize;
@@ -409,6 +435,11 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_glassesKey, _companionGlasses);
     await prefs.setString(_headwearKey, _companionHeadwear);
     await prefs.setString(_piercingKey, _companionPiercing);
+    await prefs.setInt(_headwearSizeKey, _companionHeadwearSize);
+    await prefs.setInt(_headwearWidthKey, _companionHeadwearWidth);
+    await prefs.setInt(_headwearHeightKey, _companionHeadwearHeight);
+    await prefs.setInt(_headwearOffsetXKey, _companionHeadwearOffsetX);
+    await prefs.setInt(_headwearOffsetYKey, _companionHeadwearOffsetY);
     await prefs.setInt(_hairSizeKey, _companionHairSize);
     await prefs.setInt(_mustacheSizeKey, _companionMustacheSize);
     await prefs.setInt(_hairWidthKey, _companionHairWidth);
@@ -726,9 +757,39 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> sendFlower(String type) async {
+    await sendFlowerConfig(flower: type);
+  }
+
+  Future<void> sendFlowerConfig({
+    required String flower,
+    int count = 1,
+    int size = 100,
+    String arrangement = 'single',
+    bool mixed = false,
+    int? petalColor,
+    int? centerColor,
+    int? stemColor,
+  }) async {
     await _runBusy(() async {
+      final command = <String, dynamic>{
+        'type': 'set_flower',
+        'flower': flower,
+        'count': count.clamp(1, 7),
+        'size': size.clamp(40, 180),
+        'arrangement': arrangement,
+        'mixed': mixed ? 1 : 0,
+      };
+      if (petalColor != null) {
+        command['petalColor'] = petalColor;
+      }
+      if (centerColor != null) {
+        command['centerColor'] = centerColor;
+      }
+      if (stemColor != null) {
+        command['stemColor'] = stemColor;
+      }
       await _sendCommand(
-        {'type': 'set_flower', 'flower': type},
+        command,
         mode: 'flower',
         bleLabel: 'Flower sent over BLE.',
         relayLabel: 'Flower queued through relay.',
@@ -1082,6 +1143,11 @@ class DeskCompanionController extends ChangeNotifier {
     required String glasses,
     required String headwear,
     required String piercing,
+    int headwearSize = 100,
+    int headwearWidth = 100,
+    int headwearHeight = 100,
+    int headwearOffsetX = 0,
+    int headwearOffsetY = 0,
     required int hairSize,
     required int mustacheSize,
     required int hairWidth,
@@ -1111,6 +1177,11 @@ class DeskCompanionController extends ChangeNotifier {
           'glasses': glasses,
           'headwear': headwear,
           'piercing': piercing,
+          'headwearSize': headwearSize,
+          'headwearWidth': headwearWidth,
+          'headwearHeight': headwearHeight,
+          'headwearOffsetX': headwearOffsetX,
+          'headwearOffsetY': headwearOffsetY,
           'hairSize': hairSize,
           'mustacheSize': mustacheSize,
           'hairWidth': hairWidth,
@@ -1134,12 +1205,18 @@ class DeskCompanionController extends ChangeNotifier {
         bleLabel: 'Companion style sent over BLE.',
         relayLabel: 'Companion style queued through relay.',
       );
+      _lastStyleSentAt = DateTime.now();
       _companionHair = hair.trim();
       _companionEars = ears.trim();
       _companionMustache = mustache.trim();
       _companionGlasses = glasses.trim();
       _companionHeadwear = headwear.trim();
       _companionPiercing = piercing.trim();
+      _companionHeadwearSize = headwearSize;
+      _companionHeadwearWidth = headwearWidth;
+      _companionHeadwearHeight = headwearHeight;
+      _companionHeadwearOffsetX = headwearOffsetX;
+      _companionHeadwearOffsetY = headwearOffsetY;
       _companionHairSize = hairSize;
       _companionMustacheSize = mustacheSize;
       _companionHairWidth = hairWidth;
@@ -1513,6 +1590,13 @@ class DeskCompanionController extends ChangeNotifier {
       _deviceToken = incomingToken;
     }
 
+    // Guard: skip overwriting appearance fields for 15 seconds after a
+    // style was just sent locally. This prevents stale relay pull responses
+    // (buffered before the device applied the command) from reverting newly-
+    // pushed accessories like headwear and mustache.
+    final styleSentRecently = _lastStyleSentAt != null &&
+        DateTime.now().difference(_lastStyleSentAt!).inSeconds < 15;
+
     final incomingPersonality =
         (payload['personality'] as String? ?? '').trim();
     if (incomingPersonality.isNotEmpty) {
@@ -1523,6 +1607,8 @@ class DeskCompanionController extends ChangeNotifier {
     if (incomingPetMode.isNotEmpty) {
       _activePetMode = incomingPetMode;
     }
+
+    if (styleSentRecently) return;
 
     final incomingHair = (payload['hair'] as String? ?? '').trim();
     if (incomingHair.isNotEmpty) {
@@ -1547,6 +1633,33 @@ class DeskCompanionController extends ChangeNotifier {
     final incomingHeadwear = (payload['headwear'] as String? ?? '').trim();
     if (incomingHeadwear.isNotEmpty) {
       _companionHeadwear = incomingHeadwear;
+    }
+
+    final incomingHeadwearSize = (payload['headwearSize'] as num?)?.toInt();
+    if (incomingHeadwearSize != null) {
+      _companionHeadwearSize = incomingHeadwearSize;
+    }
+
+    final incomingHeadwearWidth = (payload['headwearWidth'] as num?)?.toInt();
+    if (incomingHeadwearWidth != null) {
+      _companionHeadwearWidth = incomingHeadwearWidth;
+    }
+
+    final incomingHeadwearHeight = (payload['headwearHeight'] as num?)?.toInt();
+    if (incomingHeadwearHeight != null) {
+      _companionHeadwearHeight = incomingHeadwearHeight;
+    }
+
+    final incomingHeadwearOffsetX =
+        (payload['headwearOffsetX'] as num?)?.toInt();
+    if (incomingHeadwearOffsetX != null) {
+      _companionHeadwearOffsetX = incomingHeadwearOffsetX;
+    }
+
+    final incomingHeadwearOffsetY =
+        (payload['headwearOffsetY'] as num?)?.toInt();
+    if (incomingHeadwearOffsetY != null) {
+      _companionHeadwearOffsetY = incomingHeadwearOffsetY;
     }
 
     final incomingPiercing = (payload['piercing'] as String? ?? '').trim();
