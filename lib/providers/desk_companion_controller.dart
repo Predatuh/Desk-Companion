@@ -1124,6 +1124,7 @@ class DeskCompanionController extends ChangeNotifier {
     required bool showWifi,
     bool use12HourClock = false,
     bool showBackgroundImage = false,
+    int weatherSize = 1,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -1135,10 +1136,22 @@ class DeskCompanionController extends ChangeNotifier {
           'showWifi': showWifi ? 1 : 0,
           'clock12h': use12HourClock ? 1 : 0,
           'showBackgroundImage': showBackgroundImage ? 1 : 0,
+          'weatherSize': weatherSize.clamp(1, 3),
         },
         mode: _mode,
         bleLabel: 'Idle config sent over BLE.',
         relayLabel: 'Idle config queued through relay.',
+      );
+    });
+  }
+
+  Future<void> rotateBackground() async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'rotate_background'},
+        mode: _mode,
+        bleLabel: 'Background rotated.',
+        relayLabel: 'Rotate background queued through relay.',
       );
     });
   }

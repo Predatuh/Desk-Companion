@@ -194,7 +194,7 @@ String ipAddress = "";
 String relayUrl = "";
 String deviceToken = "";
 String petPersonality = "curious";
-String activePetMode = "hangout";
+String activePetMode = "off";  // default off – no autonomous face animations
 String activeCareAction = "";
 String companionHair = "none";
 String companionEars = "none";
@@ -377,6 +377,7 @@ bool idleShowFace    = true;
 bool idleShowWifi    = true;
 bool idleClock12Hour = false;
 bool idleUseBackgroundImage = false;
+int8_t weatherTextSize = 1;  // 1=small 2=medium 3=large
 // Display brightness: 0-255 (PWM on TFT_BL pin)
 uint8_t displayBrightness = 128;
 // Countdown
@@ -875,8 +876,8 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     return -1;
   }
 
-  http.setTimeout(15000);
-  http.setConnectTimeout(10000);
+  http.setTimeout(5000);
+  http.setConnectTimeout(3000);
   if (body.length() > 0) {
     http.addHeader("Content-Type", "application/json");
   }
@@ -918,6 +919,29 @@ bool ensureIdleBackgroundBuffer() {
   if (idleBackgroundBuffer) return true;
   idleBackgroundBuffer = (uint16_t*)ps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
   return idleBackgroundBuffer != nullptr;
+}
+
+// Rotate the idle background image 90° clockwise in-place (letterboxed into 320×240)
+void rotateBackgroundCW90() {
+  if (!idleBackgroundBuffer) return;
+  const int W = SCREEN_WIDTH;   // 320
+  const int H = SCREEN_HEIGHT;  // 240
+  uint16_t* tmp = (uint16_t*)ps_malloc(W * H * 2);
+  if (!tmp) return;
+  memset(tmp, 0, W * H * 2);
+  // 90° CW of a W×H image → H cols × W rows (portrait 240×320).
+  // Fit into W×H frame: letterbox x=40..279, center-crop rows 40..279.
+  // Out pixel (ox, oy): ox∈[40..279], oy∈[0..239]
+  //   src_x = oy + 40,  src_y = 279 - ox
+  for (int oy = 0; oy < H; oy++) {
+    for (int ox = 40; ox < W - 40; ox++) {
+      int sx = oy + 40;
+      int sy = 279 - ox;
+      tmp[oy * W + ox] = idleBackgroundBuffer[sy * W + sx];
+    }
+  }
+  memcpy(idleBackgroundBuffer, tmp, W * H * 2);
+  free(tmp);
 }
 
 bool saveIdleBackgroundFromColorBuffer() {
@@ -2621,14 +2645,19 @@ void renderIdle() {
 
   // ── Weather badge (top-right) ──
   if (idleShowWeather && weatherCode >= 0) {
-    drawWeatherBadge(SCREEN_WIDTH - 20, 14);
+    // Scale positions based on weatherTextSize (1-3)
+    const int8_t ws = weatherTextSize < 1 ? 1 : (weatherTextSize > 3 ? 3 : weatherTextSize);
+    const int badgeR   = 6 + ws * 2;          // icon radius: 8, 10, 12
+    const int badgeX   = SCREEN_WIDTH - badgeR - 2;
+    const int badgeY   = badgeR + 2;
+    drawWeatherIcon(badgeX, badgeY, badgeR, weatherCodeCategory(weatherCode));
     if (weatherTempTenths != 0) {
-      char tmpBuf[8];
-      snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);  // degree symbol
-      gfx->setTextSize(1);
+      char tmpBuf[10];
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);
+      gfx->setTextSize(ws);
       gfx->setTextColor(userAccentColor);
-      int tw = (int)strlen(tmpBuf) * 6;
-      gfx->setCursor(SCREEN_WIDTH - tw - 2, 26);
+      int tw = (int)strlen(tmpBuf) * 6 * ws;
+      gfx->setCursor(SCREEN_WIDTH - tw - 2, badgeY * 2 + 2);
       gfx->print(tmpBuf);
     }
   }
@@ -3823,7 +3852,7 @@ void renderWeatherFrame() {
   char tempBuf[12];
   int tWhole = weatherTempTenths / 10;
   int tFrac  = abs(weatherTempTenths) % 10;
-  snprintf(tempBuf, sizeof(tempBuf), "%d.%d C", tWhole, tFrac);
+  snprintf(tempBuf, sizeof(tempBuf), "%d.%d F", tWhole, tFrac);
   gfx->setTextSize(3);
   gfx->setTextColor(weatherCategoryColor(cat));
   gfx->setCursor((SCREEN_WIDTH - (int)strlen(tempBuf) * 18) / 2, 115);
@@ -3859,8 +3888,8 @@ void fetchWeather() {
 
   HTTPClient whttp;
   whttp.begin(wcl, weatherUrl);
-  whttp.setTimeout(12000);
-  whttp.setConnectTimeout(8000);
+  whttp.setTimeout(10000);
+  whttp.setConnectTimeout(6000);
   const int httpCode = whttp.GET();
 
   if (httpCode < 200 || httpCode >= 300) {
@@ -3889,7 +3918,9 @@ void fetchWeather() {
     int nextWeatherCode = extractJsonIntField(searchBody, "weather_code",
                           extractJsonIntField(searchBody, "weathercode", -1));
     if (tempC > -998.f && nextWeatherCode >= 0) {
-      weatherTempTenths = (int)(tempC * 10.f + (tempC >= 0.f ? 0.5f : -0.5f));
+      // Convert to Fahrenheit for display
+      float tempF = tempC * 9.0f / 5.0f + 32.0f;
+      weatherTempTenths = (int)(tempF * 10.f + (tempF >= 0.f ? 0.5f : -0.5f));
       weatherCode = nextWeatherCode;
       weatherStatusText = "Weather updated";
       statusText = "Weather updated";
@@ -4290,7 +4321,7 @@ void tryStoredPrefs() {
   relayUrl = preferences.getString("relay_url", "");
   deviceToken = preferences.getString("device_token", "");
   petPersonality = normalizePetPersonality(preferences.getString("pet_personality", petPersonality));
-  activePetMode = normalizePetMode(preferences.getString("pet_mode", activePetMode));
+  activePetMode = normalizePetMode(preferences.getString("pet_mode", "off"));
   companionHair = normalizeCompanionHair(preferences.getString("companion_hair", companionHair));
   companionEars = normalizeCompanionEars(preferences.getString("companion_ears", companionEars));
   companionMustache = normalizeCompanionMustache(preferences.getString("companion_mustache", companionMustache));
@@ -4587,6 +4618,18 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  if (type == "rotate_background") {
+    if (idleBackgroundBuffer) {
+      rotateBackgroundCW90();
+      statusText = "Background rotated";
+      if (currentMode == MODE_IDLE) renderCurrentMode();
+    } else {
+      statusText = "No background loaded";
+    }
+    publishStatus();
+    return;
+  }
+
   if (type == "set_idle_config") {
     idleShowClock   = extractJsonIntField(body, "showClock",   idleShowClock ? 1 : 0) != 0;
     idleShowWeather = extractJsonIntField(body, "showWeather", idleShowWeather ? 1 : 0) != 0;
@@ -4596,12 +4639,15 @@ void handleCommandJson(const String& body) {
     idleUseBackgroundImage =
         extractJsonIntField(body, "showBackgroundImage", idleUseBackgroundImage ? 1 : 0) != 0 &&
         idleBackgroundBuffer != nullptr;
+    { int ws = extractJsonIntField(body, "weatherSize", weatherTextSize);
+      weatherTextSize = (int8_t)(ws < 1 ? 1 : (ws > 3 ? 3 : ws)); }
     preferences.begin("desk-cfg", false);
     preferences.putBool("idle_clock",   idleShowClock);
     preferences.putBool("idle_weather", idleShowWeather);
     preferences.putBool("idle_face",    idleShowFace);
     preferences.putBool("idle_wifi",    idleShowWifi);
     preferences.putBool("idle_clock_12h", idleClock12Hour);
+    preferences.putInt("weather_size",  weatherTextSize);
     preferences.end();
     if (currentMode == MODE_IDLE) renderCurrentMode();
     statusText = (extractJsonIntField(body, "showBackgroundImage", 0) != 0 && idleBackgroundBuffer == nullptr)
@@ -5208,6 +5254,7 @@ void pushRelayStatus() {
 
 void pollRelay() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) return;
+  if (isAnyAnimatedMode()) return;  // don't block render loop during active animations
   const unsigned long pollInterval = relayPollIntervalMs();
   if (millis() - lastRelayPollMs < pollInterval) return;
   lastRelayPollMs = millis();
@@ -5289,6 +5336,7 @@ void setupDisplay() {
   idleShowFace    = preferences.getBool("idle_face",    true);
   idleShowWifi    = preferences.getBool("idle_wifi",    true);
   idleClock12Hour = preferences.getBool("idle_clock_12h", false);
+  weatherTextSize = (int8_t)preferences.getInt("weather_size", 1);
   displayBrightness = preferences.getUChar("brightness", 128);
   preferences.end();
   displayRot = displayRot & 3;
@@ -5684,8 +5732,8 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty ||
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
+  if (!isAnyAnimatedMode() && (relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs()))) {
     pushRelayStatus();
   }
 

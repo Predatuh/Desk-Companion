@@ -37,4 +37,41 @@ if (-not $Port) {
 Write-Host "Using port: $Port"
 Write-Host "Compiling and uploading $sketchPath"
 
-& $arduinoCli compile --upload --port $Port --fqbn $fqbn $sketchPath
+# ── Step 1: Compile only, output binary to a known folder ──
+$buildOut = Join-Path $env:TEMP 'desk_companion_fw'
+New-Item -ItemType Directory -Force -Path $buildOut | Out-Null
+
+Write-Host "Compiling sketch..."
+& $arduinoCli compile --fqbn $fqbn --output-dir $buildOut $sketchPath
+if ($LASTEXITCODE -ne 0) { throw "Compile failed (exit $LASTEXITCODE)" }
+
+$binFile = Join-Path $buildOut 'tft_28.ino.bin'
+if (-not (Test-Path $binFile)) {
+    # arduino-cli sometimes names it differently; grab the first .bin
+    $binFile = (Get-ChildItem $buildOut -Filter '*.bin' | Select-Object -First 1).FullName
+}
+if (-not $binFile) { throw "Compiled .bin not found in $buildOut" }
+Write-Host "Binary: $binFile"
+
+# ── Step 2: Prompt user to enter bootloader manually (HWCDC boards) ──
+Write-Host ""
+Write-Host "*** MANUAL STEP REQUIRED ***"
+Write-Host "This board uses Hardware CDC (HWCDC) and does not support auto-reset."
+Write-Host ""
+Write-Host "Put the device in bootloader mode now:"
+Write-Host "  1. Hold the BOOT button"
+Write-Host "  2. While holding BOOT, press and release RESET"
+Write-Host "  3. Release BOOT"
+Write-Host "  (The display will go blank - that means bootloader is active)"
+Write-Host ""
+Read-Host "Press Enter when the device is in bootloader mode"
+
+# ── Step 3: Flash with esptool using --before no-reset ──
+$esptool = 'C:\Users\tanne\AppData\Local\Arduino15\packages\esp32\tools\esptool_py\5.1.0\esptool.exe'
+Write-Host "Flashing..."
+& $esptool --chip esp32s3 --port $Port --baud 921600 `
+    --before no-reset --after hard-reset `
+    write-flash -z 0x10000 $binFile
+if ($LASTEXITCODE -ne 0) { throw "esptool flash failed (exit $LASTEXITCODE)" }
+
+Write-Host "Upload complete."

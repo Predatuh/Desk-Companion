@@ -616,6 +616,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   bool _idleShowWifi = true;
   bool _idleUse12HourClock = false;
   bool _idleUseBackgroundImage = false;
+  int _weatherTextSize = 1;  // 1=S 2=M 3=L
   double _brightness = 128;
 
   CompanionImagePayload? _selectedImage;
@@ -813,6 +814,13 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       appBar: AppBar(
         title: const Text('Desk Companion'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Go to home screen',
+            onPressed: controller.canControlDevice && !controller.busy
+                ? () => _perform(() => controller.goHome(), success: 'Switched to home screen.')
+                : null,
+          ),
           IconButton(
             icon: const Icon(Icons.layers_clear_outlined),
             tooltip: 'Clear display',
@@ -2908,6 +2916,30 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         SwitchListTile.adaptive(title: const Text('Clock'), value: _idleShowClock, onChanged: (v) => setState(() => _idleShowClock = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('12-hour clock'), value: _idleUse12HourClock, onChanged: (v) => setState(() => _idleUse12HourClock = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('Weather badge'), value: _idleShowWeather, onChanged: (v) => setState(() => _idleShowWeather = v), dense: true, contentPadding: EdgeInsets.zero),
+        // Weather size selector
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 4),
+          child: Row(
+            children: [
+              const Text('Weather size:', style: TextStyle(fontSize: 13)),
+              const SizedBox(width: 8),
+              ...['S', 'M', 'L'].asMap().entries.map((e) {
+                final size = e.key + 1;
+                final selected = _weatherTextSize == size;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(e.value),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _weatherTextSize = size),
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
         SwitchListTile.adaptive(title: const Text('Companion face'), value: _idleShowFace, onChanged: (v) => setState(() => _idleShowFace = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('Wi-Fi indicator'), value: _idleShowWifi, onChanged: (v) => setState(() => _idleShowWifi = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(
@@ -2958,6 +2990,18 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: controller.canControlDevice && !controller.busy
+                ? () => _perform(() => controller.rotateBackground(),
+                      success: 'Background rotated 90\u00b0.')
+                : null,
+            icon: const Icon(Icons.rotate_90_degrees_ccw_outlined, size: 16),
+            label: const Text('Rotate background'),
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: controller.canControlDevice && !controller.busy
                 ? () => _perform(
                       () => controller.goHome(),
                       success: 'Device switched to home screen.',
@@ -2980,6 +3024,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         showWifi: _idleShowWifi,
                         use12HourClock: _idleUse12HourClock,
                         showBackgroundImage: _idleUseBackgroundImage,
+                        weatherSize: _weatherTextSize,
                       ),
                       success: 'Home screen config applied.',
                     )
@@ -3175,6 +3220,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
           showWifi: _idleShowWifi,
           use12HourClock: _idleUse12HourClock,
           showBackgroundImage: true,
+          weatherSize: _weatherTextSize,
         );
         if (!mounted) {
           return;
