@@ -2581,8 +2581,89 @@ void renderExpressionFrame() {
 void renderIdle() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
+
+  // ── Companion face (idle: gentle float + blink) ──
+  if (idleShowFace) {
+    const float cScale  = companionScale / 100.0f;
+    const int   CY_shift = clampAppearanceOffset(companionOffsetY) * 2;
+    const int   CX      = SCREEN_WIDTH / 2 + clampAppearanceOffset(companionOffsetX) * 2;
+    const int   eyeXShift   = clampAppearanceOffset(companionEyeOffsetX) * 2;
+    const int   eyeYShift   = clampAppearanceOffset(companionEyeOffsetY) * 2;
+    const int   mouthXShift = clampAppearanceOffset(companionMouthOffsetX) * 2;
+    const int   mouthYShift = clampAppearanceOffset(companionMouthOffsetY) * 2;
+
+    // Gentle vertical breathing: ±3 px over the 16-step orbit cycle
+    int floatY = (int)(sinf((float)idleOrbit * 3.14159f * 2.0f / 16.0f) * 3.0f);
+
+    const int LX = CX + (int)((68 - SCREEN_WIDTH / 2) * cScale) + eyeXShift;
+    const int RX = CX + (int)((172 - SCREEN_WIDTH / 2) * cScale) + eyeXShift;
+    const int EY = FACE_OFFSET_Y + CY_shift + floatY + (int)(45 * cScale) + eyeYShift;
+    const int MX = CX + mouthXShift;
+    const int MY = FACE_OFFSET_Y + CY_shift + floatY + (int)(100 * cScale) + mouthYShift;
+    const int EW = (int)(52 * cScale);
+    const int EH = (int)(40 * cScale);
+    const int ER = (int)(13 * cScale);
+
+    // Blink at orbit step 14 (every ~750 ms cycle)
+    int eyeH = (idleOrbit == 14) ? max(3, EH / 5) : EH;
+    drawEye(LX, EY, EW, eyeH, ER, 0, 0);
+    drawEye(RX, EY, EW, eyeH, ER, 0, 0);
+
+    // Neutral flat mouth
+    for (int line = 0; line < 4; line++)
+      gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userMouthColor);
+
+    drawCompanionAccessories(LX, RX, EY, MY);
+  }
+
+  // ── Clock (top-left) ──
+  if (idleShowClock) {
+    struct tm ti;
+    if (getLocalTime(&ti, 10)) {
+      char timeBuf[6];
+      snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", ti.tm_hour, ti.tm_min);
+      gfx->setTextSize(2);
+      gfx->setTextColor(userAccentColor);
+      gfx->setCursor(6, 5);
+      gfx->print(timeBuf);
+    }
+  }
+
+  // ── Weather badge (top-right) ──
+  if (idleShowWeather && weatherCode >= 0) {
+    drawWeatherBadge(SCREEN_WIDTH - 20, 14);
+    if (weatherTempTenths != 0) {
+      char tmpBuf[8];
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);  // degree symbol
+      gfx->setTextSize(1);
+      gfx->setTextColor(userAccentColor);
+      int tw = (int)strlen(tmpBuf) * 6;
+      gfx->setCursor(SCREEN_WIDTH - tw - 2, 26);
+      gfx->print(tmpBuf);
+    }
+  }
+
+  // ── Bottom bar: IP address or status text ──
+  gfx->setTextSize(1);
+  gfx->setTextColor(userFaceColor);
+  if (idleShowWifi && !ipAddress.isEmpty()) {
+    gfx->setCursor(4, SCREEN_HEIGHT - 12);
+    gfx->print(ipAddress);
+    if (!currentSsid.isEmpty()) {
+      int ssidW = currentSsid.length() * 6;
+      gfx->setCursor(SCREEN_WIDTH - ssidW - 4, SCREEN_HEIGHT - 12);
+      gfx->setTextColor(userAccentColor);
+      gfx->print(currentSsid);
+    }
+  } else if (!statusText.isEmpty()) {
+    int sw = (int)statusText.length() * 6;
+    gfx->setCursor((SCREEN_WIDTH - sw) / 2, SCREEN_HEIGHT - 12);
+    gfx->print(statusText);
+  }
+
   pushCanvas();
 }
+
 
 // ─── Touch menu renderer ───
 
@@ -5382,16 +5463,6 @@ void loop() {
       for (uint8_t s = 0; s < expressionSpeedMul; s++)
         expressionPhase = (expressionPhase + 1) % 64;
       renderFlowerFrame();
-    }
-  }
-
-  if (currentMode == MODE_SCENE) {
-    const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 16) {
-      lastExpressionTickMs = now;
-      for (uint8_t s = 0; s < expressionSpeedMul; s++)
-        expressionPhase = (expressionPhase + 1) % 64;
-      renderSceneFrame();
     }
   }
 
