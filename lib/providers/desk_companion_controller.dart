@@ -1129,12 +1129,12 @@ class DeskCompanionController extends ChangeNotifier {
       await _sendCommand(
         {
           'type': 'set_idle_config',
-          'showClock': showClock,
-          'showWeather': showWeather,
-          'showFace': showFace,
-          'showWifi': showWifi,
-          'clock12h': use12HourClock,
-          'showBackgroundImage': showBackgroundImage,
+          'showClock': showClock ? 1 : 0,
+          'showWeather': showWeather ? 1 : 0,
+          'showFace': showFace ? 1 : 0,
+          'showWifi': showWifi ? 1 : 0,
+          'clock12h': use12HourClock ? 1 : 0,
+          'showBackgroundImage': showBackgroundImage ? 1 : 0,
         },
         mode: _mode,
         bleLabel: 'Idle config sent over BLE.',
@@ -1150,6 +1150,17 @@ class DeskCompanionController extends ChangeNotifier {
         mode: _mode,
         bleLabel: 'Brightness sent over BLE.',
         relayLabel: 'Brightness queued through relay.',
+      );
+    });
+  }
+
+  Future<void> goHome() async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'go_home'},
+        mode: _mode,
+        bleLabel: 'Switched to home screen.',
+        relayLabel: 'Home screen command queued through relay.',
       );
     });
   }

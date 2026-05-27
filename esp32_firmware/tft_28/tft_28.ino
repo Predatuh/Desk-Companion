@@ -28,6 +28,7 @@ static const FwSizeParams FW_SIZES[] = {
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <esp_system.h>
 #include <ctype.h>
 #include <mbedtls/base64.h>
@@ -858,114 +859,49 @@ const char* modeName(DisplayMode mode) {
 // ─── Relay ───
 
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
-  String finalUrl = url;
-  int protoEnd = finalUrl.indexOf("://");
-  bool isHttps = finalUrl.startsWith("https://");
-  String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
-  int pathStart = hostAndPath.indexOf('/');
-  String host = (pathStart > 0) ? hostAndPath.substring(0, pathStart) : hostAndPath;
-  String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
+  Serial.printf("[RELAY] %s %s heap=%u\n", method, url.c_str(), ESP.getFreeHeap());
 
-  // Extract port from host if present (e.g. "host:8080")
-  uint16_t port = isHttps ? 443 : 80;
-  int colonIdx = host.indexOf(':');
-  if (colonIdx > 0) {
-    port = (uint16_t)host.substring(colonIdx + 1).toInt();
-    host = host.substring(0, colonIdx);
-  }
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+  HTTPClient http;
 
-  Serial.printf("[RELAY] %s %s (host=%s:%u path=%s https=%d) heap=%u\n",
-    method, url.c_str(), host.c_str(), port,
-    path.c_str(), isHttps, ESP.getFreeHeap());
+  bool started = url.startsWith("https://")
+      ? http.begin(secureClient, url)
+      : http.begin(url);
 
-  Client* tcp;
-  WiFiClient plainTcp;
-  WiFiClientSecure secureTcp;
-  if (isHttps) {
-    secureTcp.setInsecure(); // skip cert verification (ESP32-S3 has limited CA store)
-    secureTcp.setTimeout(15);
-    tcp = &secureTcp;
-  } else {
-    plainTcp.setTimeout(15);
-    plainTcp.setConnectionTimeout(2000);
-    tcp = &plainTcp;
-  }
-
-  unsigned long t0 = millis();
-  if (!tcp->connect(host.c_str(), port)) {
-    unsigned long elapsed = millis() - t0;
-    Serial.printf("[RELAY] TCP connect FAILED in %lums heap=%u\n",
-      elapsed, ESP.getFreeHeap());
-    response = String("TCP fail ") + String(elapsed) + "ms";
+  if (!started) {
+    response = "HTTP begin failed";
+    Serial.println("[RELAY] http.begin() failed");
     return -1;
   }
-  unsigned long elapsed = millis() - t0;
-  Serial.printf("[RELAY] TCP connected in %lums\n", elapsed);
 
-  String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += String("Host: ") + host + "\r\n";
-  req += "Connection: close\r\n";
+  http.setTimeout(15000);
+  http.setConnectTimeout(10000);
   if (body.length() > 0) {
-    req += "Content-Type: application/json\r\n";
-    req += "Content-Length: " + String(body.length()) + "\r\n";
-  }
-  req += "\r\n";
-  if (body.length() > 0) {
-    req += body;
+    http.addHeader("Content-Type", "application/json");
   }
 
-  tcp->print(req);
-
-  unsigned long respStart = millis();
-  String statusLine = "";
-  while (millis() - respStart < 2000) {
-    if (tcp->available()) {
-      statusLine = tcp->readStringUntil('\n');
-      statusLine.trim();
-      break;
-    }
-    if (!tcp->connected()) break;
-    delay(10);
+  int code;
+  if (strcmp(method, "GET") == 0) {
+    code = http.GET();
+  } else if (strcmp(method, "POST") == 0) {
+    code = http.POST((uint8_t*)body.c_str(), body.length());
+  } else {
+    code = http.sendRequest(method, (uint8_t*)body.c_str(), body.length());
   }
 
-  if (statusLine.length() == 0) {
-    Serial.println("[RELAY] No response received");
-    response = "No response";
-    tcp->stop();
-    return -2;
+  Serial.printf("[RELAY] Code=%d\n", code);
+
+  if (code > 0) {
+    response = http.getString();
+    Serial.printf("[RELAY] Body=%.120s\n", response.c_str());
+  } else {
+    response = http.errorToString(code);
+    Serial.printf("[RELAY] Error: %s\n", response.c_str());
   }
 
-  Serial.printf("[RELAY] Status: %s\n", statusLine.c_str());
-
-  int httpCode = 0;
-  int spaceIdx = statusLine.indexOf(' ');
-  if (spaceIdx > 0) {
-    httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
-  }
-
-  while (millis() - respStart < 2000) {
-    if (tcp->available()) {
-      String line = tcp->readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) break;
-    }
-    if (!tcp->connected() && !tcp->available()) break;
-    delay(1);
-  }
-
-  response = "";
-  while (millis() - respStart < 2000) {
-    while (tcp->available()) {
-      response += (char)tcp->read();
-    }
-    if (!tcp->connected() && !tcp->available()) break;
-    delay(10);
-  }
-
-  Serial.printf("[RELAY] Code=%d Body=%s\n", httpCode, response.c_str());
-
-  tcp->stop();
-  return httpCode;
+  http.end();
+  return code;
 }
 
 void clearImageBuffer() {
@@ -3915,69 +3851,20 @@ void fetchWeather() {
   }
   WiFiClientSecure wcl;
   wcl.setInsecure();
-  wcl.setTimeout(8);
-  if (!wcl.connect("api.open-meteo.com", 443)) {
-    weatherStatusText = "Weather connect failed";
-    statusText = weatherStatusText;
-    lastWeatherFetchMs = millis();
-    publishStatus();
-    refreshWeatherDisplayIfVisible();
-    return;
-  }
-  String path = "/v1/forecast?latitude=";
-  path += String(weatherLat, 4);
-  path += "&longitude=";
-  path += String(weatherLon, 4);
-  path += "&current=temperature_2m,weather_code&forecast_days=1";
-  wcl.print(String("GET ") + path + " HTTP/1.0\r\n"
-            + "Host: api.open-meteo.com\r\n"
-            + "User-Agent: DeskCompanion/1.0\r\n"
-            + "Accept: application/json\r\n"
-            + "Accept-Encoding: identity\r\n"
-            + "Connection: close\r\n\r\n");
-  unsigned long t0 = millis();
-  String statusLine = "";
-  while (millis() - t0 < 2000) {
-    if (wcl.available()) {
-      statusLine = wcl.readStringUntil('\n');
-      statusLine.trim();
-      break;
-    }
-    if (!wcl.connected()) break;
-    delay(10);
-  }
+  String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=";
+  weatherUrl += String(weatherLat, 4);
+  weatherUrl += "&longitude=";
+  weatherUrl += String(weatherLon, 4);
+  weatherUrl += "&current=temperature_2m,weather_code&forecast_days=1";
 
-  int httpCode = 0;
-  int spaceIdx = statusLine.indexOf(' ');
-  if (spaceIdx > 0 && statusLine.length() >= spaceIdx + 4) {
-    httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
-  }
-
-  while (millis() - t0 < 4000) {
-    if (wcl.available()) {
-      String line = wcl.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) break;
-    }
-    if (!wcl.connected() && !wcl.available()) break;
-    delay(1);
-  }
-
-  String body;
-  body.reserve(1536);
-  while (millis() - t0 < 8000) {
-    while (wcl.available()) {
-      char c = wcl.read();
-      if (body.length() < 2048) {
-        body += c;
-      }
-    }
-    if (!wcl.connected() && !wcl.available()) break;
-    delay(5);
-  }
-  wcl.stop();
+  HTTPClient whttp;
+  whttp.begin(wcl, weatherUrl);
+  whttp.setTimeout(12000);
+  whttp.setConnectTimeout(8000);
+  const int httpCode = whttp.GET();
 
   if (httpCode < 200 || httpCode >= 300) {
+    whttp.end();
     weatherStatusText = httpCode > 0
         ? (String("Weather HTTP ") + String(httpCode))
         : "Weather no response";
@@ -3988,9 +3875,19 @@ void fetchWeather() {
     return;
   }
 
+  const String body = whttp.getString();
+  whttp.end();
+
   if (body.length() > 10) {
-    float tempC = extractJsonFloatField(body, "temperature_2m", -999.f);
-    int nextWeatherCode = extractJsonIntField(body, "weather_code", extractJsonIntField(body, "weathercode", -1));
+    // Open-Meteo includes "current_units":{"temperature_2m":"°C",...} before the actual
+    // "current":{"temperature_2m":28.5,...} block. Search from "current": to skip units.
+    String searchBody = body;
+    int curStart = body.indexOf("\"current\":{");
+    if (curStart < 0) curStart = body.indexOf("\"current\": {");
+    if (curStart >= 0) searchBody = body.substring(curStart);
+    float tempC = extractJsonFloatField(searchBody, "temperature_2m", -999.f);
+    int nextWeatherCode = extractJsonIntField(searchBody, "weather_code",
+                          extractJsonIntField(searchBody, "weathercode", -1));
     if (tempC > -998.f && nextWeatherCode >= 0) {
       weatherTempTenths = (int)(tempC * 10.f + (tempC >= 0.f ? 0.5f : -0.5f));
       weatherCode = nextWeatherCode;
@@ -4678,6 +4575,14 @@ void handleCommandJson(const String& body) {
     firecrackerExplodeMs = 0;
     currentMode = MODE_FIRECRACKER;
     statusText = "Firecracker lit!";
+    publishStatus();
+    return;
+  }
+
+  if (type == "go_home") {
+    currentMode = MODE_IDLE;
+    renderCurrentMode();
+    statusText = "Home screen";
     publishStatus();
     return;
   }

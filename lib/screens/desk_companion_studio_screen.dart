@@ -2956,6 +2956,20 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: controller.canControlDevice && !controller.busy
+                ? () => _perform(
+                      () => controller.goHome(),
+                      success: 'Device switched to home screen.',
+                    )
+                : null,
+            icon: const Icon(Icons.home_outlined, size: 16),
+            label: const Text('Go to home screen'),
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: controller.canControlDevice && !controller.busy
                 ? () => _perform(
@@ -2970,8 +2984,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                       success: 'Home screen config applied.',
                     )
                 : null,
-            icon: const Icon(Icons.home_outlined, size: 16),
-            label: const Text('Apply home screen'),
+            icon: const Icon(Icons.settings_outlined, size: 16),
+            label: const Text('Apply home screen settings'),
           ),
         ),
       ],
