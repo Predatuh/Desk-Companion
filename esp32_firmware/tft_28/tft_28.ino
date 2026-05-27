@@ -480,7 +480,23 @@ void configureWifiStaMode() {
 }
 
 bool isRelayBackgroundMode() {
+  return currentMode == MODE_EXPRESSION ||
+  currentMode == MODE_FLOWER ||
+  currentMode == MODE_SLEEP ||
+  currentMode == MODE_FIREWORKS ||
+  currentMode == MODE_FIRECRACKER ||
+  currentMode == MODE_HEART_RAIN ||
+  currentMode == MODE_SNOWFALL ||
+  currentMode == MODE_STARFIELD ||
+  currentMode == MODE_ANIMATED_NOTE ||
+  currentMode == MODE_COUNTDOWN;
+}
+
+bool isAnyAnimatedMode() {
   return currentMode == MODE_FIREWORKS ||
+  currentMode == MODE_EXPRESSION ||
+  currentMode == MODE_FLOWER ||
+  currentMode == MODE_SLEEP ||
       currentMode == MODE_FIRECRACKER ||
       currentMode == MODE_HEART_RAIN ||
       currentMode == MODE_SNOWFALL ||
@@ -3852,20 +3868,20 @@ void fetchWeather() {
   path += String(weatherLat, 4);
   path += "&longitude=";
   path += String(weatherLon, 4);
-  path += "&current=temperature_2m,weather_code&timezone=auto";
+  path += "&current=temperature_2m,weather_code&forecast_days=1";
   wcl.print(String("GET ") + path + " HTTP/1.1\r\nHost: api.open-meteo.com\r\nUser-Agent: DeskCompanion/1.0\r\nConnection: close\r\n\r\n");
   unsigned long t0 = millis();
   bool inBody = false;
   char hdr[4] = {0,0,0,0};
   String body;
-  body.reserve(400);
+  body.reserve(1536);
   while (millis() - t0 < 8000) {
     while (wcl.available()) {
       char c = wcl.read();
       if (!inBody) {
         hdr[0]=hdr[1]; hdr[1]=hdr[2]; hdr[2]=hdr[3]; hdr[3]=c;
         if (hdr[0]=='\r' && hdr[1]=='\n' && hdr[2]=='\r' && hdr[3]=='\n') inBody = true;
-      } else if (body.length() < 480) {
+      } else if (body.length() < 2048) {
         body += c;
       }
     }
@@ -3879,6 +3895,7 @@ void fetchWeather() {
     if (tempC > -998.f && nextWeatherCode >= 0) {
       weatherTempTenths = (int)(tempC * 10.f + (tempC >= 0.f ? 0.5f : -0.5f));
       weatherCode = nextWeatherCode;
+      statusText = "Weather updated";
     }
   }
   lastWeatherFetchMs = millis();
@@ -5536,11 +5553,11 @@ void loop() {
     }
   }
 
-  // Keep relay maintenance alive during heavy animation modes, but at a slower cadence.
-  const bool inParticleMode = isRelayBackgroundMode();
+  // Keep network maintenance from blocking render loops while an animation is active.
+  const bool inAnimatedMode = isAnyAnimatedMode();
 
-  // Weather auto-fetch every 10 min when WiFi+location set (skip during particle modes)
-  if (!inParticleMode &&
+  // Weather auto-fetch every 10 min when WiFi+location set (skip while an animation is running)
+  if (!inAnimatedMode &&
       WiFi.status() == WL_CONNECTED &&
       (weatherLat != 0.f || weatherLon != 0.f) &&
       (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= 600000UL)) {
@@ -5616,12 +5633,14 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty ||
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
+  if (!inAnimatedMode &&
+      (relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs()))) {
     pushRelayStatus();
   }
 
-  if (WiFi.status() == WL_CONNECTED &&
+  if (!inAnimatedMode &&
+      WiFi.status() == WL_CONNECTED &&
       !relayUrl.isEmpty() &&
       !deviceToken.isEmpty() &&
       lastRelaySuccessMs > 0 &&
@@ -5643,7 +5662,9 @@ void loop() {
     }
   }
 
-  pollRelay();
+  if (!inAnimatedMode) {
+    pollRelay();
+  }
 
   updatePetBehavior();
   checkTimeGreetings();
