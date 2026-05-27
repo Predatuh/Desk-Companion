@@ -1522,7 +1522,8 @@ class _CompanionFacePainter extends CustomPainter {
 
   int _clampOffset(int value) => value.clamp(-60, 60);
 
-  double _scaleValue(num base, int percent) => base * _clampPercent(percent) / 100.0;
+  double _scaleValue(num base, num percent) =>
+      base * percent.clamp(10, 400).toDouble() / 100.0;
 
   double _scaleByPercent(num base, int percent) {
     final scaled = base * _clampPercent(percent) / 100.0;
