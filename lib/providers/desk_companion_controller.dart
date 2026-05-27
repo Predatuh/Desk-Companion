@@ -1168,10 +1168,10 @@ class DeskCompanionController extends ChangeNotifier {
     required int mustacheOffsetY,
   }) async {
     await _runBusy(() async {
-      // The full set_companion_style payload exceeds the 512-byte BLE maximum.
-      // For BLE we split into two packets: accessories+sizes and offsets.
-      // For relay (HTTP) the full payload is sent in one request (no size limit).
-      final stylePacket = {
+      // The full set_companion_style payload exceeds the BLE write ceiling.
+      // The firmware accepts partial style updates, so BLE sends multiple
+      // smaller packets while relay still uses a single merged payload.
+      final styleIdentityPacket = {
         'type': 'set_companion_style',
         'hair': hair,
         'ears': ears,
@@ -1179,11 +1179,17 @@ class DeskCompanionController extends ChangeNotifier {
         'glasses': glasses,
         'headwear': headwear,
         'piercing': piercing,
+      };
+      final styleSizePacket = {
+        'type': 'set_companion_style',
         'headwearSize': headwearSize,
         'headwearWidth': headwearWidth,
         'headwearHeight': headwearHeight,
         'hairSize': hairSize,
         'mustacheSize': mustacheSize,
+      };
+      final styleShapePacket = {
+        'type': 'set_companion_style',
         'hairWidth': hairWidth,
         'hairHeight': hairHeight,
         'hairThickness': hairThickness,
@@ -1211,7 +1217,9 @@ class DeskCompanionController extends ChangeNotifier {
       notifyListeners();
 
       if (isBleConnected) {
-        await _sendBleCommand(stylePacket);
+        await _sendBleCommand(styleIdentityPacket);
+        await _sendBleCommand(styleSizePacket);
+        await _sendBleCommand(styleShapePacket);
         await _sendBleCommand(offsetPacket);
         _deliveryStage = 'displaying';
         _setStatus('Companion style sent over BLE.');
@@ -1223,7 +1231,9 @@ class DeskCompanionController extends ChangeNotifier {
         });
       } else if (hasRelayTarget) {
         final sent = await _postRelay({
-          ...stylePacket,
+          ...styleIdentityPacket,
+          ...styleSizePacket,
+          ...styleShapePacket,
           'headwearOffsetX': headwearOffsetX,
           'headwearOffsetY': headwearOffsetY,
           'hairOffsetX': hairOffsetX,
