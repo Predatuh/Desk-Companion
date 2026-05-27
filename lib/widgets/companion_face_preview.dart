@@ -1290,8 +1290,6 @@ class _CompanionFacePainter extends CustomPainter {
   final Color? mustacheColor;
   final Color? mouthColor;
 
-  Color get _resolvedAccentColor => accentColor ?? const Color(0xFF00BFFF);
-
   static const _visibleScreenRect = Rect.fromLTWH(2, 2, 316, 236);
 
   @override
@@ -1354,7 +1352,7 @@ class _CompanionFacePainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
     final mustacheFill = Paint()
-      ..color = mustacheColor ?? resolvedEyeColor
+      ..color = mustacheColor ?? resolvedFaceColor
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
 

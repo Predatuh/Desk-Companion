@@ -357,6 +357,7 @@ unsigned long firecrackerWordDurationMs = 3000;  // how long word stays on scree
 unsigned long firecrackerExplodeMs = 0;          // millis() when explosion started
 // Note animation: 0=none, 1=flowing_water, 2=shooting_stars, 3=growing_flowers, 4=fireworks, 5=snowfall, 6=starfield
 uint8_t noteAnimType = 0;
+bool animatedNoteUsesTextBackground = false;
 Ptcl noteOvPtcl[24];
 uint8_t noteOvCount = 0;
 // Countdown end action: 0=fireworks, 1=heart_rain, 2=snowfall, 3=starfield
@@ -396,7 +397,7 @@ bool relayColorTransferActive();
 void publishStatus();
 void publishStatusWithNetworks();
 String buildSlimStatusJson();
-void drawWrappedText(const String& text, int fontSize, int border, const String& icons);
+void drawWrappedText(const String& text, int fontSize, int border, const String& icons, bool pushToScreen = true);
 void renderBannerFrame();
 void renderExpressionFrame();
 void renderImage();
@@ -405,6 +406,7 @@ void renderIdle();
 void renderCurrentMode();
 void drawFireworkParticle(int16_t x, int16_t y, int r, uint16_t c);
 void renderAnimatedNoteFrame();
+void drawCurrentNoteBackground(bool pushToScreen = true);
 void initNoteOverlay();
 String petDisplayLabel(const String& value);
 String normalizePetPersonality(const String& value);
@@ -460,7 +462,7 @@ void drawHeartEye(int cx, int cy, int s);
 void drawSteamPuff(int cx, int cy, int r);
 void drawCompanionAccessories(int leftX, int rightX, int eyeY, int mouthY);
 void renderFlowerFrame();
-void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType);
+void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType, bool pushToScreen = true);
 void tryStoredPrefs();
 void handleCommandJson(const String& body);
 void pushRelayStatus();
@@ -1596,7 +1598,7 @@ int lineVisualWidth(const String& line, int fontSize) {
   return w;
 }
 
-void drawWrappedText(const String& text, int fontSize, int border, const String& icons) {
+void drawWrappedText(const String& text, int fontSize, int border, const String& icons, bool pushToScreen) {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
   drawNoteBorder(border);
@@ -1647,7 +1649,7 @@ void drawWrappedText(const String& text, int fontSize, int border, const String&
   }
 
   if (hasIcons) drawNoteIcons(icons, 14, 8);
-  pushCanvas();
+  if (pushToScreen) pushCanvas();
 }
 
 void renderBannerFrame() {
@@ -3046,11 +3048,7 @@ void renderCurrentMode() {
   if (!displayAvailable) return;
   switch (currentMode) {
     case MODE_NOTE:
-      if (currentNoteFlowerAccent.length() > 0) {
-        drawNoteWithFlowerAccent(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons, currentNoteFlowerAccent);
-      } else {
-        drawWrappedText(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons);
-      }
+      drawCurrentNoteBackground();
       break;
     case MODE_BANNER:
       renderBannerFrame();
@@ -3531,9 +3529,14 @@ void drawFlowerShape(int16_t cx, int16_t cy, int s, uint16_t c) {
 }
 
 void renderAnimatedNoteFrame() {
-  if (!displayAvailable || !colorImageBuffer) return;
-  // Redraw the note image as background
-  if (spriteReady && canvas) {
+  if (!displayAvailable) return;
+  if (animatedNoteUsesTextBackground || !colorImageBuffer) {
+    if (!spriteReady || !canvas) {
+      drawCurrentNoteBackground();
+      return;
+    }
+    drawCurrentNoteBackground(false);
+  } else if (spriteReady && canvas) {
     memcpy(canvas->getBuffer(), colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
   } else {
     tft.drawRGBBitmap(0, 0, colorImageBuffer, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -3725,7 +3728,6 @@ void renderCountdownFrame() {
       case 3:  setParticleMode("starfield");  break;
       default: setParticleMode("fireworks");  break;
     }
-    startTransientExpression("love", 4000, "Time's up!");
   }
   pushCanvas();
 }
@@ -4197,7 +4199,7 @@ void renderFlowerFrame() {
   pushCanvas();
 }
 
-void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType) {
+void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, const String& icons, const String& flowerType, bool pushToScreen) {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
 
@@ -4246,7 +4248,15 @@ void drawNoteWithFlowerAccent(const String& text, int fontSize, int border, cons
     gfx->setCursor(textLeft, startY + i * lineHeight);
     gfx->print(lines[i]);
   }
-  pushCanvas();
+  if (pushToScreen) pushCanvas();
+}
+
+void drawCurrentNoteBackground(bool pushToScreen) {
+  if (currentNoteFlowerAccent.length() > 0) {
+    drawNoteWithFlowerAccent(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons, currentNoteFlowerAccent, pushToScreen);
+  } else {
+    drawWrappedText(currentNote, currentNoteFontSize, currentNoteBorder, currentNoteIcons, pushToScreen);
+  }
 }
 
 // ─── Preferences and state (identical to mini) ───
@@ -4474,15 +4484,17 @@ void handleCommandJson(const String& body) {
     else if (anim == "snowfall")         noteAnimType = 5;
     else if (anim == "starfield")        noteAnimType = 6;
     else                                 noteAnimType = 0;
-    // If we have a color image loaded, switch to animated note mode
-    if (noteAnimType > 0 && colorImageBuffer) {
+    const bool hasTextNote = currentNote.length() > 0;
+    const bool hasImageNote = colorImageBuffer != nullptr;
+    if (noteAnimType > 0 && (hasTextNote || hasImageNote)) {
       transientActive = false;
+      animatedNoteUsesTextBackground = hasTextNote;
       currentMode = MODE_ANIMATED_NOTE;
       lastParticleTickMs = millis();
       initNoteOverlay();
       renderCurrentMode();
     } else if (noteAnimType == 0 && currentMode == MODE_ANIMATED_NOTE) {
-      currentMode = MODE_COLOR_IMAGE;
+      currentMode = animatedNoteUsesTextBackground ? MODE_NOTE : MODE_COLOR_IMAGE;
       renderCurrentMode();
     }
     publishStatus();
@@ -4876,7 +4888,14 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   currentNote = noteQueue[noteQueueIndex];
   currentNoteFontSize = noteFontSizeQueue[noteQueueIndex];
   currentNoteFlowerAccent = flowerAccent;
-  currentMode = MODE_NOTE;
+  animatedNoteUsesTextBackground = true;
+  if (noteAnimType > 0) {
+    currentMode = MODE_ANIMATED_NOTE;
+    lastParticleTickMs = millis();
+    initNoteOverlay();
+  } else {
+    currentMode = MODE_NOTE;
+  }
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();

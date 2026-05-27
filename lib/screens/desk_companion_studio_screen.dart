@@ -3971,19 +3971,19 @@ enum _AppearanceEditorSection { scene, silhouette, face, mustache, motion, style
 
 extension _AppearanceEditorSectionExt on _AppearanceEditorSection {
   String get label => switch (this) {
-        _AppearanceEditorSection.scene => 'Scene',
-        _AppearanceEditorSection.silhouette => 'Top layer',
-        _AppearanceEditorSection.face => 'Face',
-        _AppearanceEditorSection.mustache => 'Mustache',
+        _AppearanceEditorSection.scene => 'Overview',
+        _AppearanceEditorSection.silhouette => 'Base',
+        _AppearanceEditorSection.face => 'Accessories',
+        _AppearanceEditorSection.mustache => 'Tune',
         _AppearanceEditorSection.motion => 'Motion',
-        _AppearanceEditorSection.style => 'Style',
+        _AppearanceEditorSection.style => 'Colors',
       };
 
   IconData get icon => switch (this) {
-        _AppearanceEditorSection.scene => Icons.movie_filter_outlined,
-        _AppearanceEditorSection.silhouette => Icons.style_outlined,
-        _AppearanceEditorSection.face => Icons.face_retouching_natural,
-        _AppearanceEditorSection.mustache => Icons.brush_outlined,
+        _AppearanceEditorSection.scene => Icons.view_compact_outlined,
+        _AppearanceEditorSection.silhouette => Icons.category_outlined,
+        _AppearanceEditorSection.face => Icons.auto_awesome_outlined,
+        _AppearanceEditorSection.mustache => Icons.tune_outlined,
         _AppearanceEditorSection.motion => Icons.animation_outlined,
         _AppearanceEditorSection.style => Icons.palette_outlined,
       };
@@ -4269,6 +4269,9 @@ class _FullscreenAppearanceEditorState
     _visualModel = CompanionVisualModel.classic;
     _scene = widget.initialScene;
     _activeSection = widget.initialSection ?? _defaultSectionForModel(_visualModel);
+    if (!_availableSections.contains(_activeSection)) {
+      _activeSection = _defaultSectionForModel(_visualModel);
+    }
     _referencePose = widget.initialReferencePose;
     _selectedExpression = widget.selectedExpression;
     _hairStyle = widget.hairStyle;
@@ -4316,7 +4319,6 @@ class _FullscreenAppearanceEditorState
   }
 
   List<_AppearanceEditorSection> get _availableSections => const [
-        _AppearanceEditorSection.scene,
         _AppearanceEditorSection.silhouette,
         _AppearanceEditorSection.face,
         _AppearanceEditorSection.mustache,
@@ -4572,100 +4574,131 @@ class _FullscreenAppearanceEditorState
 
   Widget _buildSilhouettePanel(BuildContext context) {
     return _EditorPanel(
-      title: 'Top layer',
-      subtitle: 'Shape the silhouette first, then move on. Everything unrelated stays out of the way.',
+      title: 'Base shape',
+      subtitle: 'Pick the big silhouette pieces first. Fine sizing and placement stay tucked away unless you need them.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChoiceWrap(
-            context,
-            'Hair',
-            DeskHairStyle.values,
-            _hairStyle,
-            (value) => setState(() => _hairStyle = value),
-            (value) => value.label,
+          _EditorSubgroup(
+            title: 'Hair & ears',
+            subtitle: 'Choose the main silhouette before touching any sliders.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildChoiceWrap(
+                  context,
+                  'Hair',
+                  DeskHairStyle.values,
+                  _hairStyle,
+                  (value) => setState(() => _hairStyle = value),
+                  (value) => value.label,
+                ),
+                const SizedBox(height: 12),
+                _buildChoiceWrap(
+                  context,
+                  'Ears',
+                  DeskEarsStyle.values,
+                  _earsStyle,
+                  (value) => setState(() => _earsStyle = value),
+                  (value) => value.label,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          _buildChoiceWrap(
-            context,
-            'Ears',
-            DeskEarsStyle.values,
-            _earsStyle,
-            (value) => setState(() => _earsStyle = value),
-            (value) => value.label,
+          _EditorAdvancedGroup(
+            title: 'Hair tuning',
+            summary: 'Size, width, height, thickness, and placement.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSlider(
+                  context,
+                  'Hair size ${_hairSize.round()}%',
+                  _hairSize,
+                  (value) => setState(() => _hairSize = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Hair width ${_hairWidth.round()}%',
+                  _hairWidth,
+                  (value) => setState(() => _hairWidth = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Hair height ${_hairHeight.round()}%',
+                  _hairHeight,
+                  (value) => setState(() => _hairHeight = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Hair thickness ${_hairThickness.round()}%',
+                  _hairThickness,
+                  (value) => setState(() => _hairThickness = value),
+                ),
+                const SizedBox(height: 8),
+                _OffsetPad(
+                  title: 'Hair placement',
+                  offsetX: _hairOffsetX,
+                  offsetY: _hairOffsetY,
+                  onChanged: (x, y) => setState(() {
+                    _hairOffsetX = x;
+                    _hairOffsetY = y;
+                  }),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          _buildChoiceWrap(
-            context,
-            'Headwear',
-            DeskHeadwearStyle.values,
-            _headwearStyle,
-            (value) => setState(() => _headwearStyle = value),
-            (value) => value.label,
+          _EditorSubgroup(
+            title: 'Headwear',
+            subtitle: 'Add bows, hats, or simple top accents without crowding the primary flow.',
+            child: _buildChoiceWrap(
+              context,
+              'Headwear',
+              DeskHeadwearStyle.values,
+              _headwearStyle,
+              (value) => setState(() => _headwearStyle = value),
+              (value) => value.label,
+            ),
           ),
           const SizedBox(height: 12),
-          _buildSlider(
-            context,
-            'Headwear size ${_headwearSize.round()}%',
-            _headwearSize,
-            (value) => setState(() => _headwearSize = value),
-          ),
-          _buildSlider(
-            context,
-            'Headwear width ${_headwearWidth.round()}%',
-            _headwearWidth,
-            (value) => setState(() => _headwearWidth = value),
-          ),
-          _buildSlider(
-            context,
-            'Headwear height ${_headwearHeight.round()}%',
-            _headwearHeight,
-            (value) => setState(() => _headwearHeight = value),
-          ),
-          const SizedBox(height: 8),
-          _OffsetPad(
-            title: 'Headwear placement',
-            offsetX: _headwearOffsetX,
-            offsetY: _headwearOffsetY,
-            onChanged: (x, y) => setState(() {
-              _headwearOffsetX = x;
-              _headwearOffsetY = y;
-            }),
-          ),
-          const SizedBox(height: 12),
-          _buildSlider(
-            context,
-            'Hair size ${_hairSize.round()}%',
-            _hairSize,
-            (value) => setState(() => _hairSize = value),
-          ),
-          _buildSlider(
-            context,
-            'Hair width ${_hairWidth.round()}%',
-            _hairWidth,
-            (value) => setState(() => _hairWidth = value),
-          ),
-          _buildSlider(
-            context,
-            'Hair height ${_hairHeight.round()}%',
-            _hairHeight,
-            (value) => setState(() => _hairHeight = value),
-          ),
-          _buildSlider(
-            context,
-            'Hair thickness ${_hairThickness.round()}%',
-            _hairThickness,
-            (value) => setState(() => _hairThickness = value),
-          ),
-          const SizedBox(height: 8),
-          _OffsetPad(
-            title: 'Hair placement',
-            offsetX: _hairOffsetX,
-            offsetY: _hairOffsetY,
-            onChanged: (x, y) => setState(() {
-              _hairOffsetX = x;
-              _hairOffsetY = y;
-            }),
+          _EditorAdvancedGroup(
+            title: 'Headwear tuning',
+            summary: 'Size, width, height, and placement.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSlider(
+                  context,
+                  'Headwear size ${_headwearSize.round()}%',
+                  _headwearSize,
+                  (value) => setState(() => _headwearSize = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Headwear width ${_headwearWidth.round()}%',
+                  _headwearWidth,
+                  (value) => setState(() => _headwearWidth = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Headwear height ${_headwearHeight.round()}%',
+                  _headwearHeight,
+                  (value) => setState(() => _headwearHeight = value),
+                ),
+                const SizedBox(height: 8),
+                _OffsetPad(
+                  title: 'Headwear placement',
+                  offsetX: _headwearOffsetX,
+                  offsetY: _headwearOffsetY,
+                  onChanged: (x, y) => setState(() {
+                    _headwearOffsetX = x;
+                    _headwearOffsetY = y;
+                  }),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -4674,47 +4707,78 @@ class _FullscreenAppearanceEditorState
 
   Widget _buildFacePanel(BuildContext context) {
     return _EditorPanel(
-      title: 'Face details',
-      subtitle: 'Classic face alignment lives here: glasses, piercing, and the eye and mouth lines that keep hair from crashing into the expression.',
+      title: 'Accessories',
+      subtitle: 'Keep the main accessory choices visible. Placement stays in Advanced so the primary path remains short.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChoiceWrap(
-            context,
-            'Glasses',
-            DeskGlassesStyle.values,
-            _glassesStyle,
-            (value) => setState(() => _glassesStyle = value),
-            (value) => value.label,
+          _EditorSubgroup(
+            title: 'Face accents',
+            subtitle: 'Glasses and piercings are the fast-access choices.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildChoiceWrap(
+                  context,
+                  'Glasses',
+                  DeskGlassesStyle.values,
+                  _glassesStyle,
+                  (value) => setState(() => _glassesStyle = value),
+                  (value) => value.label,
+                ),
+                const SizedBox(height: 12),
+                _buildChoiceWrap(
+                  context,
+                  'Piercing',
+                  DeskPiercingStyle.values,
+                  _piercingStyle,
+                  (value) => setState(() => _piercingStyle = value),
+                  (value) => value.label,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          _buildChoiceWrap(
-            context,
-            'Piercing',
-            DeskPiercingStyle.values,
-            _piercingStyle,
-            (value) => setState(() => _piercingStyle = value),
-            (value) => value.label,
+          _EditorSubgroup(
+            title: 'Mustache style',
+            subtitle: 'Choose the shape here. Detailed shaping lives in Tune.',
+            child: _buildChoiceWrap(
+              context,
+              'Mustache',
+              DeskMustacheStyle.values,
+              _mustacheStyle,
+              (value) => setState(() => _mustacheStyle = value),
+              (value) => value.label,
+            ),
           ),
           const SizedBox(height: 12),
-          _OffsetPad(
-            title: 'Eye placement',
-            offsetX: _eyeOffsetX,
-            offsetY: _eyeOffsetY,
-            onChanged: (x, y) => setState(() {
-              _eyeOffsetX = x;
-              _eyeOffsetY = y;
-            }),
-          ),
-          const SizedBox(height: 12),
-          _OffsetPad(
-            title: 'Mouth placement',
-            offsetX: _mouthOffsetX,
-            offsetY: _mouthOffsetY,
-            onChanged: (x, y) => setState(() {
-              _mouthOffsetX = x;
-              _mouthOffsetY = y;
-            }),
+          _EditorAdvancedGroup(
+            title: 'Feature placement',
+            summary: 'Move eyes and mouth only when the default anchor is off.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _OffsetPad(
+                  title: 'Eye placement',
+                  offsetX: _eyeOffsetX,
+                  offsetY: _eyeOffsetY,
+                  onChanged: (x, y) => setState(() {
+                    _eyeOffsetX = x;
+                    _eyeOffsetY = y;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                _OffsetPad(
+                  title: 'Mouth placement',
+                  offsetX: _mouthOffsetX,
+                  offsetY: _mouthOffsetY,
+                  onChanged: (x, y) => setState(() {
+                    _mouthOffsetX = x;
+                    _mouthOffsetY = y;
+                  }),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -4723,53 +4787,58 @@ class _FullscreenAppearanceEditorState
 
   Widget _buildMustachePanel(BuildContext context) {
     return _EditorPanel(
-      title: 'Mustache studio',
-      subtitle: 'Keep all mustache shape and placement controls in one place instead of splitting them across the page.',
+      title: 'Fine tuning',
+      subtitle: 'Only open this when the basic style is right and you need to dial the fit in.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChoiceWrap(
-            context,
-            'Mustache',
-            DeskMustacheStyle.values,
-            _mustacheStyle,
-            (value) => setState(() => _mustacheStyle = value),
-            (value) => value.label,
+          _EditorSubgroup(
+            title: 'Mustache shape',
+            subtitle: 'The style lives in Accessories. This section is for detailed fit only.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSlider(
+                  context,
+                  'Mustache size ${_mustacheSize.round()}%',
+                  _mustacheSize,
+                  (value) => setState(() => _mustacheSize = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Mustache width ${_mustacheWidth.round()}%',
+                  _mustacheWidth,
+                  (value) => setState(() => _mustacheWidth = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Mustache height ${_mustacheHeight.round()}%',
+                  _mustacheHeight,
+                  (value) => setState(() => _mustacheHeight = value),
+                ),
+                _buildSlider(
+                  context,
+                  'Mustache thickness ${_mustacheThickness.round()}%',
+                  _mustacheThickness,
+                  (value) => setState(() => _mustacheThickness = value),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          _buildSlider(
-            context,
-            'Mustache size ${_mustacheSize.round()}%',
-            _mustacheSize,
-            (value) => setState(() => _mustacheSize = value),
-          ),
-          _buildSlider(
-            context,
-            'Mustache width ${_mustacheWidth.round()}%',
-            _mustacheWidth,
-            (value) => setState(() => _mustacheWidth = value),
-          ),
-          _buildSlider(
-            context,
-            'Mustache height ${_mustacheHeight.round()}%',
-            _mustacheHeight,
-            (value) => setState(() => _mustacheHeight = value),
-          ),
-          _buildSlider(
-            context,
-            'Mustache thickness ${_mustacheThickness.round()}%',
-            _mustacheThickness,
-            (value) => setState(() => _mustacheThickness = value),
-          ),
-          const SizedBox(height: 8),
-          _OffsetPad(
+          _EditorAdvancedGroup(
             title: 'Mustache placement',
-            offsetX: _mustacheOffsetX,
-            offsetY: _mustacheOffsetY,
-            onChanged: (x, y) => setState(() {
-              _mustacheOffsetX = x;
-              _mustacheOffsetY = y;
-            }),
+            summary: 'Shift the mustache around the mouth anchor.',
+            initiallyExpanded: true,
+            child: _OffsetPad(
+              title: 'Placement',
+              offsetX: _mustacheOffsetX,
+              offsetY: _mustacheOffsetY,
+              onChanged: (x, y) => setState(() {
+                _mustacheOffsetX = x;
+                _mustacheOffsetY = y;
+              }),
+            ),
           ),
         ],
       ),
@@ -4825,56 +4894,72 @@ class _FullscreenAppearanceEditorState
 
   Widget _buildStylePanel(BuildContext context) {
     return _EditorPanel(
-      title: 'Style & colors',
-      subtitle: 'Animation speed, overall scale, whole-companion placement, and display colors live here so the main tab stays simple.',
+      title: 'Colors',
+      subtitle: 'Keep the visible color choices together. Whole-companion motion and placement are hidden until you need them.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSlider(
-            context,
-            'Animation speed ${_expressionSpeed.toStringAsFixed(1)}×',
-            _expressionSpeed,
-            (value) => setState(() => _expressionSpeed = value),
-            min: 0.5,
-            max: 8,
-            divisions: 15,
-          ),
-          _buildSlider(
-            context,
-            'Companion scale ${_companionScale.round()}%',
-            _companionScale,
-            (value) => setState(() => _companionScale = value),
-            min: 10,
-            max: 300,
-            divisions: 29,
-          ),
-          const SizedBox(height: 8),
-          _OffsetPad(
-            title: 'Move all',
-            offsetX: _companionOffsetX,
-            offsetY: _companionOffsetY,
-            maxOffset: 60,
-            onChanged: (x, y) => setState(() {
-              _companionOffsetX = x;
-              _companionOffsetY = y;
-            }),
+          _EditorSubgroup(
+            title: 'Display colors',
+            subtitle: 'These are the classic colors you will notice first on-device.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Face', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Hat', color: _hatColor, onChanged: (c) => setState(() => _hatColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Mustache', color: _mustacheColor, onChanged: (c) => setState(() => _mustacheColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
+                const SizedBox(height: 8),
+                _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          Text('Display colors', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Eyes', color: _eyeColor, onChanged: (c) => setState(() => _eyeColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Face', color: _faceColor, onChanged: (c) => setState(() => _faceColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Hair', color: _hairColor, onChanged: (c) => setState(() => _hairColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Hat', color: _hatColor, onChanged: (c) => setState(() => _hatColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Mustache', color: _mustacheColor, onChanged: (c) => setState(() => _mustacheColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Mouth', color: _mouthColor, onChanged: (c) => setState(() => _mouthColor = c)),
-          const SizedBox(height: 8),
-          _ColorRow(label: 'Accent', color: _accentColor, onChanged: (c) => setState(() => _accentColor = c)),
+          _EditorAdvancedGroup(
+            title: 'Whole companion',
+            summary: 'Animation speed, overall scale, and global placement.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSlider(
+                  context,
+                  'Animation speed ${_expressionSpeed.toStringAsFixed(1)}×',
+                  _expressionSpeed,
+                  (value) => setState(() => _expressionSpeed = value),
+                  min: 0.5,
+                  max: 8,
+                  divisions: 15,
+                ),
+                _buildSlider(
+                  context,
+                  'Companion scale ${_companionScale.round()}%',
+                  _companionScale,
+                  (value) => setState(() => _companionScale = value),
+                  min: 10,
+                  max: 300,
+                  divisions: 29,
+                ),
+                const SizedBox(height: 8),
+                _OffsetPad(
+                  title: 'Move all',
+                  offsetX: _companionOffsetX,
+                  offsetY: _companionOffsetY,
+                  maxOffset: 60,
+                  onChanged: (x, y) => setState(() {
+                    _companionOffsetX = x;
+                    _companionOffsetY = y;
+                  }),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -5332,6 +5417,80 @@ class _EditorPanel extends StatelessWidget {
           const SizedBox(height: 12),
           child,
         ],
+      ),
+    );
+  }
+}
+
+class _EditorSubgroup extends StatelessWidget {
+  const _EditorSubgroup({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: CompanionTheme.surfaceRaised,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CompanionTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorAdvancedGroup extends StatelessWidget {
+  const _EditorAdvancedGroup({
+    required this.title,
+    required this.summary,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final String summary;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: CompanionTheme.surfaceRaised,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CompanionTheme.border),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey<String>('advanced-$title'),
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          subtitle: Text(summary, style: Theme.of(context).textTheme.bodySmall),
+          children: [child],
+        ),
       ),
     );
   }
