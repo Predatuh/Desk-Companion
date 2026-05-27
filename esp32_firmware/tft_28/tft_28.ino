@@ -4313,6 +4313,26 @@ void handleCommandJson(const String& body) {
     return;
   }
 
+  // Offset fields are sent as a separate BLE packet to keep each write under 512 bytes.
+  if (type == "set_companion_offsets") {
+    companionHeadwearOffsetX = clampAppearanceOffset(extractJsonIntField(body, "headwearOffsetX", companionHeadwearOffsetX));
+    companionHeadwearOffsetY = clampAppearanceOffset(extractJsonIntField(body, "headwearOffsetY", companionHeadwearOffsetY));
+    companionHairOffsetX     = clampAppearanceOffset(extractJsonIntField(body, "hairOffsetX",     companionHairOffsetX));
+    companionHairOffsetY     = clampAppearanceOffset(extractJsonIntField(body, "hairOffsetY",     companionHairOffsetY));
+    companionEyeOffsetX      = clampAppearanceOffset(extractJsonIntField(body, "eyeOffsetX",      companionEyeOffsetX));
+    companionEyeOffsetY      = clampAppearanceOffset(extractJsonIntField(body, "eyeOffsetY",      companionEyeOffsetY));
+    companionMouthOffsetX    = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetX",    companionMouthOffsetX));
+    companionMouthOffsetY    = clampAppearanceOffset(extractJsonIntField(body, "mouthOffsetY",    companionMouthOffsetY));
+    companionOffsetX         = clampAppearanceOffset(extractJsonIntField(body, "companionOffsetX", companionOffsetX));
+    companionOffsetY         = clampAppearanceOffset(extractJsonIntField(body, "companionOffsetY", companionOffsetY));
+    companionMustacheOffsetX = clampAppearanceOffset(extractJsonIntField(body, "mustacheOffsetX", companionMustacheOffsetX));
+    companionMustacheOffsetY = clampAppearanceOffset(extractJsonIntField(body, "mustacheOffsetY", companionMustacheOffsetY));
+    persistPetState();
+    renderCurrentMode();
+    publishStatus();
+    return;
+  }
+
   if (type == "set_relay") {
     saveRelaySettings(extractJsonStringField(body, "relayUrl"), extractJsonStringField(body, "deviceToken"));
     return;

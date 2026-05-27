@@ -1168,25 +1168,64 @@ class DeskCompanionController extends ChangeNotifier {
     required int mustacheOffsetY,
   }) async {
     await _runBusy(() async {
-      await _sendCommand(
-        {
-          'type': 'set_companion_style',
-          'hair': hair,
-          'ears': ears,
-          'mustache': mustache,
-          'glasses': glasses,
-          'headwear': headwear,
-          'piercing': piercing,
-          'headwearSize': headwearSize,
-          'headwearWidth': headwearWidth,
-          'headwearHeight': headwearHeight,
+      // The full set_companion_style payload exceeds the 512-byte BLE maximum.
+      // For BLE we split into two packets: accessories+sizes and offsets.
+      // For relay (HTTP) the full payload is sent in one request (no size limit).
+      final stylePacket = {
+        'type': 'set_companion_style',
+        'hair': hair,
+        'ears': ears,
+        'mustache': mustache,
+        'glasses': glasses,
+        'headwear': headwear,
+        'piercing': piercing,
+        'headwearSize': headwearSize,
+        'headwearWidth': headwearWidth,
+        'headwearHeight': headwearHeight,
+        'hairSize': hairSize,
+        'mustacheSize': mustacheSize,
+        'hairWidth': hairWidth,
+        'hairHeight': hairHeight,
+        'hairThickness': hairThickness,
+        'mustacheWidth': mustacheWidth,
+        'mustacheHeight': mustacheHeight,
+        'mustacheThickness': mustacheThickness,
+      };
+      final offsetPacket = {
+        'type': 'set_companion_offsets',
+        'headwearOffsetX': headwearOffsetX,
+        'headwearOffsetY': headwearOffsetY,
+        'hairOffsetX': hairOffsetX,
+        'hairOffsetY': hairOffsetY,
+        'eyeOffsetX': eyeOffsetX,
+        'eyeOffsetY': eyeOffsetY,
+        'mouthOffsetX': mouthOffsetX,
+        'mouthOffsetY': mouthOffsetY,
+        'companionOffsetX': companionOffsetX,
+        'companionOffsetY': companionOffsetY,
+        'mustacheOffsetX': mustacheOffsetX,
+        'mustacheOffsetY': mustacheOffsetY,
+      };
+
+      _deliveryStage = 'sending';
+      notifyListeners();
+
+      if (isBleConnected) {
+        await _sendBleCommand(stylePacket);
+        await _sendBleCommand(offsetPacket);
+        _deliveryStage = 'displaying';
+        _setStatus('Companion style sent over BLE.');
+        Future.delayed(const Duration(seconds: 3), () {
+          if (_deliveryStage == 'displaying') {
+            _deliveryStage = '';
+            notifyListeners();
+          }
+        });
+      } else if (hasRelayTarget) {
+        final sent = await _postRelay({
+          ...stylePacket,
           'headwearOffsetX': headwearOffsetX,
           'headwearOffsetY': headwearOffsetY,
-          'hairSize': hairSize,
-          'mustacheSize': mustacheSize,
-          'hairWidth': hairWidth,
-          'hairHeight': hairHeight,
-          'hairThickness': hairThickness,
           'hairOffsetX': hairOffsetX,
           'hairOffsetY': hairOffsetY,
           'eyeOffsetX': eyeOffsetX,
@@ -1195,16 +1234,24 @@ class DeskCompanionController extends ChangeNotifier {
           'mouthOffsetY': mouthOffsetY,
           'companionOffsetX': companionOffsetX,
           'companionOffsetY': companionOffsetY,
-          'mustacheWidth': mustacheWidth,
-          'mustacheHeight': mustacheHeight,
-          'mustacheThickness': mustacheThickness,
           'mustacheOffsetX': mustacheOffsetX,
           'mustacheOffsetY': mustacheOffsetY,
-        },
-        mode: _mode,
-        bleLabel: 'Companion style sent over BLE.',
-        relayLabel: 'Companion style queued through relay.',
-      );
+        });
+        if (sent) {
+          _deliveryStage = 'queued';
+          _pollRelayDelivery('Companion style queued through relay.');
+          notifyListeners();
+        } else {
+          _deliveryStage = '';
+          notifyListeners();
+          throw HttpException(_lastRelayError ?? 'Relay send failed.');
+        }
+      } else {
+        _deliveryStage = '';
+        notifyListeners();
+        throw const HttpException(
+            'Not connected. Pair over BLE or configure a relay.');
+      }
       _lastStyleSentAt = DateTime.now();
       _companionHair = hair.trim();
       _companionEars = ears.trim();
