@@ -1524,6 +1524,14 @@ class _CompanionFacePainter extends CustomPainter {
 
   double _scaleValue(num base, int percent) => base * _clampPercent(percent) / 100.0;
 
+  double _scaleByPercent(num base, int percent) {
+    final scaled = base * _clampPercent(percent) / 100.0;
+    if (scaled == 0 && base != 0) {
+      return base > 0 ? 1.0 : -1.0;
+    }
+    return scaled;
+  }
+
   void _drawEye(
     Canvas canvas,
     Paint fill,
@@ -1652,22 +1660,22 @@ class _CompanionFacePainter extends CustomPainter {
   void _drawAccessories(Canvas canvas, Paint stroke, Paint fill, Paint hairPaint, Paint hatPaint, Paint mustachePaint, Paint mustacheFill, double leftX, double rightX, double eyeY, double mouthY) {
     final faceCenterX = (leftX + rightX) / 2;
     final scaledHeadwear = _clampPercent(headwearSize);
-    final scaledHeadwearWidth = _clampPercent(headwearWidth);
-    final scaledHeadwearHeight = _clampPercent(headwearHeight);
+    final scaledHeadwearWidth = _scaleByPercent(scaledHeadwear, headwearWidth);
+    final scaledHeadwearHeight = _scaleByPercent(scaledHeadwear, headwearHeight);
     final headwearCenterX = faceCenterX + _clampOffset(headwearOffsetX) * 2.0;
     final headwearBaseY = eyeY + _clampOffset(headwearOffsetY) * 2.0;
     final scaledHair = _clampPercent(hairSize);
     final scaledMustache = _clampPercent(mustacheSize);
-    final scaledHairWidth = _clampPercent(hairWidth);
-    final scaledHairHeight = _clampPercent(hairHeight);
+    final scaledHairWidth = _scaleByPercent(scaledHair, hairWidth);
+    final scaledHairHeight = _scaleByPercent(scaledHair, hairHeight);
     final scaledHairThickness = _clampPercent(hairThickness);
-    final hairStroke = 1 + ((2 * scaledHairThickness) / 100).floor();
-    final hairCenterX = faceCenterX + _clampOffset(hairOffsetX);
-    final hairCenterY = eyeY + _clampOffset(hairOffsetY);
-    final scaledMustacheWidth = _clampPercent(mustacheWidth);
-    final scaledMustacheHeight = _clampPercent(mustacheHeight);
+    final hairStroke = 2 + _scaleByPercent(3, scaledHairThickness).floor();
+    final hairCenterX = faceCenterX + _clampOffset(hairOffsetX) * 2.0;
+    final hairCenterY = eyeY + _clampOffset(hairOffsetY) * 2.0;
+    final scaledMustacheWidth = _scaleByPercent(scaledMustache, mustacheWidth);
+    final scaledMustacheHeight = _scaleByPercent(scaledMustache, mustacheHeight);
     final scaledMustacheThickness = _clampPercent(mustacheThickness);
-    final mustacheStroke = 1 + ((2 * scaledMustacheThickness) / 100).floor();
+    final mustacheStroke = 2 + _scaleByPercent(3, scaledMustacheThickness).floor();
     final mustacheCenterX = faceCenterX + _clampOffset(mustacheOffsetX) * 2.0;
     final mustacheCenterY = mouthY + _clampOffset(mustacheOffsetY) * 2.0;
 
@@ -1689,8 +1697,8 @@ class _CompanionFacePainter extends CustomPainter {
     }
 
     if (hair == 'tuft') {
-      final lift = _scaleValue(22, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final spread = _scaleValue(10, _clampPercent((scaledHair * scaledHairWidth / 100).round()));
+      final lift = _scaleByPercent(22, scaledHairHeight.round());
+      final spread = _scaleByPercent(9, scaledHairWidth.round());
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
           Offset(hairCenterX - spread, hairCenterY - 22 + strokeIndex),
@@ -1709,64 +1717,64 @@ class _CompanionFacePainter extends CustomPainter {
         );
       }
     } else if (hair == 'bangs') {
-      final topY = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final leftEdge = hairCenterX - _scaleValue(45, scaledHairWidth);
-      final rightEdge = hairCenterX + _scaleValue(45, scaledHairWidth);
+      final topY = hairCenterY - 22 - _scaleByPercent(5, scaledHairHeight.round());
+      final leftEdge = hairCenterX - (_scaleByPercent(68, scaledHairWidth.round()) / 2);
+      final rightEdge = hairCenterX + (_scaleByPercent(68, scaledHairWidth.round()) / 2);
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(Offset(leftEdge, topY + strokeIndex), Offset(rightEdge, topY + strokeIndex), hairPaint);
       }
-      for (double x = leftX - 35; x <= rightX + 35; x += 20) {
+      for (double x = leftX - 26; x <= rightX + 26; x += 14) {
         final shiftedX = hairCenterX + (x - faceCenterX);
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
             Offset(shiftedX, topY + 2 + strokeIndex),
-            Offset(shiftedX + _scaleValue(6, scaledHairWidth), hairCenterY - 13 + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(5, scaledHairWidth.round()), hairCenterY - 12 + strokeIndex),
             hairPaint,
           );
         }
       }
     } else if (hair == 'spiky') {
-      for (double x = leftX - 35; x <= rightX + 35; x += 25) {
+      for (double x = leftX - 26; x <= rightX + 26; x += 18) {
         final shiftedX = hairCenterX + (x - faceCenterX);
-        final peak = hairCenterY - 19 - _scaleValue(17, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+        final peak = hairCenterY - 18 - _scaleByPercent(16, scaledHairHeight.round());
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
-            Offset(shiftedX, hairCenterY - 19 + strokeIndex),
-            Offset(shiftedX + _scaleValue(10, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX, hairCenterY - 18 + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(7, scaledHairWidth.round()), peak + strokeIndex),
             hairPaint,
           );
           canvas.drawLine(
-            Offset(shiftedX + _scaleValue(10, scaledHairWidth), peak + strokeIndex),
-            Offset(shiftedX + _scaleValue(20, scaledHairWidth), hairCenterY - 19 + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(7, scaledHairWidth.round()), peak + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(14, scaledHairWidth.round()), hairCenterY - 18 + strokeIndex),
             hairPaint,
           );
         }
       }
     } else if (hair == 'swoop') {
-      final topY = hairCenterY - 22 - _scaleValue(11, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
+      final topY = hairCenterY - 22 - _scaleByPercent(11, scaledHairHeight.round());
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
-          Offset(hairCenterX - _scaleValue(45, scaledHairWidth), hairCenterY - 17 + strokeIndex),
-          Offset(hairCenterX + _scaleValue(30, scaledHairWidth), topY + strokeIndex),
+          Offset(hairCenterX - _scaleByPercent(34, scaledHairWidth.round()), hairCenterY - 16 + strokeIndex),
+          Offset(hairCenterX + _scaleByPercent(22, scaledHairWidth.round()), topY + strokeIndex),
           hairPaint,
         );
         canvas.drawLine(
-          Offset(hairCenterX + _scaleValue(30, scaledHairWidth), topY + strokeIndex),
-          Offset(hairCenterX + _scaleValue(70, scaledHairWidth), hairCenterY - 9 + strokeIndex),
+          Offset(hairCenterX + _scaleByPercent(22, scaledHairWidth.round()), topY + strokeIndex),
+          Offset(hairCenterX + _scaleByPercent(52, scaledHairWidth.round()), hairCenterY - 9 + strokeIndex),
           hairPaint,
         );
         canvas.drawLine(
-          Offset(hairCenterX - _scaleValue(25, scaledHairWidth), hairCenterY - 19 + strokeIndex),
-          Offset(hairCenterX + _scaleValue(10, scaledHairWidth), topY + 4 + strokeIndex),
+          Offset(hairCenterX - _scaleByPercent(18, scaledHairWidth.round()), hairCenterY - 18 + strokeIndex),
+          Offset(hairCenterX + _scaleByPercent(7, scaledHairWidth.round()), topY + 3 + strokeIndex),
           hairPaint,
         );
       }
     } else if (hair == 'bob') {
-      final topY = hairCenterY - 21 - _scaleValue(8, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final width = _scaleValue((rightX - leftX) + 90, scaledHairWidth);
+      final topY = hairCenterY - 20 - _scaleByPercent(7, scaledHairHeight.round());
+      final width = _scaleByPercent((rightX - leftX) + 68, scaledHairWidth.round());
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(hairCenterX - width / 2, topY, width, 19 + _scaleValue(8, scaledHairHeight)),
+          Rect.fromLTWH(hairCenterX - width / 2, topY, width, 18 + _scaleByPercent(7, scaledHairHeight.round())),
           const Radius.circular(9),
         ),
         hairPaint,
@@ -1774,72 +1782,68 @@ class _CompanionFacePainter extends CustomPainter {
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(
           Offset(hairCenterX - width / 2, hairCenterY - 2 + strokeIndex),
-          Offset(hairCenterX - width / 2 + _scaleValue(15, scaledHairWidth), hairCenterY + 13 + strokeIndex),
+          Offset(hairCenterX - width / 2 + _scaleByPercent(11, scaledHairWidth.round()), hairCenterY + 12 + strokeIndex),
           hairPaint,
         );
         canvas.drawLine(
           Offset(hairCenterX + width / 2, hairCenterY - 2 + strokeIndex),
-          Offset(hairCenterX + width / 2 - _scaleValue(15, scaledHairWidth), hairCenterY + 13 + strokeIndex),
+          Offset(hairCenterX + width / 2 - _scaleByPercent(11, scaledHairWidth.round()), hairCenterY + 12 + strokeIndex),
           hairPaint,
         );
       }
     } else if (hair == 'messy') {
-      for (double x = leftX - 25; x <= rightX + 30; x += 22) {
+      for (double x = leftX - 18; x <= rightX + 22; x += 16) {
         final shiftedX = hairCenterX + (x - faceCenterX);
-        final peak = hairCenterY - 15 - _scaleValue(13, _clampPercent((scaledHair * scaledHairHeight / 100).round())) + (((x ~/ 22) % 2 == 0) ? 0 : 6);
+        final peak = hairCenterY - 14 - _scaleByPercent(13, scaledHairHeight.round()) + (((x ~/ 16) % 2 == 0) ? 0 : 5);
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
-            Offset(shiftedX, hairCenterY - 15 + strokeIndex),
-            Offset(shiftedX + _scaleValue(6, scaledHairWidth), peak + strokeIndex),
+            Offset(shiftedX, hairCenterY - 14 + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(5, scaledHairWidth.round()), peak + strokeIndex),
             hairPaint,
           );
           canvas.drawLine(
-            Offset(shiftedX + _scaleValue(6, scaledHairWidth), peak + strokeIndex),
-            Offset(shiftedX + _scaleValue(15, scaledHairWidth), hairCenterY - 17 + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(5, scaledHairWidth.round()), peak + strokeIndex),
+            Offset(shiftedX + _scaleByPercent(11, scaledHairWidth.round()), hairCenterY - 16 + strokeIndex),
             hairPaint,
           );
         }
       }
     } else if (hair == 'ponytail') {
-      final topY = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      final leftEdge = hairCenterX - _scaleValue(45, scaledHairWidth);
-      final rightEdge = hairCenterX + _scaleValue(45, scaledHairWidth);
+      final topY = hairCenterY - 22 - _scaleByPercent(5, scaledHairHeight.round());
+      final leftEdge = hairCenterX - (_scaleByPercent(68, scaledHairWidth.round()) / 2);
+      final rightEdge = hairCenterX + (_scaleByPercent(68, scaledHairWidth.round()) / 2);
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
         canvas.drawLine(Offset(leftEdge, topY + strokeIndex), Offset(rightEdge, topY + strokeIndex), hairPaint);
       }
-      // Ponytail tail going right and down
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
-        canvas.drawLine(Offset(rightEdge, topY + strokeIndex), Offset(rightEdge + _scaleValue(20, scaledHairWidth), topY + 10 + strokeIndex), hairPaint);
-        canvas.drawLine(Offset(rightEdge + _scaleValue(20, scaledHairWidth), topY + 10 + strokeIndex), Offset(rightEdge + _scaleValue(15, scaledHairWidth), topY + 35 + strokeIndex), hairPaint);
+        canvas.drawLine(Offset(rightEdge, topY + strokeIndex), Offset(rightEdge + _scaleByPercent(15, scaledHairWidth.round()), topY + 8 + strokeIndex), hairPaint);
+        canvas.drawLine(Offset(rightEdge + _scaleByPercent(15, scaledHairWidth.round()), topY + 8 + strokeIndex), Offset(rightEdge + _scaleByPercent(11, scaledHairWidth.round()), topY + 28 + strokeIndex), hairPaint);
       }
-      // Band
       canvas.drawCircle(Offset(rightEdge, topY + 2), 3, hairPaint);
     } else if (hair == 'curly') {
-      for (double angle = 0; angle < 5; angle++) {
-        final offsetAngle = angle * 1.1;
-        final cx = hairCenterX - _scaleValue(30, scaledHairWidth) + angle * _scaleValue(15, scaledHairWidth);
-        final cy = hairCenterY - 22 - _scaleValue(6, _clampPercent((scaledHair * scaledHairHeight / 100).round())) + (angle.toInt().isOdd ? 3.0 : 0.0);
-        canvas.drawCircle(Offset(cx, cy), _scaleValue(8, scaledHairHeight) + offsetAngle, hairPaint);
+      for (var i = 0; i < 5; i++) {
+        final cx = hairCenterX - _scaleByPercent(22, scaledHairWidth.round()) + i * _scaleByPercent(11, scaledHairWidth.round());
+        final cy = hairCenterY - 22 - _scaleByPercent(5, scaledHairHeight.round()) + (i.isOdd ? 3.0 : 0.0);
+        final cr = _scaleByPercent(6, scaledHairHeight.round()) + i;
+        canvas.drawCircle(Offset(cx, cy), cr, hairPaint);
       }
     } else if (hair == 'pigtails') {
       final topY = hairCenterY - 20;
-      final leftPigX = hairCenterX - _scaleValue(55, scaledHairWidth);
-      final rightPigX = hairCenterX + _scaleValue(55, scaledHairWidth);
-      // bands
-      canvas.drawCircle(Offset(leftPigX + 10, topY - 6), 4, hairPaint);
-      canvas.drawCircle(Offset(rightPigX - 10, topY - 6), 4, hairPaint);
-      // pigtails hanging down
+      final leftPigX = hairCenterX - _scaleByPercent(40, scaledHairWidth.round());
+      final rightPigX = hairCenterX + _scaleByPercent(40, scaledHairWidth.round());
+      canvas.drawCircle(Offset(leftPigX + 8, topY - 5), 3, hairPaint);
+      canvas.drawCircle(Offset(rightPigX - 8, topY - 5), 3, hairPaint);
       for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
-        canvas.drawLine(Offset(leftPigX + 10, topY - 2 + strokeIndex), Offset(leftPigX, topY + _scaleValue(25, scaledHairHeight) + strokeIndex), hairPaint);
-        canvas.drawLine(Offset(rightPigX - 10, topY - 2 + strokeIndex), Offset(rightPigX, topY + _scaleValue(25, scaledHairHeight) + strokeIndex), hairPaint);
+        canvas.drawLine(Offset(leftPigX + 8, topY - 2 + strokeIndex), Offset(leftPigX, topY + _scaleByPercent(18, scaledHairHeight.round()) + strokeIndex), hairPaint);
+        canvas.drawLine(Offset(rightPigX - 8, topY - 2 + strokeIndex), Offset(rightPigX, topY + _scaleByPercent(18, scaledHairHeight.round()) + strokeIndex), hairPaint);
       }
     } else if (hair == 'mohawk') {
-      final height = _scaleValue(28, _clampPercent((scaledHair * scaledHairHeight / 100).round()));
-      for (double x = hairCenterX - _scaleValue(15, scaledHairWidth); x <= hairCenterX + _scaleValue(15, scaledHairWidth); x += 8) {
+      final height = _scaleByPercent(22, scaledHairHeight.round());
+      for (double x = hairCenterX - _scaleByPercent(11, scaledHairWidth.round()); x <= hairCenterX + _scaleByPercent(11, scaledHairWidth.round()); x += 6) {
         for (var strokeIndex = 0; strokeIndex < hairStroke; strokeIndex++) {
           canvas.drawLine(
             Offset(x, hairCenterY - 18 + strokeIndex),
-            Offset(x + 2, hairCenterY - 18 - height + strokeIndex),
+            Offset(x + 1, hairCenterY - 18 - height + strokeIndex),
             hairPaint,
           );
         }

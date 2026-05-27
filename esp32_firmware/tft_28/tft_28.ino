@@ -362,7 +362,7 @@ uint8_t noteOvCount = 0;
 // Countdown end action: 0=fireworks, 1=heart_rain, 2=snowfall, 3=starfield
 uint8_t countdownEndAction = 0;
 // Expression speed multiplier (1=slow, 2=normal, 4=fast, 8=super fast)
-uint8_t expressionSpeedMul = 2;
+uint8_t expressionSpeedMul = 1;
 // Companion scale: 10-300 percent
 uint16_t companionScale = 100;
 // Idle screen toggles (NVS-persisted)
@@ -4476,7 +4476,7 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "set_expression_speed") {
-    int spd = extractJsonIntField(body, "speed", 2);
+    int spd = extractJsonIntField(body, "speed", 1);
     if (spd < 1) spd = 1;
     if (spd > 8) spd = 8;
     expressionSpeedMul = (uint8_t)spd;
@@ -5448,7 +5448,7 @@ void loop() {
 
   if (currentMode == MODE_EXPRESSION) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 16) {
+    if (now - lastExpressionTickMs >= 33) {
       lastExpressionTickMs = now;
       for (uint8_t s = 0; s < expressionSpeedMul; s++)
         expressionPhase = (expressionPhase + 1) % 64;
@@ -5458,7 +5458,7 @@ void loop() {
 
   if (currentMode == MODE_FLOWER) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 16) {
+    if (now - lastExpressionTickMs >= 33) {
       lastExpressionTickMs = now;
       for (uint8_t s = 0; s < expressionSpeedMul; s++)
         expressionPhase = (expressionPhase + 1) % 64;
@@ -5487,7 +5487,7 @@ void loop() {
   // Sleep mode tick
   if (currentMode == MODE_SLEEP) {
     const unsigned long now = millis();
-    if (now - lastExpressionTickMs >= 16) {
+    if (now - lastExpressionTickMs >= 33) {
       lastExpressionTickMs = now;
       expressionPhase = (expressionPhase + 1) % 64;
       renderSleepFrame();
