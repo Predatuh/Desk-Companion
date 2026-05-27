@@ -1439,7 +1439,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         Text('Presets', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         SizedBox(
-          height: 80,
+          height: 92,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _studioPresets.length,
@@ -1463,7 +1463,12 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(preset.title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13)),
+                      Text(
+                        preset.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13),
+                      ),
                       const SizedBox(height: 2),
                       Text(preset.subtitle, style: const TextStyle(color: CompanionTheme.muted, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis),
                     ],
