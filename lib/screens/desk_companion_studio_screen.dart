@@ -614,6 +614,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   bool _idleShowWeather = true;
   bool _idleShowFace = true;
   bool _idleShowWifi = true;
+  bool _idleUse12HourClock = false;
+  bool _idleUseBackgroundImage = false;
   double _brightness = 128;
 
   CompanionImagePayload? _selectedImage;
@@ -2899,13 +2901,58 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   }
 
   Widget _buildHomeScreenContent(BuildContext context, DeskCompanionController controller) {
+    final selectedImage = _selectedImage;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SwitchListTile.adaptive(title: const Text('Clock'), value: _idleShowClock, onChanged: (v) => setState(() => _idleShowClock = v), dense: true, contentPadding: EdgeInsets.zero),
+        SwitchListTile.adaptive(title: const Text('12-hour clock'), value: _idleUse12HourClock, onChanged: (v) => setState(() => _idleUse12HourClock = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('Weather badge'), value: _idleShowWeather, onChanged: (v) => setState(() => _idleShowWeather = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('Companion face'), value: _idleShowFace, onChanged: (v) => setState(() => _idleShowFace = v), dense: true, contentPadding: EdgeInsets.zero),
         SwitchListTile.adaptive(title: const Text('Wi-Fi indicator'), value: _idleShowWifi, onChanged: (v) => setState(() => _idleShowWifi = v), dense: true, contentPadding: EdgeInsets.zero),
+        SwitchListTile.adaptive(
+          title: const Text('Background image'),
+          subtitle: const Text('Uses the uploaded home background image on the idle screen.'),
+          value: _idleUseBackgroundImage,
+          onChanged: (v) => setState(() => _idleUseBackgroundImage = v),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: 8),
+        if (selectedImage != null && selectedImage.previewPng.isNotEmpty) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: AspectRatio(
+              aspectRatio: 320 / 240,
+              child: Image.memory(
+                selectedImage.previewPng,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: controller.busy ? null : _pickImage,
+                icon: const Icon(Icons.image_outlined, size: 16),
+                label: Text(selectedImage == null ? 'Pick background' : 'Change background'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: controller.canControlDevice && !controller.busy && selectedImage != null
+                    ? () => _sendHomeBackground(controller)
+                    : null,
+                icon: const Icon(Icons.wallpaper_outlined, size: 16),
+                label: const Text('Upload background'),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
@@ -2917,6 +2964,8 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
                         showWeather: _idleShowWeather,
                         showFace: _idleShowFace,
                         showWifi: _idleShowWifi,
+                        use12HourClock: _idleUse12HourClock,
+                        showBackgroundImage: _idleUseBackgroundImage,
                       ),
                       success: 'Home screen config applied.',
                     )
@@ -3092,6 +3141,33 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     await _perform(
       () => controller.sendImage(payload),
       success: 'Image delivered.',
+    );
+  }
+
+  Future<void> _sendHomeBackground(DeskCompanionController controller) async {
+    final payload = _selectedImage;
+    if (payload == null) {
+      _showMessage('Pick an image first.');
+      return;
+    }
+
+    await _perform(
+      () async {
+        await controller.sendHomeBackgroundImage(payload);
+        await controller.sendIdleConfig(
+          showClock: _idleShowClock,
+          showWeather: _idleShowWeather,
+          showFace: _idleShowFace,
+          showWifi: _idleShowWifi,
+          use12HourClock: _idleUse12HourClock,
+          showBackgroundImage: true,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() => _idleUseBackgroundImage = true);
+      },
+      success: 'Home background applied.',
     );
   }
 

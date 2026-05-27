@@ -290,9 +290,11 @@ bool imageTransferActive = false;
 
 // Color image buffer (RGB565, 153600 bytes, PSRAM-backed)
 uint16_t* colorImageBuffer = nullptr;
+uint16_t* idleBackgroundBuffer = nullptr;
 size_t expectedColorBytes = 0;
 size_t receivedColorBytes = 0;
 bool colorImageTransferActive = false;
+bool colorImageTransferForIdleBackground = false;
 
 // Touch state for virtual buttons
 bool touchActive = false;
@@ -319,6 +321,7 @@ float weatherLat = 0.f;
 float weatherLon = 0.f;
 int   weatherCode       = -1;   // WMO code; -1 = no data
 int   weatherTempTenths = 0;    // temp_2m * 10, e.g. 215 = 21.5 C
+String weatherStatusText = "";
 unsigned long lastWeatherFetchMs = 0;
 // Touch double-tap
 unsigned long lastTapReleaseMs = 0;
@@ -371,6 +374,8 @@ bool idleShowClock   = true;
 bool idleShowWeather = true;
 bool idleShowFace    = true;
 bool idleShowWifi    = true;
+bool idleClock12Hour = false;
+bool idleUseBackgroundImage = false;
 // Display brightness: 0-255 (PWM on TFT_BL pin)
 uint8_t displayBrightness = 128;
 // Countdown
@@ -971,6 +976,26 @@ bool relayColorTransferActive() {
   return colorImageTransferActive &&
       expectedColorBytes > 0 &&
       receivedColorBytes < expectedColorBytes;
+}
+
+bool ensureIdleBackgroundBuffer() {
+  if (idleBackgroundBuffer) return true;
+  idleBackgroundBuffer = (uint16_t*)ps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+  return idleBackgroundBuffer != nullptr;
+}
+
+bool saveIdleBackgroundFromColorBuffer() {
+  if (!colorImageBuffer) return false;
+  if (!ensureIdleBackgroundBuffer()) return false;
+  memcpy(idleBackgroundBuffer, colorImageBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+  idleUseBackgroundImage = true;
+  return true;
+}
+
+void refreshWeatherDisplayIfVisible() {
+  if (currentMode == MODE_WEATHER || (currentMode == MODE_IDLE && idleShowWeather)) {
+    renderCurrentMode();
+  }
 }
 
 // ─── Pet logic (identical to mini) ───
@@ -2598,7 +2623,11 @@ void renderExpressionFrame() {
 
 void renderIdle() {
   if (!displayAvailable) return;
-  gfx->fillScreen(COL_BG);
+  if (idleUseBackgroundImage && idleBackgroundBuffer) {
+    gfx->drawRGBBitmap(0, 0, idleBackgroundBuffer, SCREEN_WIDTH, SCREEN_HEIGHT);
+  } else {
+    gfx->fillScreen(COL_BG);
+  }
 
   // ── Companion face (idle: gentle float + blink) ──
   if (idleShowFace) {
@@ -2638,8 +2667,15 @@ void renderIdle() {
   if (idleShowClock) {
     struct tm ti;
     if (getLocalTime(&ti, 10)) {
-      char timeBuf[6];
-      snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", ti.tm_hour, ti.tm_min);
+      char timeBuf[12];
+      if (idleClock12Hour) {
+        int hour = ti.tm_hour % 12;
+        if (hour == 0) hour = 12;
+        snprintf(timeBuf, sizeof(timeBuf), "%d:%02d %s", hour, ti.tm_min,
+                 ti.tm_hour >= 12 ? "PM" : "AM");
+      } else {
+        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", ti.tm_hour, ti.tm_min);
+      }
       gfx->setTextSize(2);
       gfx->setTextColor(userAccentColor);
       gfx->setCursor(6, 5);
@@ -3829,14 +3865,20 @@ void renderWeatherFrame() {
   if (!displayAvailable) return;
   gfx->fillScreen(COL_BG);
   if (weatherCode < 0) {
+    String detail = (weatherLat == 0.f && weatherLon == 0.f)
+        ? "Use the app weather controls"
+        : (weatherStatusText.isEmpty() ? "Check Wi-Fi or try again" : weatherStatusText);
+    if (detail.length() > 34) {
+      detail = detail.substring(0, 34);
+    }
     gfx->setTextSize(2);
     gfx->setTextColor(userFaceColor);
     gfx->setCursor(34, 95);
     gfx->print((weatherLat == 0.f && weatherLon == 0.f) ? "Set location first" : "Waiting for weather");
     gfx->setTextSize(1);
     gfx->setTextColor(COL_ACCENT);
-    gfx->setCursor(44, 122);
-    gfx->print((weatherLat == 0.f && weatherLon == 0.f) ? "Use the app weather controls" : "Check Wi-Fi or try again");
+    gfx->setCursor(24, 122);
+    gfx->print(detail);
     pushCanvas();
     return;
   }
@@ -3859,29 +3901,74 @@ void renderWeatherFrame() {
 }
 
 void fetchWeather() {
-  if (weatherLat == 0.f && weatherLon == 0.f) return;
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (weatherLat == 0.f && weatherLon == 0.f) {
+    weatherStatusText = "Set location first";
+    refreshWeatherDisplayIfVisible();
+    return;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    weatherStatusText = "Weather needs Wi-Fi";
+    statusText = weatherStatusText;
+    publishStatus();
+    refreshWeatherDisplayIfVisible();
+    return;
+  }
   WiFiClientSecure wcl;
   wcl.setInsecure();
-  if (!wcl.connect("api.open-meteo.com", 443)) return;
+  wcl.setTimeout(8);
+  if (!wcl.connect("api.open-meteo.com", 443)) {
+    weatherStatusText = "Weather connect failed";
+    statusText = weatherStatusText;
+    lastWeatherFetchMs = millis();
+    publishStatus();
+    refreshWeatherDisplayIfVisible();
+    return;
+  }
   String path = "/v1/forecast?latitude=";
   path += String(weatherLat, 4);
   path += "&longitude=";
   path += String(weatherLon, 4);
   path += "&current=temperature_2m,weather_code&forecast_days=1";
-  wcl.print(String("GET ") + path + " HTTP/1.1\r\nHost: api.open-meteo.com\r\nUser-Agent: DeskCompanion/1.0\r\nConnection: close\r\n\r\n");
+  wcl.print(String("GET ") + path + " HTTP/1.0\r\n"
+            + "Host: api.open-meteo.com\r\n"
+            + "User-Agent: DeskCompanion/1.0\r\n"
+            + "Accept: application/json\r\n"
+            + "Accept-Encoding: identity\r\n"
+            + "Connection: close\r\n\r\n");
   unsigned long t0 = millis();
-  bool inBody = false;
-  char hdr[4] = {0,0,0,0};
+  String statusLine = "";
+  while (millis() - t0 < 2000) {
+    if (wcl.available()) {
+      statusLine = wcl.readStringUntil('\n');
+      statusLine.trim();
+      break;
+    }
+    if (!wcl.connected()) break;
+    delay(10);
+  }
+
+  int httpCode = 0;
+  int spaceIdx = statusLine.indexOf(' ');
+  if (spaceIdx > 0 && statusLine.length() >= spaceIdx + 4) {
+    httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
+  }
+
+  while (millis() - t0 < 4000) {
+    if (wcl.available()) {
+      String line = wcl.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break;
+    }
+    if (!wcl.connected() && !wcl.available()) break;
+    delay(1);
+  }
+
   String body;
   body.reserve(1536);
   while (millis() - t0 < 8000) {
     while (wcl.available()) {
       char c = wcl.read();
-      if (!inBody) {
-        hdr[0]=hdr[1]; hdr[1]=hdr[2]; hdr[2]=hdr[3]; hdr[3]=c;
-        if (hdr[0]=='\r' && hdr[1]=='\n' && hdr[2]=='\r' && hdr[3]=='\n') inBody = true;
-      } else if (body.length() < 2048) {
+      if (body.length() < 2048) {
         body += c;
       }
     }
@@ -3889,17 +3976,38 @@ void fetchWeather() {
     delay(5);
   }
   wcl.stop();
+
+  if (httpCode < 200 || httpCode >= 300) {
+    weatherStatusText = httpCode > 0
+        ? (String("Weather HTTP ") + String(httpCode))
+        : "Weather no response";
+    statusText = weatherStatusText;
+    lastWeatherFetchMs = millis();
+    publishStatus();
+    refreshWeatherDisplayIfVisible();
+    return;
+  }
+
   if (body.length() > 10) {
     float tempC = extractJsonFloatField(body, "temperature_2m", -999.f);
     int nextWeatherCode = extractJsonIntField(body, "weather_code", extractJsonIntField(body, "weathercode", -1));
     if (tempC > -998.f && nextWeatherCode >= 0) {
       weatherTempTenths = (int)(tempC * 10.f + (tempC >= 0.f ? 0.5f : -0.5f));
       weatherCode = nextWeatherCode;
+      weatherStatusText = "Weather updated";
       statusText = "Weather updated";
+      lastWeatherFetchMs = millis();
+      publishStatus();
+      refreshWeatherDisplayIfVisible();
+      return;
     }
   }
+
+  weatherStatusText = body.length() > 0 ? "Weather parse failed" : "Weather empty response";
+  statusText = weatherStatusText;
   lastWeatherFetchMs = millis();
-  if (currentMode == MODE_WEATHER || (currentMode == MODE_IDLE && idleShowWeather)) renderCurrentMode();
+  publishStatus();
+  refreshWeatherDisplayIfVisible();
 }
 
 // ─── Daily greetings + spontaneous reactions ───
@@ -4579,14 +4687,21 @@ void handleCommandJson(const String& body) {
     idleShowWeather = extractJsonIntField(body, "showWeather", idleShowWeather ? 1 : 0) != 0;
     idleShowFace    = extractJsonIntField(body, "showFace",    idleShowFace ? 1 : 0) != 0;
     idleShowWifi    = extractJsonIntField(body, "showWifi",    idleShowWifi ? 1 : 0) != 0;
+    idleClock12Hour = extractJsonIntField(body, "clock12h", idleClock12Hour ? 1 : 0) != 0;
+    idleUseBackgroundImage =
+        extractJsonIntField(body, "showBackgroundImage", idleUseBackgroundImage ? 1 : 0) != 0 &&
+        idleBackgroundBuffer != nullptr;
     preferences.begin("desk-cfg", false);
     preferences.putBool("idle_clock",   idleShowClock);
     preferences.putBool("idle_weather", idleShowWeather);
     preferences.putBool("idle_face",    idleShowFace);
     preferences.putBool("idle_wifi",    idleShowWifi);
+    preferences.putBool("idle_clock_12h", idleClock12Hour);
     preferences.end();
     if (currentMode == MODE_IDLE) renderCurrentMode();
-    statusText = "Home screen updated";
+    statusText = (extractJsonIntField(body, "showBackgroundImage", 0) != 0 && idleBackgroundBuffer == nullptr)
+        ? "Pick a home background"
+        : "Home screen updated";
     publishStatus();
     return;
   }
@@ -4665,6 +4780,7 @@ void handleCommandJson(const String& body) {
     preferences.putFloat("wLat", weatherLat);
     preferences.putFloat("wLon", weatherLon);
     preferences.end();
+    weatherStatusText = "Fetching weather";
     lastWeatherFetchMs = 0;  // force immediate refetch
     if (WiFi.status() == WL_CONNECTED) fetchWeather();
     statusText = "Location saved";
@@ -4673,7 +4789,12 @@ void handleCommandJson(const String& body) {
   }
 
   if (type == "show_weather") {
-    if (WiFi.status() == WL_CONNECTED) fetchWeather();
+    if (WiFi.status() == WL_CONNECTED) {
+      weatherStatusText = "Fetching weather";
+      fetchWeather();
+    } else {
+      weatherStatusText = "Weather needs Wi-Fi";
+    }
     currentMode = MODE_WEATHER;
     renderCurrentMode();
     publishStatus();
@@ -4792,6 +4913,8 @@ void handleCommandJson(const String& body) {
     memset(colorImageBuffer, 0, SCREEN_WIDTH * SCREEN_HEIGHT * 2);
     expectedColorBytes = extractJsonIntField(body, "total", 0);
     receivedColorBytes = 0;
+    colorImageTransferForIdleBackground =
+      extractJsonIntField(body, "idleBackground", 0) != 0;
     colorImageTransferActive = (expectedColorBytes == (size_t)(SCREEN_WIDTH * SCREEN_HEIGHT * 2));
     statusText = colorImageTransferActive ? "Receiving color image" : "Bad color image size";
     publishStatus();
@@ -4818,16 +4941,25 @@ void handleCommandJson(const String& body) {
         uint8_t lo = ((uint8_t*)colorImageBuffer)[i * 2 + 1];
         colorImageBuffer[i] = (uint16_t)(hi << 8) | lo;
       }
-      currentMode = MODE_COLOR_IMAGE;
-      clearSavedNote();
-      statusText = "Color image ready";
-      renderCurrentMode();
+      if (colorImageTransferForIdleBackground) {
+        idleUseBackgroundImage = saveIdleBackgroundFromColorBuffer();
+        statusText = idleUseBackgroundImage ? "Home background ready" : "Home bg alloc failed";
+        if (currentMode == MODE_IDLE) {
+          renderCurrentMode();
+        }
+      } else {
+        currentMode = MODE_COLOR_IMAGE;
+        clearSavedNote();
+        statusText = "Color image ready";
+        renderCurrentMode();
+      }
       publishStatus();
     } else {
       statusText = "Color image incomplete";
       publishStatus();
     }
     colorImageTransferActive = false;
+    colorImageTransferForIdleBackground = false;
     return;
   }
 
@@ -4845,10 +4977,18 @@ void handleCommandJson(const String& body) {
   if (type == "set_color_image") {
     const String encoded = extractJsonStringField(body, "data");
     if (decodeBase64IntoColorImage(encoded)) {
-      currentMode = MODE_COLOR_IMAGE;
-      clearSavedNote();
-      statusText = "Color image ready";
-      renderCurrentMode();
+      if (extractJsonIntField(body, "idleBackground", 0) != 0) {
+        idleUseBackgroundImage = saveIdleBackgroundFromColorBuffer();
+        statusText = idleUseBackgroundImage ? "Home background ready" : "Home bg alloc failed";
+        if (currentMode == MODE_IDLE) {
+          renderCurrentMode();
+        }
+      } else {
+        currentMode = MODE_COLOR_IMAGE;
+        clearSavedNote();
+        statusText = "Color image ready";
+        renderCurrentMode();
+      }
       publishStatus();
     } else {
       statusText = "Bad color image payload";
@@ -5243,6 +5383,7 @@ void setupDisplay() {
   idleShowWeather = preferences.getBool("idle_weather", true);
   idleShowFace    = preferences.getBool("idle_face",    true);
   idleShowWifi    = preferences.getBool("idle_wifi",    true);
+  idleClock12Hour = preferences.getBool("idle_clock_12h", false);
   displayBrightness = preferences.getUChar("brightness", 128);
   preferences.end();
   displayRot = displayRot & 3;
@@ -5555,12 +5696,13 @@ void loop() {
 
   // Keep network maintenance from blocking render loops while an animation is active.
   const bool inAnimatedMode = isAnyAnimatedMode();
+  const unsigned long weatherRefreshMs = weatherCode >= 0 ? 600000UL : 60000UL;
 
   // Weather auto-fetch every 10 min when WiFi+location set (skip while an animation is running)
   if (!inAnimatedMode &&
       WiFi.status() == WL_CONNECTED &&
       (weatherLat != 0.f || weatherLon != 0.f) &&
-      (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= 600000UL)) {
+      (lastWeatherFetchMs == 0 || millis() - lastWeatherFetchMs >= weatherRefreshMs)) {
     fetchWeather();
   }
 
@@ -5590,6 +5732,10 @@ void loop() {
       wifiWasConnected = true;
       statusText = "Wi-Fi connected";
       syncNtp();
+      lastRelaySuccessMs = 0;
+      lastRelayPollMs = 0;
+      lastRelayStatusPushMs = 0;
+      relayStatusDirty = true;
       publishStatus();
     }
     lastWifiCheckMs = millis();
@@ -5633,14 +5779,12 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (!inAnimatedMode &&
-      (relayStatusDirty ||
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs()))) {
+  if (relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
     pushRelayStatus();
   }
 
-  if (!inAnimatedMode &&
-      WiFi.status() == WL_CONNECTED &&
+  if (WiFi.status() == WL_CONNECTED &&
       !relayUrl.isEmpty() &&
       !deviceToken.isEmpty() &&
       lastRelaySuccessMs > 0 &&
@@ -5662,9 +5806,7 @@ void loop() {
     }
   }
 
-  if (!inAnimatedMode) {
-    pollRelay();
-  }
+  pollRelay();
 
   updatePetBehavior();
   checkTimeGreetings();

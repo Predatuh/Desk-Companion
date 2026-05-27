@@ -720,6 +720,20 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendHomeBackgroundImage(CompanionImagePayload payload) async {
+    await _runBusy(() async {
+      if (!payload.isColor) {
+        throw const FormatException('Home background images must be full color.');
+      }
+      await _sendColorBitmap(
+        payload.bitmap,
+        idleBackground: true,
+        relayDeliveryLabel: 'Home background',
+        bleSuccessLabel: 'Home background sent over BLE.',
+      );
+    });
+  }
+
   Future<void> sendBanner(String text, {required int speed}) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -1108,6 +1122,8 @@ class DeskCompanionController extends ChangeNotifier {
     required bool showWeather,
     required bool showFace,
     required bool showWifi,
+    bool use12HourClock = false,
+    bool showBackgroundImage = false,
   }) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -1117,6 +1133,8 @@ class DeskCompanionController extends ChangeNotifier {
           'showWeather': showWeather,
           'showFace': showFace,
           'showWifi': showWifi,
+          'clock12h': use12HourClock,
+          'showBackgroundImage': showBackgroundImage,
         },
         mode: _mode,
         bleLabel: 'Idle config sent over BLE.',
@@ -1420,7 +1438,12 @@ class DeskCompanionController extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendColorBitmap(Uint8List rgb565) async {
+  Future<void> _sendColorBitmap(
+    Uint8List rgb565, {
+    bool idleBackground = false,
+    String? relayDeliveryLabel,
+    String? bleSuccessLabel,
+  }) async {
     final canSendOverBle = isBleConnected &&
         _imageCharacteristic != null &&
         _commandCharacteristic != null;
@@ -1432,6 +1455,7 @@ class DeskCompanionController extends ChangeNotifier {
       final started = await _postRelay({
         'type': 'begin_color_image',
         'total': rgb565.length,
+        if (idleBackground) 'idleBackground': 1,
       });
       if (!started) {
         _relaySendProgress = 0.0;
@@ -1465,8 +1489,10 @@ class DeskCompanionController extends ChangeNotifier {
       if (await _postRelay({'type': 'commit_color_image'})) {
         _relaySendProgress = 1.0;
         notifyListeners();
-        _mode = 'color_image';
-        _pollRelayDelivery('Color image');
+        if (!idleBackground) {
+          _mode = 'color_image';
+        }
+        _pollRelayDelivery(relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image'));
         return;
       }
       _relaySendProgress = 0.0;
@@ -1480,7 +1506,11 @@ class DeskCompanionController extends ChangeNotifier {
     }
 
     await _sendBleCommand(
-        {'type': 'begin_color_image', 'total': rgb565.length});
+        {
+          'type': 'begin_color_image',
+          'total': rgb565.length,
+          if (idleBackground) 'idleBackground': 1,
+        });
 
     final chunkSize = Platform.isAndroid ? 244 : 180;
     for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
@@ -1494,8 +1524,10 @@ class DeskCompanionController extends ChangeNotifier {
     }
 
     await _sendBleCommand({'type': 'commit_color_image'});
-    _mode = 'color_image';
-    _setStatus('Color image sent over BLE.');
+    if (!idleBackground) {
+      _mode = 'color_image';
+    }
+    _setStatus(bleSuccessLabel ?? (idleBackground ? 'Home background sent over BLE.' : 'Color image sent over BLE.'));
   }
 
   Future<bool> _postRelay(Map<String, dynamic> command) async {
