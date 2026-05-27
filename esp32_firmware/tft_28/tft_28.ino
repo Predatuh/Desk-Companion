@@ -3655,14 +3655,34 @@ void renderAnimatedNoteFrame() {
 }
 
 void setParticleMode(const String& name) {
-  lastParticleTickMs = 0;
+  transientActive = false;
+  lastParticleTickMs = millis();
   expressionPhase    = 0;
+  gPtclCount = 0;
+  noteOvCount = 0;
+  memset(gPtcl, 0, sizeof(gPtcl));
+  memset(noteOvPtcl, 0, sizeof(noteOvPtcl));
   gfx->fillScreen(COL_BG);
   fwManualOnly = false; // "Send fireworks" enables auto-relaunch
-  if      (name == "fireworks")  { currentMode = MODE_FIREWORKS;  initFireworks();  }
-  else if (name == "heart_rain") { currentMode = MODE_HEART_RAIN; initHeartRain(); }
-  else if (name == "snowfall")   { currentMode = MODE_SNOWFALL;   initSnowfall();  }
-  else                           { currentMode = MODE_STARFIELD;  initStarfield(); }
+  if (name == "fireworks") {
+    currentMode = MODE_FIREWORKS;
+    statusText = "Fireworks active";
+    initFireworks();
+  } else if (name == "heart_rain") {
+    currentMode = MODE_HEART_RAIN;
+    statusText = "Heart rain active";
+    initHeartRain();
+  } else if (name == "snowfall") {
+    currentMode = MODE_SNOWFALL;
+    statusText = "Snowfall active";
+    initSnowfall();
+  } else {
+    currentMode = MODE_STARFIELD;
+    statusText = "Starfield active";
+    initStarfield();
+  }
+  renderCurrentMode();
+  publishStatus();
 }
 
 // ─── Countdown mode ───
@@ -4456,8 +4476,9 @@ void handleCommandJson(const String& body) {
     else                                 noteAnimType = 0;
     // If we have a color image loaded, switch to animated note mode
     if (noteAnimType > 0 && colorImageBuffer) {
+      transientActive = false;
       currentMode = MODE_ANIMATED_NOTE;
-      lastParticleTickMs = 0;
+      lastParticleTickMs = millis();
       initNoteOverlay();
       renderCurrentMode();
     } else if (noteAnimType == 0 && currentMode == MODE_ANIMATED_NOTE) {
@@ -4865,9 +4886,11 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
 }
 
 void setBanner(const String& text, int speed) {
+  transientActive = false;
   currentBanner = text;
   bannerSpeed = speed;
   bannerOffset = SCREEN_WIDTH;
+  lastBannerTickMs = millis();
   boredomLevel = clampLevel(boredomLevel - 6);
   energyLevel = clampLevel(energyLevel - 2);
   persistPetState();
@@ -4876,10 +4899,10 @@ void setBanner(const String& text, int speed) {
   statusText = "Banner running";
   renderCurrentMode();
   publishStatus();
-  startTransientExpression(pickReactionExpression("banner"), 1800, "Showing off");
 }
 
 void setExpression(const String& expression) {
+  transientActive = false;
   currentExpression = expression;
   expressionPhase = 0;
   lastExpressionTickMs = 0;
@@ -5602,6 +5625,9 @@ void loop() {
   }
 
   pollRelay();
+
+  updatePetBehavior();
+  checkTimeGreetings();
 
   handleTouch();
 

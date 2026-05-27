@@ -680,27 +680,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
 
   static const List<_StudioPreset> _studioPresets = [
     _StudioPreset(
-      title: 'Sweethearts',
-      subtitle: 'Stick duo kiss scene with a soft romantic vibe.',
-      visualModel: CompanionVisualModel.stickFigure,
-      scene: CompanionScene.kiss,
-      expression: DeskExpression.love,
-    ),
-    _StudioPreset(
-      title: 'Besties',
-      subtitle: 'Hold-hands duo pose with a bright friendly energy.',
-      visualModel: CompanionVisualModel.stickFigure,
-      scene: CompanionScene.holdHands,
-      expression: DeskExpression.happy,
-    ),
-    _StudioPreset(
-      title: 'Tiny Bow',
-      subtitle: 'Solo greeting pose for a neat little intro moment.',
-      visualModel: CompanionVisualModel.stickFigure,
-      scene: CompanionScene.bow,
-      expression: DeskExpression.smile,
-    ),
-    _StudioPreset(
       title: 'Classic Wink',
       subtitle: 'The firmware-faithful face with a playful expression.',
       visualModel: CompanionVisualModel.classic,
@@ -708,11 +687,11 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       expression: DeskExpression.wink,
     ),
     _StudioPreset(
-      title: 'Robot Parade',
-      subtitle: 'Animated robot duo with a clean geometric hold-hands pose.',
-      visualModel: CompanionVisualModel.robot,
-      scene: CompanionScene.holdHands,
-      expression: DeskExpression.excited,
+      title: 'Classic Look Around',
+      subtitle: 'Curious classic face tuned for checking eye and hat alignment.',
+      visualModel: CompanionVisualModel.classic,
+      scene: CompanionScene.none,
+      expression: DeskExpression.lookAround,
     ),
   ];
 
@@ -747,9 +726,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     if (_appearanceDraftDirty) {
       return;
     }
-    _selectedVisualModel = companionVisualModelFromCommand(
-      controller.companionVisualModel,
-    );
+    _selectedVisualModel = CompanionVisualModel.classic;
     _selectedScene = companionSceneFromCommand(controller.companionScene);
     _selectedHairStyle =
         _hairStyleFromCommand(controller.companionHair) ?? _selectedHairStyle;
@@ -797,25 +774,10 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     _stickFigureEnergy = controller.stickFigureEnergy.toDouble();
   }
 
-  void _updateSelectedVisualModel(
-    DeskCompanionController controller,
-    CompanionVisualModel model,
-  ) {
-    if (_selectedVisualModel == model) {
-      return;
-    }
-
-    setState(() {
-      _appearanceDraftDirty = true;
-      _selectedVisualModel = model;
-    });
-    _persistStudioPreviewState(controller);
-  }
-
   void _persistStudioPreviewState(DeskCompanionController controller) {
     unawaited(
       controller.updateStudioPreviewSettings(
-        visualModel: _selectedVisualModel.command,
+        visualModel: CompanionVisualModel.classic.command,
         scene: _selectedScene.command,
         stickFigureScale: _stickFigureScale.round(),
         stickFigureSpacing: _stickFigureSpacing.round(),
@@ -830,12 +792,9 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
   ) {
     setState(() {
       _appearanceDraftDirty = true;
-      _selectedVisualModel = preset.visualModel;
+      _selectedVisualModel = CompanionVisualModel.classic;
       _selectedScene = preset.scene;
       _selectedExpression = preset.expression;
-      if (preset.visualModel == CompanionVisualModel.stickFigure) {
-        _appearancePreviewReferencePose = false;
-      }
     });
     _persistStudioPreviewState(controller);
   }
@@ -1460,9 +1419,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
         // ── Appearance expansion tile ──
         _buildAppearanceTile(context),
         const SizedBox(height: 16),
-        // ── Visual model ──
-        _buildModelRow(context, controller),
-        const SizedBox(height: 16),
         // ── Personality ──
         Text('Personality', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
@@ -1769,72 +1725,6 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
       ),
     );
   }
-
-  Widget _buildModelRow(BuildContext context, DeskCompanionController controller) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Model', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Row(
-          children: CompanionVisualModel.values.map((m) {
-            final sel = _selectedVisualModel == m;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  right: m != CompanionVisualModel.values.last ? 8.0 : 0.0,
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    _updateSelectedVisualModel(controller, m);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: sel
-                          ? CompanionTheme.accent.withValues(alpha: 0.18)
-                          : CompanionTheme.surfaceRaised,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: sel ? CompanionTheme.accent : CompanionTheme.border,
-                        width: sel ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          _modelIcon(m),
-                          size: 20,
-                          color: sel ? CompanionTheme.accent : CompanionTheme.muted,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          m.name,
-                          style: TextStyle(
-                            color: sel ? CompanionTheme.accent : CompanionTheme.muted,
-                            fontSize: 12,
-                            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  IconData _modelIcon(CompanionVisualModel m) => switch (m) {
-        CompanionVisualModel.classic     => Icons.face_outlined,
-        CompanionVisualModel.stickFigure => Icons.accessibility_new_outlined,
-        CompanionVisualModel.robot       => Icons.smart_toy_outlined,
-      };
 
   // ════════════════════════════════════════════════════════════════════════════
   // Send tab
@@ -4376,7 +4266,7 @@ class _FullscreenAppearanceEditorState
   @override
   void initState() {
     super.initState();
-    _visualModel = widget.initialVisualModel;
+    _visualModel = CompanionVisualModel.classic;
     _scene = widget.initialScene;
     _activeSection = widget.initialSection ?? _defaultSectionForModel(_visualModel);
     _referencePose = widget.initialReferencePose;
@@ -4425,41 +4315,16 @@ class _FullscreenAppearanceEditorState
     _stickFigureEnergy = widget.stickFigureEnergy;
   }
 
-  List<_AppearanceEditorSection> get _availableSections => switch (_visualModel) {
-        CompanionVisualModel.classic => const [
-            _AppearanceEditorSection.scene,
-            _AppearanceEditorSection.silhouette,
-            _AppearanceEditorSection.face,
-            _AppearanceEditorSection.mustache,
-            _AppearanceEditorSection.style,
-          ],
-        CompanionVisualModel.stickFigure => const [
-            _AppearanceEditorSection.scene,
-            _AppearanceEditorSection.motion,
-          ],
-        CompanionVisualModel.robot => const [_AppearanceEditorSection.scene],
-      };
+  List<_AppearanceEditorSection> get _availableSections => const [
+        _AppearanceEditorSection.scene,
+        _AppearanceEditorSection.silhouette,
+        _AppearanceEditorSection.face,
+        _AppearanceEditorSection.mustache,
+        _AppearanceEditorSection.style,
+      ];
 
   _AppearanceEditorSection _defaultSectionForModel(CompanionVisualModel model) {
-    return switch (model) {
-      CompanionVisualModel.classic => _AppearanceEditorSection.silhouette,
-      CompanionVisualModel.stickFigure => _AppearanceEditorSection.motion,
-      CompanionVisualModel.robot => _AppearanceEditorSection.scene,
-    };
-  }
-
-  void _setVisualModel(CompanionVisualModel value) {
-    if (_visualModel == value) {
-      return;
-    }
-
-    setState(() {
-      _visualModel = value;
-      final availableSections = _availableSections;
-      if (!availableSections.contains(_activeSection)) {
-        _activeSection = _defaultSectionForModel(value);
-      }
-    });
+    return _AppearanceEditorSection.silhouette;
   }
 
   @override
@@ -4682,83 +4547,22 @@ class _FullscreenAppearanceEditorState
   Widget _buildScenePanel(BuildContext context) {
     return _EditorPanel(
       title: 'Scene setup',
-      subtitle: _visualModel == CompanionVisualModel.classic
-          ? 'Classic keeps the scene page intentionally sparse so accessory and face edits do not get buried under irrelevant controls.'
-          : _visualModel == CompanionVisualModel.stickFigure
-              ? 'Pick the relationship scene and scene mood here. Preview mode stays pinned above so alignment work is always one tap away.'
-              : 'Robot currently focuses on scene selection only. Extra robot-only mood controls stay hidden until they have a real effect.',
+      subtitle: 'Classic keeps the scene page intentionally sparse so accessory and face edits do not get buried under irrelevant controls.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChoiceWrap(
-            context,
-            'Visual model',
-            CompanionVisualModel.values,
-            _visualModel,
-            _setVisualModel,
-            (value) => value.label,
-          ),
-          const SizedBox(height: 12),
           Text(
-            _visualModel.description,
+            CompanionVisualModel.classic.description,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (_visualModel != CompanionVisualModel.classic) ...[
-            const SizedBox(height: 14),
-            _buildChoiceWrap(
-              context,
-              'Scene',
-              CompanionScene.values,
-              _scene,
-              (value) => setState(() => _scene = value),
-              (value) => value.label,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _scene.description,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ] else ...[
-            const SizedBox(height: 14),
-            Text(
-              'Classic mode does not use relationship scenes here. Preview mode stays pinned above, and mood changes belong in Expression studio.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (_visualModel == CompanionVisualModel.stickFigure) ...[
-            const SizedBox(height: 14),
-            _buildChoiceWrap(
-              context,
-              'Expression / mood',
-              DeskExpression.values,
-              _selectedExpression,
-              (value) => setState(() {
-                _selectedExpression = value;
-                if (_referencePose) {
-                  _referencePose = false;
-                }
-              }),
-              (value) => value.label,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _referencePose
-                  ? 'Reference pose is best for silhouette alignment and fixed accessory placement.'
-                  : 'Live mood is previewing ${_selectedExpression.label.toLowerCase()} inside the active stick-figure scene.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ] else if (_visualModel == CompanionVisualModel.robot) ...[
-            const SizedBox(height: 14),
-            Text(
-              'Robot stays scene-first for now. The preview chips above still let you freeze the pose when you need alignment work.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+          const SizedBox(height: 14),
+          Text(
+            'Classic mode does not use relationship scenes here. Preview mode stays pinned above, and mood changes belong in Expression studio.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 10),
           Text(
-            _visualModel.isDeviceSupported
-                ? 'This model is ready to send directly to the desk companion.'
-                : 'This model is app-rendered. Over BLE it can stream live to the display, and over relay it falls back to a single snapshot.',
+            'This model is ready to send directly to the desk companion.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
