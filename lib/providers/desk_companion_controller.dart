@@ -1842,6 +1842,7 @@ class DeskCompanionController extends ChangeNotifier {
     await _commandCharacteristic!.write(
       utf8.encode(jsonEncode(body)),
       withoutResponse: false,
+      allowLongWrite: true,
     );
   }
 
