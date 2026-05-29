@@ -272,6 +272,7 @@ String transientResumeExpression = "happy";
 String transientResumeFlower = "rose";
 bool transientActive = false;
 unsigned long transientEndsAt = 0;
+unsigned long noteDisplayEndsMs = 0;  // auto-expire note back to idle
 int bondLevel = 50;
 int energyLevel = 72;
 int boredomLevel = 28;
@@ -4410,6 +4411,7 @@ void tryStoredPrefs() {
     noteQueueCount = 1;
     noteQueueIndex = 0;
     currentMode = MODE_NOTE;
+    noteDisplayEndsMs = millis() + 30000;  // auto-return to idle after 30s on boot
   } else {
     statusText = petAmbientStatus();
   }
@@ -4666,7 +4668,7 @@ void handleCommandJson(const String& body) {
     if (idleBackgroundBuffer) {
       rotateBackgroundCW90();
       statusText = "Background rotated";
-      if (currentMode == MODE_IDLE) renderCurrentMode();
+      renderCurrentMode();  // always re-render so rotation is immediately visible
     } else {
       statusText = "No background loaded";
     }
@@ -5056,6 +5058,7 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
+  noteDisplayEndsMs = millis() + 45000;  // auto-return to idle after 45s
   // Emoji-reactive expressions only when pet mode is active
   if (activePetMode != "off") {
     startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
@@ -5628,6 +5631,15 @@ void setup() {
 }
 
 void loop() {
+  // Auto-expire note display and return to idle
+  if (currentMode == MODE_NOTE && noteDisplayEndsMs > 0 && millis() >= noteDisplayEndsMs) {
+    noteDisplayEndsMs = 0;
+    currentMode = MODE_IDLE;
+    statusText = petAmbientStatus();
+    renderCurrentMode();
+    publishStatus();
+  }
+
   if (millis() - lastDecorTickMs >= 50) {
     lastDecorTickMs = millis();
     idleOrbit = (idleOrbit + 1) % 16;
