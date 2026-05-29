@@ -1386,7 +1386,13 @@ class DeskCompanionController extends ChangeNotifier {
     notifyListeners();
 
     if (isBleConnected) {
-      await _sendBleCommand(payload);
+      try {
+        await _sendBleCommand(payload);
+      } catch (e) {
+        _deliveryStage = '';
+        notifyListeners();
+        rethrow;
+      }
       _mode = mode;
       _deliveryStage = 'displaying';
       _setStatus(bleLabel);

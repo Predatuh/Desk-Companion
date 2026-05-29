@@ -280,6 +280,11 @@ int boredomLevel = 28;
 bool wifiConnectPending = false;
 String pendingWifiSsid = "";
 String pendingWifiPass = "";
+
+// BLE commands are queued here and processed in loop() to avoid running
+// heavy operations (HTTPS, NVS, etc.) inside the BLE task's limited stack.
+volatile bool bleCommandPending = false;
+String pendingBleCommand = "";
 bool wifiScanPending = false;
 bool wifiWasConnected = false;
 String storedWifiPass = "";
@@ -5258,7 +5263,12 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* characteristic) override {
     const auto value = characteristic->getValue();
     const String body = bleValueToString(value);
-    if (!body.isEmpty()) handleCommandJson(body);
+    // Queue for loop() — calling handleCommandJson here (BLE task) crashes
+    // when commands like show_weather trigger HTTPS requests (stack overflow).
+    if (!body.isEmpty()) {
+      pendingBleCommand = body;
+      bleCommandPending = true;
+    }
   }
 };
 
@@ -5631,6 +5641,14 @@ void setup() {
 }
 
 void loop() {
+  // Drain BLE command queue (deferred from BLE task to avoid stack overflow)
+  if (bleCommandPending) {
+    bleCommandPending = false;
+    String cmd = pendingBleCommand;
+    pendingBleCommand = "";
+    handleCommandJson(cmd);
+  }
+
   // Auto-expire note display and return to idle
   if (currentMode == MODE_NOTE && noteDisplayEndsMs > 0 && millis() >= noteDisplayEndsMs) {
     noteDisplayEndsMs = 0;
