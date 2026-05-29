@@ -160,6 +160,7 @@ BLEServer* bleServer = nullptr;
 BLECharacteristic* commandCharacteristic = nullptr;
 BLECharacteristic* statusCharacteristic = nullptr;
 BLECharacteristic* imageCharacteristic = nullptr;
+static unsigned long lastBleAdvertRestartMs = 0;
 
 enum DisplayMode {
   MODE_IDLE,
@@ -260,6 +261,7 @@ unsigned long lastPetBeatMs = 0;
 bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 uint8_t idleOrbit = 0;
+uint16_t rainDropOffset = 0;
 uint8_t expressionPhase = 0;
 uint8_t petCycleStep = 0;
 String availableWifiNetworks[10];
@@ -921,23 +923,21 @@ bool ensureIdleBackgroundBuffer() {
   return idleBackgroundBuffer != nullptr;
 }
 
-// Rotate the idle background image 90° clockwise in-place (letterboxed into 320×240)
+// Rotate the idle background image 90° CW in-place, scale-to-fill (no black bars)
 void rotateBackgroundCW90() {
   if (!idleBackgroundBuffer) return;
   const int W = SCREEN_WIDTH;   // 320
   const int H = SCREEN_HEIGHT;  // 240
   uint16_t* tmp = (uint16_t*)ps_malloc(W * H * 2);
   if (!tmp) return;
-  memset(tmp, 0, W * H * 2);
-  // 90° CW of a W×H image → H cols × W rows (portrait 240×320).
-  // Fit into W×H frame: letterbox x=40..279, center-crop rows 40..279.
-  // Out pixel (ox, oy): ox∈[40..279], oy∈[0..239]
-  //   src_x = oy + 40,  src_y = 279 - ox
-  for (int oy = 0; oy < H; oy++) {
-    for (int ox = 40; ox < W - 40; ox++) {
-      int sx = oy + 40;
-      int sy = 279 - ox;
-      tmp[oy * W + ox] = idleBackgroundBuffer[sy * W + sx];
+  // 90°CW + scale-to-fill: portrait (H×W=240×320) scaled by W/H=4/3 to fill W×H
+  // display(xd,yd) → source(sc,sr):
+  //   sc = yd*3/4 + 70   (portrait_y remapped to source column)
+  //   sr = 239 - xd*3/4  (portrait_x remapped to source row)
+  for (int yd = 0; yd < H; yd++) {
+    const int sc = yd * 3 / 4 + 70;
+    for (int xd = 0; xd < W; xd++) {
+      tmp[yd * W + xd] = idleBackgroundBuffer[(239 - xd * 3 / 4) * W + sc];
     }
   }
   memcpy(idleBackgroundBuffer, tmp, W * H * 2);
@@ -2581,6 +2581,46 @@ void renderExpressionFrame() {
   pushCanvas();
 }
 
+// ─── Weather background effects drawn behind the companion ───
+void drawWeatherBackground() {
+  if (!idleShowWeather || weatherCode < 0) return;
+  const int cat = weatherCodeCategory(weatherCode);
+  if (cat == 0) {
+    // Clear sky: warm sun in bottom-left corner
+    const int sx = 28, sy = SCREEN_HEIGHT - 40;
+    const int r = 18;
+    const uint16_t sunCol = 0xFEE0;
+    gfx->fillCircle(sx, sy, r, sunCol);
+    for (int i = 0; i < 8; i++) {
+      float ang = i * 0.7854f;
+      int x1 = sx + (int)(cosf(ang) * (r + 3));
+      int y1 = sy + (int)(sinf(ang) * (r + 3));
+      int x2 = sx + (int)(cosf(ang) * (r + 11));
+      int y2 = sy + (int)(sinf(ang) * (r + 11));
+      gfx->drawLine(x1, y1, x2, y2, sunCol);
+      gfx->drawLine(x1, y1 + 1, x2, y2 + 1, sunCol);
+    }
+  } else if (cat == 2 || cat == 4) {
+    // Rain or storm: smooth per-frame animated falling drops
+    rainDropOffset = (rainDropOffset + 3) % SCREEN_HEIGHT;
+    const uint16_t rainCol = 0x4A7F;
+    for (int i = 0; i < 36; i++) {
+      int x = (i * 41 + 7) % SCREEN_WIDTH;
+      int y = (i * 53 + rainDropOffset) % SCREEN_HEIGHT;
+      gfx->drawLine(x, y, x - 2, y + 8, rainCol);
+    }
+    if (cat == 4) {
+      // Storm: lightning bolt flashes at orbit steps 3-4
+      if (idleOrbit == 3 || idleOrbit == 4) {
+        const int lx = 55, ly = 8;
+        const uint16_t ltCol = 0xFFE0;
+        gfx->fillTriangle(lx + 6, ly, lx - 4, ly + 26, lx + 4, ly + 26, ltCol);
+        gfx->fillTriangle(lx, ly + 24, lx - 10, ly + 48, lx + 7, ly + 48, ltCol);
+      }
+    }
+  }
+}
+
 void renderIdle() {
   if (!displayAvailable) return;
   if (idleUseBackgroundImage && idleBackgroundBuffer) {
@@ -2588,6 +2628,7 @@ void renderIdle() {
   } else {
     gfx->fillScreen(COL_BG);
   }
+  drawWeatherBackground();
 
   // ── Companion face (idle: gentle float + blink) ──
   if (idleShowFace) {
@@ -2611,14 +2652,20 @@ void renderIdle() {
     const int EH = (int)(40 * cScale);
     const int ER = (int)(13 * cScale);
 
-    // Blink at orbit step 14 (every ~750 ms cycle)
-    int eyeH = (idleOrbit == 14) ? max(3, EH / 5) : EH;
-    drawEye(LX, EY, EW, eyeH, ER, 0, 0);
-    drawEye(RX, EY, EW, eyeH, ER, 0, 0);
+    // Eyes: glance right steps 10-11, left 12-13, blink 14
+    const int pupilDx = (idleOrbit == 10 || idleOrbit == 11) ? 5
+                       : (idleOrbit == 12 || idleOrbit == 13) ? -5 : 0;
+    const int eyeH = (idleOrbit == 14) ? max(3, EH / 5) : EH;
+    drawEye(LX, EY, EW, eyeH, ER, pupilDx, 0);
+    drawEye(RX, EY, EW, eyeH, ER, pupilDx, 0);
 
-    // Neutral flat mouth
-    for (int line = 0; line < 4; line++)
-      gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userMouthColor);
+    // Mouth: small smile while glancing, neutral otherwise
+    if (idleOrbit >= 10 && idleOrbit <= 13) {
+      drawSmile(MX, MY, 26);
+    } else {
+      for (int line = 0; line < 4; line++)
+        gfx->drawLine(MX - 13, MY + line, MX + 13, MY + line, userMouthColor);
+    }
 
     drawCompanionAccessories(LX, RX, EY, MY);
   }
@@ -2643,23 +2690,16 @@ void renderIdle() {
     }
   }
 
-  // ── Weather badge (top-right) ──
-  if (idleShowWeather && weatherCode >= 0) {
-    // Scale positions based on weatherTextSize (1-3)
+  // ── Weather badge (top-right) — temperature only, no icon ──
+  if (idleShowWeather && weatherCode >= 0 && weatherTempTenths != 0) {
     const int8_t ws = weatherTextSize < 1 ? 1 : (weatherTextSize > 3 ? 3 : weatherTextSize);
-    const int badgeR   = 6 + ws * 2;          // icon radius: 8, 10, 12
-    const int badgeX   = SCREEN_WIDTH - badgeR - 2;
-    const int badgeY   = badgeR + 2;
-    drawWeatherIcon(badgeX, badgeY, badgeR, weatherCodeCategory(weatherCode));
-    if (weatherTempTenths != 0) {
-      char tmpBuf[10];
-      snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);
-      gfx->setTextSize(ws);
-      gfx->setTextColor(userAccentColor);
-      int tw = (int)strlen(tmpBuf) * 6 * ws;
-      gfx->setCursor(SCREEN_WIDTH - tw - 2, badgeY * 2 + 2);
-      gfx->print(tmpBuf);
-    }
+    char tmpBuf[10];
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);
+    gfx->setTextSize(ws);
+    gfx->setTextColor(userAccentColor);
+    int tw = (int)strlen(tmpBuf) * 6 * ws;
+    gfx->setCursor(SCREEN_WIDTH - tw - 2, 5);
+    gfx->print(tmpBuf);
   }
 
   // ── Bottom bar: IP address or status text ──
@@ -3954,6 +3994,7 @@ void drawStatusBar() {
 }
 
 void checkTimeGreetings() {
+  if (activePetMode == "off") return;
   if (WiFi.status() != WL_CONNECTED) return;
   if (millis() - lastTimeCheckMs < 60000UL) return;
   lastTimeCheckMs = millis();
@@ -4321,7 +4362,7 @@ void tryStoredPrefs() {
   relayUrl = preferences.getString("relay_url", "");
   deviceToken = preferences.getString("device_token", "");
   petPersonality = normalizePetPersonality(preferences.getString("pet_personality", petPersonality));
-  activePetMode = normalizePetMode(preferences.getString("pet_mode", "off"));
+  activePetMode = "off"; // Always start with pet mode off; prevents stale NVS from triggering random expressions
   companionHair = normalizeCompanionHair(preferences.getString("companion_hair", companionHair));
   companionEars = normalizeCompanionEars(preferences.getString("companion_ears", companionEars));
   companionMustache = normalizeCompanionMustache(preferences.getString("companion_mustache", companionMustache));
@@ -4372,6 +4413,7 @@ void tryStoredPrefs() {
   }
   weatherLat = preferences.getFloat("wLat", 0.f);
   weatherLon = preferences.getFloat("wLon", 0.f);
+  ntpUtcOffsetSeconds = preferences.getInt("ntp_offset", 0);
   preferences.end();
   Serial.printf("[BOOT] Loaded relay url='%s' token='%s' ssid='%s'\n",
                 relayUrl.c_str(), deviceToken.c_str(), currentSsid.c_str());
@@ -4720,6 +4762,9 @@ void handleCommandJson(const String& body) {
 
   if (type == "set_timezone") {
     ntpUtcOffsetSeconds = extractJsonIntField(body, "offsetSeconds", 0);
+    preferences.begin("desk-cfg", false);
+    preferences.putInt("ntp_offset", ntpUtcOffsetSeconds);
+    preferences.end();
     if (WiFi.status() == WL_CONNECTED) syncNtp();
     return;
   }
@@ -5007,9 +5052,11 @@ void setNote(const String& text, int fontSize, int border, const String& icons, 
   statusText = "Showing note";
   renderCurrentMode();
   publishStatus();
-  // Emoji-reactive: also scan new note text for emoji tokens
-  startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
-  detectEmojiReaction(boundedText);
+  // Emoji-reactive expressions only when pet mode is active
+  if (activePetMode != "off") {
+    startTransientExpression(pickReactionExpression("note"), 2200, "Loved your note");
+    detectEmojiReaction(boundedText);
+  }
 }
 
 void setBanner(const String& text, int speed) {
@@ -5765,6 +5812,14 @@ void loop() {
   checkTimeGreetings();
 
   handleTouch();
+
+  // Keep BLE advertising alive — restart every 30 s if no client is connected
+  if (bleServer && millis() - lastBleAdvertRestartMs >= 30000UL) {
+    lastBleAdvertRestartMs = millis();
+    if (bleServer->getConnectedCount() == 0) {
+      BLEDevice::startAdvertising();
+    }
+  }
 
   delay(1);
 }
