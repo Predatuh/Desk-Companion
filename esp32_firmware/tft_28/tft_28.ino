@@ -1303,9 +1303,11 @@ void updateCompanionNeeds() {
   boredomLevel = clampLevel(boredomLevel + 2);
   energyLevel = clampLevel(energyLevel - 1);
   if (bondLevel > 10) bondLevel = clampLevel(bondLevel - 1);
-  if (energyLevel <= 20) activePetMode = "nap";
-  else if (boredomLevel >= 80) activePetMode = "needy";
-  else if (activePetMode == "needy" && boredomLevel <= 40) activePetMode = "hangout";
+  if (activePetMode != "off") {
+    if (energyLevel <= 20) activePetMode = "nap";
+    else if (boredomLevel >= 80) activePetMode = "needy";
+    else if (activePetMode == "needy" && boredomLevel <= 40) activePetMode = "hangout";
+  }
   persistPetState();
 }
 
@@ -2694,7 +2696,7 @@ void renderIdle() {
   if (idleShowWeather && weatherCode >= 0 && weatherTempTenths != 0) {
     const int8_t ws = weatherTextSize < 1 ? 1 : (weatherTextSize > 3 ? 3 : weatherTextSize);
     char tmpBuf[10];
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d\xB0", weatherTempTenths / 10);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%dF", weatherTempTenths / 10);
     gfx->setTextSize(ws);
     gfx->setTextColor(userAccentColor);
     int tw = (int)strlen(tmpBuf) * 6 * ws;
@@ -5014,6 +5016,8 @@ void clearSavedNote() {
 
 void setNote(const String& text, int fontSize, int border, const String& icons, const String& flowerAccent) {
   const String boundedText = text.length() > NOTE_TEXT_MAX ? text.substring(0, NOTE_TEXT_MAX) : text;
+  // Ignore relay re-delivery of the same note so the idle screen isn't constantly interrupted
+  if (boundedText == currentNote && currentMode == MODE_NOTE) return;
   const int boundedFontSize = fontSize < 1 ? 1 : (fontSize > 4 ? 4 : fontSize);
   currentNoteBorder = border < 0 ? 0 : (border > 4 ? 4 : border);
   currentNoteIcons = icons;
