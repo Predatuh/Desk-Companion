@@ -2817,7 +2817,7 @@ void pollRelay() {
     return;
   }
 
-  const unsigned long pollInterval = currentMode == MODE_BANNER ? 10000UL : 5000UL;
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 5000UL : 5000UL;
   if (millis() - lastRelayPollMs < pollInterval) {
     return;
   }
@@ -3198,7 +3198,7 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 10000)) {
+  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 5000)) {
     pushRelayStatus();
   }
 
