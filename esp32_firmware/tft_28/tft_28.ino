@@ -261,6 +261,16 @@ unsigned long lastPetBeatMs = 0;
 bool wifiJoinActive = false;
 bool relayStatusDirty = true;
 bool relayPreferPoll = true;
+
+// ─── Async relay task (runs HTTP on core 0, never blocks the render loop) ────
+static TaskHandle_t s_relayTaskHandle  = nullptr;
+static volatile bool s_relayBusy        = false;  // task is executing HTTP
+static volatile bool s_relayResultReady = false;  // task has a result to process
+static volatile int  s_relayResCode     = 0;
+static volatile bool s_relayReqIsPoll   = false;
+static char s_relayReqUrl[400];
+static char s_relayReqBody[1024];
+static char s_relayResBody[512];
 uint8_t idleOrbit = 0;
 uint16_t rainDropOffset = 0;
 uint8_t expressionPhase = 0;
@@ -403,6 +413,7 @@ int noteQueueCount = 0;
 int noteQueueIndex = 0;
 
 // Forward declarations
+void relayBgTask(void*);
 const char* modeName(DisplayMode mode);
 int relayRequest(const char* method, const String& url, const String& body, String& response);
 void clearImageBuffer();
@@ -525,7 +536,7 @@ unsigned long relayPollIntervalMs() {
   if (relayColorTransferActive() || imageTransferActive) return 150UL;
   if (currentMode == MODE_BANNER) return 5000UL;
   if (isRelayBackgroundMode()) return 5000UL;
-  return 5000UL;
+  return 1000UL;
 }
 
 unsigned long relayStatusIntervalMs() {
@@ -5295,6 +5306,44 @@ class ImageCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+void relayBgTask(void*) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // sleep until main loop signals work
+    s_relayResCode   = 0;
+    s_relayResBody[0] = '\0';
+
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+    HTTPClient http;
+
+    const String url(s_relayReqUrl);
+    bool started = url.startsWith("https://") ? http.begin(secureClient, url) : http.begin(url);
+    if (started) {
+      http.setTimeout(800);
+      http.setConnectTimeout(500);
+      int code;
+      if (s_relayReqIsPoll) {
+        code = http.GET();
+      } else {
+        http.addHeader("Content-Type", "application/json");
+        code = http.POST(s_relayReqBody);
+      }
+      s_relayResCode = code;
+      if (code > 0) {
+        strlcpy(s_relayResBody, http.getString().c_str(), sizeof(s_relayResBody));
+      } else {
+        strlcpy(s_relayResBody, http.errorToString(code).c_str(), sizeof(s_relayResBody));
+      }
+      http.end();
+    } else {
+      s_relayResCode = -1;
+      strlcpy(s_relayResBody, "begin failed", sizeof(s_relayResBody));
+    }
+    s_relayResultReady = true;
+    s_relayBusy = false;
+  }
+}
+
 void pushRelayStatus() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) {
     Serial.printf("[RELAY] Push skipped: wifi=%d url=%s tok=%s\n",
@@ -5637,6 +5686,9 @@ void setup() {
   bootCompletedAtMs = millis();
   lastWifiCheckMs = millis();
 
+  // Relay HTTP task on core 0 — keeps blocking HTTP calls off the render loop.
+  xTaskCreatePinnedToCore(relayBgTask, "relay_bg", 8192, nullptr, 1, &s_relayTaskHandle, 0);
+
   renderCurrentMode();
   publishStatus();
 }
@@ -5814,21 +5866,13 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  // Rate-limit relay push strictly — dirty flag must not bypass the interval
-  // or it fires an HTTP call on every loop iteration and freezes animation.
-  const bool relayPushDue = WiFi.status() == WL_CONNECTED &&
-      !relayUrl.isEmpty() && !deviceToken.isEmpty() &&
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs());
-
+  // ── Stale relay / WiFi watchdog ───────────────────────────────────────────
   if (WiFi.status() == WL_CONNECTED &&
-      !relayUrl.isEmpty() &&
-      !deviceToken.isEmpty() &&
-      lastRelaySuccessMs > 0 &&
-      millis() - lastRelaySuccessMs >= 45000) {
+      !relayUrl.isEmpty() && !deviceToken.isEmpty() &&
+      lastRelaySuccessMs > 0 && millis() - lastRelaySuccessMs >= 45000) {
     relayStatusDirty = true;
     if (millis() - lastRelaySuccessMs >= 90000 &&
-        !currentSsid.isEmpty() &&
-        storedWifiPass.length() > 0 &&
+        !currentSsid.isEmpty() && storedWifiPass.length() > 0 &&
         !wifiJoinInProgress()) {
       statusText = "Relay stalled, reconnecting Wi-Fi";
       publishStatus();
@@ -5842,21 +5886,56 @@ void loop() {
     }
   }
 
-  const bool relayPollDue = WiFi.status() == WL_CONNECTED &&
-      !relayUrl.isEmpty() &&
-      !deviceToken.isEmpty() &&
-      (millis() - lastRelayPollMs >= relayPollIntervalMs());
-
-  // Execute at most one relay network call per loop pass.
-  if (relayPushDue || relayPollDue) {
-    if (relayPollDue && (!relayPushDue || relayPreferPoll)) {
-      pollRelay();
-    } else if (relayPushDue) {
-      pushRelayStatus();
-    } else {
-      pollRelay();
+  // ── Async relay dispatch — HTTP runs on core 0, render loop never stalls ──
+  if (!s_relayBusy) {
+    // Process the previous result on the main loop so display state is safe.
+    if (s_relayResultReady) {
+      s_relayResultReady = false;
+      const int code = s_relayResCode;
+      if (s_relayReqIsPoll) {
+        if (code == 200) {
+          lastRelaySuccessMs = millis();
+          handleCommandJson(String(s_relayResBody));
+        } else if (code > 0) {
+          lastRelaySuccessMs = millis();
+        } else {
+          statusText = String(s_relayResBody);
+          publishStatus();
+        }
+      } else {
+        if (code >= 200 && code < 300) {
+          lastRelaySuccessMs = millis();
+          relayStatusDirty = false;
+        } else {
+          statusText = (code < 0) ? String(s_relayResBody) : (String("Relay HTTP ") + code);
+          publishStatus();
+        }
+      }
     }
-    relayPreferPoll = !relayPreferPoll;
+    // Dispatch next request when interval is due.
+    const bool wifiOk = WiFi.status() == WL_CONNECTED && !relayUrl.isEmpty() && !deviceToken.isEmpty();
+    const bool doPoll = wifiOk && (millis() - lastRelayPollMs >= relayPollIntervalMs());
+    const bool doPush = wifiOk && (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs());
+    if ((doPoll || doPush) && s_relayTaskHandle) {
+      s_relayBusy = true;
+      s_relayResultReady = false;
+      if (doPoll && (!doPush || relayPreferPoll)) {
+        lastRelayPollMs = millis();
+        s_relayReqIsPoll = true;
+        const String url = relayUrl + "/v1/device/" + deviceToken + "/pull?t=" + String(millis());
+        strlcpy(s_relayReqUrl, url.c_str(), sizeof(s_relayReqUrl));
+        s_relayReqBody[0] = '\0';
+      } else {
+        lastRelayStatusPushMs = millis();
+        s_relayReqIsPoll = false;
+        const String url = relayUrl + "/v1/device/" + deviceToken + "/status";
+        const String body = buildStatusJson();
+        strlcpy(s_relayReqUrl, url.c_str(), sizeof(s_relayReqUrl));
+        strlcpy(s_relayReqBody, body.c_str(), sizeof(s_relayReqBody));
+      }
+      relayPreferPoll = !relayPreferPoll;
+      xTaskNotifyGive(s_relayTaskHandle);
+    }
   }
 
   updatePetBehavior();

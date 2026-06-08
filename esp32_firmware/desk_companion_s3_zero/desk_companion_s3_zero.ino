@@ -3172,7 +3172,7 @@ void loop() {
   const bool relayPollDue = WiFi.status() == WL_CONNECTED &&
       !relayUrl.isEmpty() &&
       !deviceToken.isEmpty() &&
-      (millis() - lastRelayPollMs >= 5000);
+      (millis() - lastRelayPollMs >= 1000);
 
   // Execute at most one relay network call per loop pass.
   if (relayPushDue || relayPollDue) {
