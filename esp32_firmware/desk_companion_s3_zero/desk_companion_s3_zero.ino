@@ -8,6 +8,8 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <Wire.h>
 #include <esp_wifi.h>
 #include <ctype.h>
@@ -517,109 +519,50 @@ const char* modeName(DisplayMode mode) {
   }
 }
 
-// Fly.io relay server — plain HTTP on port 80, no TLS needed
-static const char* RELAY_HTTP_HOST = "desk-companion-relay.fly.dev";
-static const uint16_t RELAY_HTTP_PORT = 80;
-
-// Plain-HTTP relay request via Fly.io.
-// No TLS — Fly.io serves plain HTTP with force_https=false.
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
-  // Parse URL to extract the original host (for Host header) and path
-  String finalUrl = url;
-  // Strip protocol prefix
-  int protoEnd = finalUrl.indexOf("://");
-  String hostAndPath = (protoEnd > 0) ? finalUrl.substring(protoEnd + 3) : finalUrl;
-  int pathStart = hostAndPath.indexOf('/');
-  String path = (pathStart > 0) ? hostAndPath.substring(pathStart) : "/";
+  Serial.printf("[RELAY] %s %s heap=%u\n", method, url.c_str(), ESP.getFreeHeap());
 
-  Serial.printf("[RELAY-HTTP] %s %s (host=%s:%u path=%s) heap=%u\n",
-    method, url.c_str(), RELAY_HTTP_HOST, RELAY_HTTP_PORT,
-    path.c_str(), ESP.getFreeHeap());
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+  HTTPClient http;
 
-  WiFiClient tcp;
-  tcp.setTimeout(15);  // 15-second read timeout
-  tcp.setConnectionTimeout(10000);  // 10-second connect timeout (Fly.io cold start)
+  bool started = url.startsWith("https://")
+      ? http.begin(secureClient, url)
+      : http.begin(url);
 
-  unsigned long t0 = millis();
-  if (!tcp.connect(RELAY_HTTP_HOST, RELAY_HTTP_PORT)) {
-    unsigned long elapsed = millis() - t0;
-    Serial.printf("[RELAY-HTTP] TCP connect FAILED in %lums heap=%u\n",
-      elapsed, ESP.getFreeHeap());
-    response = String("TCP fail ") + String(elapsed) + "ms";
+  if (!started) {
+    response = "HTTP begin failed";
+    Serial.println("[RELAY] http.begin() failed");
     return -1;
   }
-  unsigned long elapsed = millis() - t0;
-  Serial.printf("[RELAY-HTTP] TCP connected in %lums\n", elapsed);
 
-  // Build raw HTTP request
-  String req = String(method) + " " + path + " HTTP/1.1\r\n";
-  req += String("Host: ") + RELAY_HTTP_HOST + "\r\n";
-  req += "Connection: close\r\n";
+  http.setTimeout(5000);
+  http.setConnectTimeout(3000);
   if (body.length() > 0) {
-    req += "Content-Type: application/json\r\n";
-    req += "Content-Length: " + String(body.length()) + "\r\n";
-  }
-  req += "\r\n";
-  if (body.length() > 0) {
-    req += body;
+    http.addHeader("Content-Type", "application/json");
   }
 
-  tcp.print(req);
-
-  // Read response status line
-  unsigned long respStart = millis();
-  String statusLine = "";
-  while (millis() - respStart < 10000) {
-    if (tcp.available()) {
-      statusLine = tcp.readStringUntil('\n');
-      statusLine.trim();
-      break;
-    }
-    if (!tcp.connected()) break;
-    delay(10);
+  int code;
+  if (strcmp(method, "GET") == 0) {
+    code = http.GET();
+  } else if (strcmp(method, "POST") == 0) {
+    code = http.POST((uint8_t*)body.c_str(), body.length());
+  } else {
+    code = http.sendRequest(method, (uint8_t*)body.c_str(), body.length());
   }
 
-  if (statusLine.length() == 0) {
-    Serial.println("[RELAY-HTTP] No response received");
-    response = "No response";
-    tcp.stop();
-    return -2;
+  Serial.printf("[RELAY] Code=%d\n", code);
+
+  if (code > 0) {
+    response = http.getString();
+    Serial.printf("[RELAY] Body=%.120s\n", response.c_str());
+  } else {
+    response = http.errorToString(code);
+    Serial.printf("[RELAY] Error: %s\n", response.c_str());
   }
 
-  Serial.printf("[RELAY-HTTP] Status: %s\n", statusLine.c_str());
-
-  // Parse status code (e.g. "HTTP/1.1 200 OK")
-  int httpCode = 0;
-  int spaceIdx = statusLine.indexOf(' ');
-  if (spaceIdx > 0) {
-    httpCode = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
-  }
-
-  // Read headers (skip them, just consume)
-  while (millis() - respStart < 10000) {
-    if (tcp.available()) {
-      String line = tcp.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) break;  // end of headers
-    }
-    if (!tcp.connected() && !tcp.available()) break;
-    delay(1);
-  }
-
-  // Read body
-  response = "";
-  while (millis() - respStart < 10000) {
-    while (tcp.available()) {
-      response += (char)tcp.read();
-    }
-    if (!tcp.connected() && !tcp.available()) break;
-    delay(10);
-  }
-
-  Serial.printf("[RELAY-HTTP] Code=%d Body=%s\n", httpCode, response.c_str());
-
-  tcp.stop();
-  return httpCode;
+  http.end();
+  return code;
 }
 
 void clearImageBuffer() {

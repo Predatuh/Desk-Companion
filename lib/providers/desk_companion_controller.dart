@@ -816,6 +816,9 @@ class DeskCompanionController extends ChangeNotifier {
     final result = await _runBusy<bool>(() async {
       if (isBleConnected) {
         await _sendBleCommand({'type': 'status'});
+        if (hasRelayTarget) {
+          return _fetchRelayStatus();
+        }
         return true;
       }
       if (hasRelayTarget) {
@@ -2264,7 +2267,7 @@ class DeskCompanionController extends ChangeNotifier {
   void _startRelayPollTimer() {
     _relayPollTimer?.cancel();
     _relayPollTimer = Timer.periodic(_relayStatusRefreshInterval, (_) {
-      if (!isBleConnected && hasRelayTarget) {
+      if (hasRelayTarget) {
         unawaited(_fetchRelayStatus());
       }
     });
