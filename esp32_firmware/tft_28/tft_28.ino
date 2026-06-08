@@ -260,6 +260,7 @@ unsigned long lastCompanionTickMs = 0;
 unsigned long lastPetBeatMs = 0;
 bool wifiJoinActive = false;
 bool relayStatusDirty = true;
+bool relayPreferPoll = true;
 uint8_t idleOrbit = 0;
 uint16_t rainDropOffset = 0;
 uint8_t expressionPhase = 0;
@@ -884,8 +885,9 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
     return -1;
   }
 
-  http.setTimeout(5000);
-  http.setConnectTimeout(3000);
+  // Keep relay operations short so animation loops stay responsive.
+  http.setTimeout(1200);
+  http.setConnectTimeout(800);
   if (body.length() > 0) {
     http.addHeader("Content-Type", "application/json");
   }
@@ -5812,10 +5814,8 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty ||
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
-    pushRelayStatus();
-  }
+  const bool relayPushDue = relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs());
 
   if (WiFi.status() == WL_CONNECTED &&
       !relayUrl.isEmpty() &&
@@ -5839,7 +5839,22 @@ void loop() {
     }
   }
 
-  pollRelay();
+  const bool relayPollDue = WiFi.status() == WL_CONNECTED &&
+      !relayUrl.isEmpty() &&
+      !deviceToken.isEmpty() &&
+      (millis() - lastRelayPollMs >= relayPollIntervalMs());
+
+  // Execute at most one relay network call per loop pass.
+  if (relayPushDue || relayPollDue) {
+    if (relayPollDue && (!relayPushDue || relayPreferPoll)) {
+      pollRelay();
+    } else if (relayPushDue) {
+      pushRelayStatus();
+    } else {
+      pollRelay();
+    }
+    relayPreferPoll = !relayPreferPoll;
+  }
 
   updatePetBehavior();
   checkTimeGreetings();
