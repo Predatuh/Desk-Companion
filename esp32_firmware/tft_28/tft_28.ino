@@ -5814,7 +5814,10 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  const bool relayPushDue = relayStatusDirty ||
+  // Rate-limit relay push strictly — dirty flag must not bypass the interval
+  // or it fires an HTTP call on every loop iteration and freezes animation.
+  const bool relayPushDue = WiFi.status() == WL_CONNECTED &&
+      !relayUrl.isEmpty() && !deviceToken.isEmpty() &&
       (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs());
 
   if (WiFi.status() == WL_CONNECTED &&
