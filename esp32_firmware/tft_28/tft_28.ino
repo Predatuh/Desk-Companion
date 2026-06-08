@@ -522,14 +522,14 @@ bool isAnyAnimatedMode() {
 
 unsigned long relayPollIntervalMs() {
   if (relayColorTransferActive() || imageTransferActive) return 150UL;
-  if (currentMode == MODE_BANNER) return 8000UL;
-  if (isRelayBackgroundMode()) return 30000UL;
-  return 4000UL;
+  if (currentMode == MODE_BANNER) return 10000UL;
+  if (isRelayBackgroundMode()) return 10000UL;
+  return 5000UL;
 }
 
 unsigned long relayStatusIntervalMs() {
-  if (isRelayBackgroundMode()) return 60000UL;
-  return 30000UL;
+  if (isRelayBackgroundMode()) return 10000UL;
+  return 10000UL;
 }
 void setupDisplay();
 void handleTouch();
