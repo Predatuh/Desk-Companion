@@ -5321,7 +5321,7 @@ void pollRelay() {
   const unsigned long pollInterval = relayPollIntervalMs();
   if (millis() - lastRelayPollMs < pollInterval) return;
   lastRelayPollMs = millis();
-  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull?t=" + String(millis());
   String response;
   const int code = relayRequest("GET", url, "", response);
   if (code == 200) {

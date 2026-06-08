@@ -2816,14 +2816,14 @@ void pollRelay() {
     return;
   }
 
-  const unsigned long pollInterval = currentMode == MODE_BANNER ? 8000UL : 4000UL;
+  const unsigned long pollInterval = currentMode == MODE_BANNER ? 5000UL : 5000UL;
   if (millis() - lastRelayPollMs < pollInterval) {
     return;
   }
 
   lastRelayPollMs = millis();
 
-  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull";
+  const String url = relayUrl + "/v1/device/" + deviceToken + "/pull?t=" + String(millis());
   String response;
   const int code = relayRequest("GET", url, "", response);
   if (code == 200) {
@@ -3196,7 +3196,7 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 30000)) {
+  if (relayStatusDirty || (millis() - lastRelayStatusPushMs >= 5000)) {
     pushRelayStatus();
   }
 

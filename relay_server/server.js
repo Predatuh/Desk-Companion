@@ -68,14 +68,24 @@ function queuePersist() {
 }
 
 function sendJson(res, statusCode, body) {
-  res.writeHead(statusCode, { 'content-type': 'application/json' });
+  res.writeHead(statusCode, {
+    'content-type': 'application/json',
+    'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+    pragma: 'no-cache',
+    expires: '0',
+  });
   res.end(JSON.stringify(body));
 }
 
 function sendFile(res, filePath, contentType) {
   fs.readFile(filePath)
     .then((body) => {
-      res.writeHead(200, { 'content-type': contentType });
+      res.writeHead(200, {
+        'content-type': contentType,
+        'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+        pragma: 'no-cache',
+        expires: '0',
+      });
       res.end(body);
     })
     .catch(() => sendJson(res, 404, { error: 'not_found' }));
@@ -145,7 +155,11 @@ async function handleRequest(req, res) {
       device.updatedAt = now;
       queuePersist();
       if (!nextCommand) {
-        res.writeHead(204);
+        res.writeHead(204, {
+          'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+          pragma: 'no-cache',
+          expires: '0',
+        });
         return res.end();
       }
       return sendJson(res, 200, nextCommand);

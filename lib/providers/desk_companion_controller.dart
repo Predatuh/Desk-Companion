@@ -1750,7 +1750,7 @@ class DeskCompanionController extends ChangeNotifier {
         return false;
       }
 
-      final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+      final url = '$base/v1/device/${Uri.encodeComponent(token)}/status?t=${DateTime.now().millisecondsSinceEpoch}';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         _relayOnline = false;
@@ -2139,7 +2139,7 @@ class DeskCompanionController extends ChangeNotifier {
       try {
         final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
         final token = _deviceToken.trim();
-        final url = '$base/v1/device/${Uri.encodeComponent(token)}/status';
+        final url = '$base/v1/device/${Uri.encodeComponent(token)}/status?t=${DateTime.now().millisecondsSinceEpoch}';
         final response = await http.get(Uri.parse(url));
         if (response.statusCode < 200 || response.statusCode >= 300) {
           return;
