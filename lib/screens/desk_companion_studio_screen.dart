@@ -1193,6 +1193,42 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     );
   }
 
+  Future<void> _saveRelayProfile(DeskCompanionController controller) async {
+    final token = _deviceTokenController.text.trim();
+    if (token.isEmpty) {
+      _showMessage('Enter a device token first.');
+      return;
+    }
+
+    await _perform(
+      () => controller.saveCurrentRelayProfile(label: token),
+      success: 'Saved relay target $token.',
+    );
+  }
+
+  Future<void> _selectRelayProfile(
+    DeskCompanionController controller,
+    String profileKey,
+  ) async {
+    await _perform(
+      () => controller.selectRelayProfile(profileKey),
+      success: 'Relay target selected.',
+    );
+  }
+
+  Future<void> _deleteRelayProfile(DeskCompanionController controller) async {
+    final profileKey = controller.selectedRelayProfileKey;
+    if (profileKey == null) {
+      _showMessage('Select a saved relay target first.');
+      return;
+    }
+
+    await _perform(
+      () => controller.deleteRelayProfile(profileKey),
+      success: 'Relay target removed.',
+    );
+  }
+
   Future<void> _connectWifiDevice(DeskCompanionController controller) async {
     try {
       final ok = await controller.connectRemoteDevice();
@@ -2739,9 +2775,55 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (controller.relayProfiles.isNotEmpty) ...[
+          DropdownButtonFormField<String>(
+            value: controller.selectedRelayProfileKey,
+            decoration: const InputDecoration(labelText: 'Saved relay targets'),
+            hint: const Text('Select a saved target'),
+            items: controller.relayProfiles
+                .map(
+                  (profile) => DropdownMenuItem<String>(
+                    value: profile.key,
+                    child: Text('${profile.label} (${profile.deviceToken})'),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: controller.busy
+                ? null
+                : (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    _selectRelayProfile(controller, value);
+                  },
+          ),
+          const SizedBox(height: 8),
+        ],
         TextField(controller: _relayBaseUrlController, onChanged: controller.updateRelayBaseUrl, decoration: const InputDecoration(labelText: 'Relay base URL', hintText: 'http://desk-companion-relay.fly.dev')),
         const SizedBox(height: 8),
         TextField(controller: _deviceTokenController, onChanged: controller.updateDeviceToken, decoration: const InputDecoration(labelText: 'Device token', hintText: 'desk-01')),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: controller.busy ? null : () => _saveRelayProfile(controller),
+                icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                label: const Text('Save target'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: controller.busy || controller.selectedRelayProfileKey == null
+                    ? null
+                    : () => _deleteRelayProfile(controller),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Remove target'),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         Row(
           children: [

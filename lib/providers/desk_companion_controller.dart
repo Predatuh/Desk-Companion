@@ -13,6 +13,46 @@ import '../models/companion_visual_model.dart';
 
 enum CompanionBleState { disconnected, scanning, connecting, connected }
 
+class RelayTargetProfile {
+  const RelayTargetProfile({
+    required this.label,
+    required this.relayBaseUrl,
+    required this.deviceToken,
+  });
+
+  final String label;
+  final String relayBaseUrl;
+  final String deviceToken;
+
+  String get key =>
+      '${relayBaseUrl.toLowerCase()}|${deviceToken.toLowerCase()}';
+
+  Map<String, dynamic> toJson() {
+    return {
+      'label': label,
+      'relayBaseUrl': relayBaseUrl,
+      'deviceToken': deviceToken,
+    };
+  }
+
+  static RelayTargetProfile? fromJson(dynamic raw) {
+    if (raw is! Map<String, dynamic>) {
+      return null;
+    }
+    final label = (raw['label'] as String? ?? '').trim();
+    final relayBaseUrl = (raw['relayBaseUrl'] as String? ?? '').trim();
+    final deviceToken = (raw['deviceToken'] as String? ?? '').trim();
+    if (relayBaseUrl.isEmpty || deviceToken.isEmpty) {
+      return null;
+    }
+    return RelayTargetProfile(
+      label: label.isEmpty ? deviceToken : label,
+      relayBaseUrl: relayBaseUrl,
+      deviceToken: deviceToken,
+    );
+  }
+}
+
 class DeskCompanionController extends ChangeNotifier {
   static const Duration _relayHeartbeatGrace = Duration(seconds: 75);
   static const Duration _relayStatusRefreshInterval = Duration(seconds: 5);
@@ -30,6 +70,7 @@ class DeskCompanionController extends ChangeNotifier {
     'Desk Companion S3',
     'Desk Companion Mini',
   ];
+  static const String _relayProfilesKey = 'relayProfiles';
   static const String _relayBaseUrlKey = 'relayBaseUrl';
   static const String _deviceTokenKey = 'deviceToken';
   static const String _connectedSsidKey = 'lastSsid';
@@ -83,6 +124,8 @@ class DeskCompanionController extends ChangeNotifier {
   String _deviceName = '';
   String _relayBaseUrl = 'https://desk-companion-production.up.railway.app';
   String _deviceToken = '';
+  List<RelayTargetProfile> _relayProfiles = const [];
+  String? _selectedRelayProfileKey;
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
   DateTime? _lastStyleSentAt;
@@ -166,6 +209,8 @@ class DeskCompanionController extends ChangeNotifier {
   String get deviceName => _deviceName;
   String get relayBaseUrl => _relayBaseUrl;
   String get deviceToken => _deviceToken;
+  List<RelayTargetProfile> get relayProfiles => _relayProfiles;
+  String? get selectedRelayProfileKey => _selectedRelayProfileKey;
   String get petPersonality => _petPersonality;
   String get activePetMode => _activePetMode;
   String get companionVisualModel => _companionVisualModel;
@@ -277,6 +322,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   void updateRelayBaseUrl(String value) {
     _relayBaseUrl = _sanitizeRelayBaseUrl(value);
+    _syncSelectedRelayProfile();
     unawaited(_persistRelayPreferences());
     _restartRelayPollingIfNeeded();
     notifyListeners();
@@ -284,9 +330,106 @@ class DeskCompanionController extends ChangeNotifier {
 
   void updateDeviceToken(String value) {
     _deviceToken = value.trim();
+    _syncSelectedRelayProfile();
     unawaited(_persistRelayPreferences());
     _restartRelayPollingIfNeeded();
     notifyListeners();
+  }
+
+  Future<void> saveCurrentRelayProfile({String? label}) async {
+    final relayBaseUrl = _sanitizeRelayBaseUrl(_relayBaseUrl);
+    final token = _deviceToken.trim();
+    if (relayBaseUrl.isEmpty || token.isEmpty) {
+      throw const HttpException('Relay URL and token are required.');
+    }
+
+    final profile = RelayTargetProfile(
+      label: (label ?? '').trim().isEmpty ? token : label!.trim(),
+      relayBaseUrl: relayBaseUrl,
+      deviceToken: token,
+    );
+
+    final next = List<RelayTargetProfile>.from(_relayProfiles);
+    final index = next.indexWhere((entry) => entry.key == profile.key);
+    if (index >= 0) {
+      next[index] = profile;
+    } else {
+      next.add(profile);
+    }
+    _relayProfiles = next;
+    _selectedRelayProfileKey = profile.key;
+    await _persistRelayProfiles();
+    notifyListeners();
+  }
+
+  Future<void> selectRelayProfile(String profileKey) async {
+    final profile = _relayProfiles.where((entry) => entry.key == profileKey);
+    if (profile.isEmpty) {
+      throw const HttpException('Selected relay profile was not found.');
+    }
+
+    final selected = profile.first;
+    _relayBaseUrl = selected.relayBaseUrl;
+    _deviceToken = selected.deviceToken;
+    _selectedRelayProfileKey = selected.key;
+    await _persistRelayPreferences();
+    _restartRelayPollingIfNeeded();
+    notifyListeners();
+  }
+
+  Future<void> deleteRelayProfile(String profileKey) async {
+    final next = _relayProfiles
+        .where((entry) => entry.key != profileKey)
+        .toList(growable: false);
+    if (next.length == _relayProfiles.length) {
+      return;
+    }
+    _relayProfiles = next;
+    _syncSelectedRelayProfile();
+    await _persistRelayProfiles();
+    notifyListeners();
+  }
+
+  void _syncSelectedRelayProfile() {
+    final currentKey =
+        '${_relayBaseUrl.toLowerCase()}|${_deviceToken.toLowerCase()}';
+    if (_relayBaseUrl.isEmpty || _deviceToken.isEmpty) {
+      _selectedRelayProfileKey = null;
+      return;
+    }
+    final match = _relayProfiles.where((entry) => entry.key == currentKey);
+    _selectedRelayProfileKey = match.isEmpty ? null : currentKey;
+  }
+
+  List<RelayTargetProfile> _decodeRelayProfiles(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return const [];
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const [];
+      }
+
+      final byKey = <String, RelayTargetProfile>{};
+      for (final item in decoded) {
+        final profile = RelayTargetProfile.fromJson(item);
+        if (profile == null) {
+          continue;
+        }
+        byKey[profile.key] = profile;
+      }
+      return byKey.values.toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _persistRelayProfiles() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = _relayProfiles.map((entry) => entry.toJson()).toList();
+    await prefs.setString(_relayProfilesKey, jsonEncode(encoded));
   }
 
   Future<void> updateCompanionVisualModel(String value) async {
@@ -328,6 +471,9 @@ class DeskCompanionController extends ChangeNotifier {
       prefs.getString(_relayBaseUrlKey) ?? _relayBaseUrl,
     );
     _deviceToken = (prefs.getString(_deviceTokenKey) ?? '').trim();
+    _relayProfiles =
+        _decodeRelayProfiles(prefs.getString(_relayProfilesKey));
+    _syncSelectedRelayProfile();
     _connectedSsid = (prefs.getString(_connectedSsidKey) ?? '').trim();
     _mode = (prefs.getString(_modeKey) ?? _mode).trim();
     _petPersonality =
@@ -659,6 +805,7 @@ class DeskCompanionController extends ChangeNotifier {
       });
       _relayBaseUrl = sanitizedRelayUrl;
       _deviceToken = trimmedToken;
+      _syncSelectedRelayProfile();
       await _persistRelayPreferences();
       _restartRelayPollingIfNeeded();
       _setStatus('Relay configuration sent over BLE.');
@@ -1708,6 +1855,8 @@ class DeskCompanionController extends ChangeNotifier {
     if (incomingToken.isNotEmpty) {
       _deviceToken = incomingToken;
     }
+
+    _syncSelectedRelayProfile();
 
     // Guard: skip overwriting appearance fields for 15 seconds after a
     // style was just sent locally. This prevents stale relay pull responses

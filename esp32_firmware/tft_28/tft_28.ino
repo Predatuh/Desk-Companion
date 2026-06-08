@@ -5318,7 +5318,6 @@ void pushRelayStatus() {
 
 void pollRelay() {
   if (WiFi.status() != WL_CONNECTED || relayUrl.isEmpty() || deviceToken.isEmpty()) return;
-  if (isAnyAnimatedMode()) return;  // don't block render loop during active animations
   const unsigned long pollInterval = relayPollIntervalMs();
   if (millis() - lastRelayPollMs < pollInterval) return;
   lastRelayPollMs = millis();
@@ -5813,8 +5812,8 @@ void loop() {
     pendingWifiPass = "";
   }
 
-  if (!isAnyAnimatedMode() && (relayStatusDirty ||
-      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs()))) {
+  if (relayStatusDirty ||
+      (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs())) {
     pushRelayStatus();
   }
 
