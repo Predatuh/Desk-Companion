@@ -1332,46 +1332,42 @@ class DeskCompanionController extends ChangeNotifier {
       _relaySendProgress = 0.0;
       notifyListeners();
 
-      final started = await _postRelay({
+      // Build all commands in memory and send as a single batch POST so the
+      // entire image sequence (begin + ~50 chunks + commit) is uploaded in one
+      // HTTP round-trip instead of 52 sequential requests.
+      const chunkSize = 3072;
+      final totalChunks = (rgb565.length + chunkSize - 1) ~/ chunkSize;
+      final batch = <Map<String, dynamic>>[];
+
+      batch.add({
         'type': 'begin_color_image',
         'total': rgb565.length,
         if (idleBackground) 'idleBackground': 1,
       });
-      if (!started) {
+
+      for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
+        final end = (offset + chunkSize < rgb565.length) ? offset + chunkSize : rgb565.length;
+        batch.add({
+          'type': 'color_image_chunk',
+          'data': base64Encode(rgb565.sublist(offset, end)),
+        });
+      }
+
+      batch.add({'type': 'commit_color_image'});
+
+      _setStatus('Uploading…');
+      final sent = await _postRelayBatch(batch);
+      if (!sent) {
         _relaySendProgress = 0.0;
         notifyListeners();
         throw HttpException(_lastRelayError ?? 'Relay send failed.');
       }
 
-      const chunkSize = 3072;
-      final totalChunks = (rgb565.length + chunkSize - 1) ~/ chunkSize;
-      var chunkIndex = 0;
-      for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
-        final end = (offset + chunkSize < rgb565.length) ? offset + chunkSize : rgb565.length;
-        final sent = await _postRelay({
-          'type': 'color_image_chunk',
-          'data': base64Encode(rgb565.sublist(offset, end)),
-        });
-        if (!sent) {
-          _relaySendProgress = 0.0;
-          notifyListeners();
-          throw HttpException(_lastRelayError ?? 'Relay send failed.');
-        }
-        chunkIndex++;
-        _relaySendProgress = chunkIndex / (totalChunks + 1);
-        _setStatus('Uploading… (${(_relaySendProgress * 100).round()}%)');
-      }
-
-      if (await _postRelay({'type': 'commit_color_image'})) {
-        _relaySendProgress = 1.0;
-        notifyListeners();
-        if (!idleBackground) _mode = 'color_image';
-        _pollRelayDelivery(relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image'));
-        return;
-      }
-      _relaySendProgress = 0.0;
+      _relaySendProgress = 1.0;
       notifyListeners();
-      throw HttpException(_lastRelayError ?? 'Relay send failed.');
+      if (!idleBackground) _mode = 'color_image';
+      _pollRelayDelivery(relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image'));
+      return;
     }
 
     if (!canSendOverBle) throw const HttpException('BLE is not connected and relay color image send is unavailable.');
@@ -1408,6 +1404,33 @@ class DeskCompanionController extends ChangeNotifier {
         Uri.parse(url),
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({'command': command}),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) return true;
+      _lastRelayError = 'Relay returned ${response.statusCode}.';
+      _setStatus(_lastRelayError!);
+      return false;
+    } catch (error) {
+      _lastRelayError = 'Relay error: $error';
+      _setStatus(_lastRelayError!);
+      return false;
+    }
+  }
+
+  Future<bool> _postRelayBatch(List<Map<String, dynamic>> commands) async {
+    final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
+    final token = _deviceToken.trim();
+    _lastRelayError = null;
+    if (base.isEmpty || token.isEmpty) {
+      _lastRelayError = 'Relay URL or token is missing.';
+      return false;
+    }
+
+    final url = '$base/v1/device/${Uri.encodeComponent(token)}/command';
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({'commands': commands}),
       );
       if (response.statusCode >= 200 && response.statusCode < 300) return true;
       _lastRelayError = 'Relay returned ${response.statusCode}.';

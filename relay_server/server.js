@@ -127,30 +127,37 @@ async function handleRequest(req, res) {
 
     if (req.method === 'POST' && action === 'command') {
       const body = JSON.parse((await readBody(req)) || '{}');
-      if (!body.command || typeof body.command !== 'object') {
+
+      // Support both single command and batch array
+      const commands = Array.isArray(body.commands) ? body.commands
+          : (body.command && typeof body.command === 'object') ? [body.command]
+          : null;
+      if (!commands || commands.length === 0) {
         return sendJson(res, 400, { error: 'missing_command' });
       }
-      
+
       const now = new Date().toISOString();
-      const type = body.command.type || '';
-      
-      // THE FIX: If this is a fresh display command, clear the queue to prevent massive backlogs.
+      const type = commands[0].type || '';
+
+      // If this is a fresh display command, clear the queue to prevent massive backlogs.
       // We skip clearing if it's an image chunk sequence or a silent status check.
       if (!type.includes('chunk') && !type.includes('commit') && type !== 'status') {
           device.queue = [];
       }
 
-      device.queue.push(body.command);
-      
-      // Allow up to 100 items to support full image chunk sequences
-      if (device.queue.length > 100) {
-          device.queue = device.queue.slice(-100);
+      for (const cmd of commands) {
+          device.queue.push(cmd);
+      }
+
+      // Allow up to 150 items to support full image chunk sequences
+      if (device.queue.length > 150) {
+          device.queue = device.queue.slice(-150);
       }
 
       device.lastCommandAt = now;
       device.updatedAt = now;
       queuePersist();
-      
+
       return sendJson(res, 202, {
         queued: true,
         pending: device.queue.length,
