@@ -1405,9 +1405,13 @@ class DeskCompanionController extends ChangeNotifier {
         Uri.parse(url),
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({'command': command}),
-      );
+      ).timeout(const Duration(seconds: 12));
       if (response.statusCode >= 200 && response.statusCode < 300) return true;
       _lastRelayError = 'Relay returned ${response.statusCode}.';
+      _setStatus(_lastRelayError!);
+      return false;
+    } on TimeoutException {
+      _lastRelayError = 'Relay timed out.';
       _setStatus(_lastRelayError!);
       return false;
     } catch (error) {
@@ -1432,9 +1436,13 @@ class DeskCompanionController extends ChangeNotifier {
         Uri.parse(url),
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({'commands': commands}),
-      );
+      ).timeout(const Duration(seconds: 12));
       if (response.statusCode >= 200 && response.statusCode < 300) return true;
       _lastRelayError = 'Relay returned ${response.statusCode}.';
+      _setStatus(_lastRelayError!);
+      return false;
+    } on TimeoutException {
+      _lastRelayError = 'Relay timed out.';
       _setStatus(_lastRelayError!);
       return false;
     } catch (error) {
