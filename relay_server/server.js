@@ -1,5 +1,4 @@
 const http = require('http');
-const path = require('path');
 
 const port = Number(process.env.PORT || 8787);
 const devices = new Map();
@@ -35,9 +34,9 @@ function readBody(req) {
       raw += chunk;
       if (raw.length > 5 * 1024 * 1024) { // 5MB limit
         const err = new Error('payload too large');
-        console.error(`Payload size limit exceeded: ${raw.length}`);
+        console.error(`Payload size limit exceeded: ${raw.length} bytes`);
         reject(err);
-        req.connection.destroy();
+        req.destroy();
       }
     });
     req.on('end', () => resolve(raw));

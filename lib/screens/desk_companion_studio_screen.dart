@@ -2756,7 +2756,7 @@ class _DeskCompanionStudioScreenState extends State<DeskCompanionStudioScreen> {
             Expanded(child: ElevatedButton.icon(onPressed: controller.busy || !controller.isBleConnected ? null : () => _sendWifi(controller), icon: const Icon(Icons.wifi, size: 16), label: const Text('Connect'))),
           ],
         ),
-        if (controller.wifiConnected) ...[
+        if (controller.isBleConnected && controller.connectedSsid.isNotEmpty) ...[
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
