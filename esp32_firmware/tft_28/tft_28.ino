@@ -880,10 +880,13 @@ const char* modeName(DisplayMode mode) {
 // ─── Relay ───
 
 int relayRequest(const char* method, const String& url, const String& body, String& response) {
-  Serial.printf("[RELAY] %s %s heap=%u\n", method, url.c_str(), ESP.getFreeHeap());
+  Serial.printf("[RELAY] %s %s (Heap: %u)\n", method, url.c_str(), ESP.getFreeHeap());
+  if (body.length() > 0) {
+    Serial.printf("[RELAY] Body: %.120s\n", body.c_str());
+  }
 
   WiFiClientSecure secureClient;
-  secureClient.setInsecure();
+  secureClient.setInsecure(); // Allow self-signed certs for local testing if needed
   HTTPClient http;
 
   bool started = url.startsWith("https://")
@@ -892,18 +895,20 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
 
   if (!started) {
     response = "HTTP begin failed";
-    Serial.println("[RELAY] http.begin() failed");
+    Serial.println("[RELAY] ERROR: http.begin() failed.");
     return -1;
   }
 
-  // Keep relay operations short so animation loops stay responsive.
-  http.setTimeout(1200);
-  http.setConnectTimeout(800);
+  // Increased timeouts for more reliable connection, especially on cold start.
+  http.setTimeout(5000); // 5 seconds total transaction timeout
+  http.setConnectTimeout(2500); // 2.5 seconds to connect
+
   if (body.length() > 0) {
     http.addHeader("Content-Type", "application/json");
   }
 
   int code;
+  unsigned long startMs = millis();
   if (strcmp(method, "GET") == 0) {
     code = http.GET();
   } else if (strcmp(method, "POST") == 0) {
@@ -911,15 +916,16 @@ int relayRequest(const char* method, const String& url, const String& body, Stri
   } else {
     code = http.sendRequest(method, (uint8_t*)body.c_str(), body.length());
   }
+  unsigned long durationMs = millis() - startMs;
 
-  Serial.printf("[RELAY] Code=%d\n", code);
+  Serial.printf("[RELAY] Request completed in %lu ms, HTTP Code: %d\n", durationMs, code);
 
   if (code > 0) {
     response = http.getString();
-    Serial.printf("[RELAY] Body=%.120s\n", response.c_str());
+    Serial.printf("[RELAY] Response Body: %.120s\n", response.c_str());
   } else {
     response = http.errorToString(code);
-    Serial.printf("[RELAY] Error: %s\n", response.c_str());
+    Serial.printf("[RELAY] HTTP Error: %s\n", response.c_str());
   }
 
   http.end();
@@ -5485,11 +5491,24 @@ void setupDisplay() {
   // Initialize FT6336U capacitive touch via I2C (bare register access, no library)
   Serial.printf("[TFT] Starting I2C for touch (SDA=%d SCL=%d)...\n", TOUCH_SDA, TOUCH_SCL);
   Wire.begin(TOUCH_SDA, TOUCH_SCL);
-  if (ft6336u_init()) {
+  Wire.setClock(400000);
+
+  const unsigned long touchInitStartMs = millis();
+  bool foundTouch = false;
+  while (millis() - touchInitStartMs < 2000UL) {
+    if (ft6336u_init()) {
+      foundTouch = true;
+      break;
+    }
+    delay(100);
+  }
+
+  if (foundTouch) {
     touchAvailable = true;
     Serial.println("[TFT] FT6336U found at 0x38. Touch ready.");
   } else {
-    Serial.println("[TFT] WARNING: FT6336U not found at 0x38! Touch disabled.");
+    touchAvailable = false;
+    Serial.println("[TFT] WARNING: Touch controller not found after 2s. Continuing without touch.");
   }
 
   Serial.printf("[TFT] ST7789 initialized with canvas buffer. Free heap: %u  PSRAM: %u\n",
@@ -5653,7 +5672,7 @@ void handleTouch() {
 void setup() {
   Serial.begin(115200);
   delay(2000);  // extra time to open serial monitor
-  Serial.println("\n=== Desk Companion TFT 2.8\" boot ===");
+  Serial.println("\n\n=== Desk Companion TFT 2.8\" boot ===");
   Serial.printf("[BOOT] Reset reason: %d\n", static_cast<int>(esp_reset_reason()));
 
   // Try to enable PSRAM (required for sprite buffer)
@@ -5665,17 +5684,32 @@ void setup() {
 
   WiFi.persistent(false);
   configureWifiStaMode();
+  Serial.println("[BOOT] Wi-Fi STA mode configured.");
 
   Serial.println("[BOOT] setupDisplay...");
   setupDisplay();
+  if (!displayAvailable || gfx == nullptr) {
+    Serial.println("[BOOT] FATAL: Display init failed. Halting.");
+    while (true) delay(1000);
+  }
+
+  gfx->fillScreen(COL_BG);
+  gfx->setCursor(10, 10);
+  gfx->setTextColor(COL_FG);
+  gfx->setTextSize(2);
+  gfx->println("Booting...");
+  pushCanvas();
+
   Serial.println("[BOOT] clearImageBuffer...");
   clearImageBuffer();
 
   Serial.println("[BOOT] tryStoredPrefs...");
   tryStoredPrefs();
+  Serial.println("[BOOT] Stored prefs applied.");
+
   Serial.println("[BOOT] setupBle...");
   setupBle();
-  Serial.println("[BOOT] BLE ready.");
+  Serial.println("[BOOT] BLE server setup complete.");
 
   if (!currentSsid.isEmpty() && storedWifiPass.length() > 0) {
     bootWifiRestorePending = true;
@@ -5687,10 +5721,19 @@ void setup() {
   lastWifiCheckMs = millis();
 
   // Relay HTTP task on core 0 — keeps blocking HTTP calls off the render loop.
-  xTaskCreatePinnedToCore(relayBgTask, "relay_bg", 8192, nullptr, 1, &s_relayTaskHandle, 0);
+  Serial.println("[BOOT] Starting relay background task...");
+  BaseType_t relayTaskOk = xTaskCreatePinnedToCore(
+    relayBgTask, "relay_bg", 12288, nullptr, 1, &s_relayTaskHandle, 0
+  );
+  if (relayTaskOk != pdPASS) {
+    Serial.println("[BOOT] ERROR: Failed to start relay background task.");
+  } else {
+    Serial.println("[BOOT] Relay background task started.");
+  }
 
   renderCurrentMode();
   publishStatus();
+  Serial.println("[BOOT] Setup complete. Entering main loop.");
 }
 
 void loop() {
@@ -5916,7 +5959,7 @@ void loop() {
     const bool wifiOk = WiFi.status() == WL_CONNECTED && !relayUrl.isEmpty() && !deviceToken.isEmpty();
     const bool doPoll = wifiOk && (millis() - lastRelayPollMs >= relayPollIntervalMs());
     const bool doPush = wifiOk && (millis() - lastRelayStatusPushMs >= relayStatusIntervalMs());
-    if ((doPoll || doPush) && s_relayTaskHandle) {
+    if (!s_relayBusy && (doPoll || doPush) && s_relayTaskHandle) {
       s_relayBusy = true;
       s_relayResultReady = false;
       if (doPoll && (!doPush || relayPreferPoll)) {
