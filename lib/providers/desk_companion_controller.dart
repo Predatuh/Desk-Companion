@@ -1169,8 +1169,8 @@ class DeskCompanionController extends ChangeNotifier {
           'mustacheOffsetX': mustacheOffsetX, 'mustacheOffsetY': mustacheOffsetY,
         });
         if (sent) {
-          _deliveryStage = 'queued';
-          _pollRelayDelivery('Companion style queued through relay.');
+          _deliveryStage = '';
+          _setStatus('Companion style sent to relay.');
           notifyListeners();
         } else {
           _deliveryStage = '';
@@ -1278,8 +1278,8 @@ class DeskCompanionController extends ChangeNotifier {
       final sent = await _postRelay(payload);
       if (sent) {
         _mode = mode;
-        _deliveryStage = 'queued';
-        _pollRelayDelivery(relayLabel);
+        _deliveryStage = '';
+        _setStatus(relayLabel);
         notifyListeners();
         return;
       }
@@ -1299,7 +1299,7 @@ class DeskCompanionController extends ChangeNotifier {
     if (!canSendOverBle && allowRelay && hasRelayTarget) {
       if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
         _mode = 'image';
-        if (!silent) _pollRelayDelivery('Image');
+        if (!silent) _setStatus('Image sent to relay.');
         return;
       }
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
@@ -1366,7 +1366,8 @@ class DeskCompanionController extends ChangeNotifier {
       _relaySendProgress = 1.0;
       notifyListeners();
       if (!idleBackground) _mode = 'color_image';
-      _pollRelayDelivery(relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image'));
+      _setStatus((relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image')) + ' sent to relay.');
+      Future.delayed(const Duration(seconds: 2), () { _relaySendProgress = 0.0; notifyListeners(); });
       return;
     }
 
