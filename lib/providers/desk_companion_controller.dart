@@ -699,7 +699,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendExpression(String expression) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_expression', 'expression': expression},
         mode: 'expression',
@@ -724,7 +723,6 @@ class DeskCompanionController extends ChangeNotifier {
     int? stemColor,
   }) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       final command = <String, dynamic>{
         'type': 'set_flower',
         'flower': flower,
@@ -747,7 +745,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendScene(String scene) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_scene', 'scene': scene},
         mode: 'scene',
@@ -759,7 +756,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendParticle(String mode) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_particle', 'particle': mode},
         mode: 'particle',
@@ -771,7 +767,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendFireworkShape(String shape) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_firework_shape', 'shape': shape},
         mode: 'firework_shape',
@@ -783,7 +778,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendNoteAnimation(String animation) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_note_animation', 'animation': animation},
         mode: 'note_animation',
@@ -795,7 +789,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendGoodnight() async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'goodnight'},
         mode: 'sleep',
@@ -807,7 +800,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> startCountdown(int seconds, {int endAction = 0}) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_countdown', 'seconds': seconds, 'endAction': endAction},
         mode: 'countdown',
@@ -819,7 +811,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendExpressionSpeed(int speed) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_expression_speed', 'speed': speed},
         mode: 'expression_speed',
@@ -831,7 +822,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendCompanionScale(int scale) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_companion_scale', 'scale': scale},
         mode: _mode,
@@ -843,7 +833,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendFireworkPalette(String palette) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_firework_palette', 'palette': palette},
         mode: 'firework_palette',
@@ -855,7 +844,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendFireworkSize(String size) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_firework_size', 'size': size},
         mode: 'firework_size',
@@ -867,7 +855,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendDrawColor(int rgb565) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_draw_color', 'color': rgb565},
         mode: _mode,
@@ -884,7 +871,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> setTimezone(int offsetSeconds) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_timezone', 'offsetSeconds': offsetSeconds},
         mode: _mode,
@@ -896,7 +882,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> setLocation(double lat, double lon) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_location', 'lat': lat, 'lon': lon},
         mode: _mode,
@@ -908,7 +893,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> showWeather() async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'show_weather'},
         mode: 'weather',
@@ -920,7 +904,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> setDisplayRotation(int rotation) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_rotation', 'rotation': rotation.clamp(0, 3)},
         mode: _mode,
@@ -941,7 +924,6 @@ class DeskCompanionController extends ChangeNotifier {
     int? mouthColor,
   }) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       final cmd = <String, dynamic>{
         'type': 'set_colors',
         'eyeColor': eyeColor,
@@ -964,7 +946,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> setPetPersonality(String personality) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'set_personality', 'personality': personality},
         mode: _mode,
@@ -979,7 +960,6 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> triggerPetMode(String petMode) async {
     await _runBusy(() async {
-      await _postRelay({'type': 'force_poll'});
       await _sendCommand(
         {'type': 'trigger_pet_mode', 'petMode': petMode},
         mode: _mode,
@@ -1482,7 +1462,7 @@ class DeskCompanionController extends ChangeNotifier {
       }
 
       final url = '$base/v1/device/${Uri.encodeComponent(token)}/status?t=${DateTime.now().millisecondsSinceEpoch}';
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         _relayOnline = false;
         _relayStatusKnown = true;
@@ -1526,7 +1506,9 @@ class DeskCompanionController extends ChangeNotifier {
       _relayOnline = false;
       _relayStatusKnown = true;
       final message = error.toString();
-      if (message.contains('host lookup') || message.contains('SocketException')) {
+      if (error is TimeoutException) {
+        _setStatus('Relay status check timed out.');
+      } else if (message.contains('host lookup') || message.contains('SocketException')) {
         _setStatus('Cannot reach relay. Check your internet connection.');
       } else {
         _setStatus('Relay error: $message');
