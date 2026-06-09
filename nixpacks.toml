@@ -8,4 +8,4 @@ cmds = ["npm install --production"]
 cmds = []
 
 [start]
-cmd = "node relay_server/server.js"
+cmd = "npm start"
