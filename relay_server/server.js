@@ -142,9 +142,9 @@ async function handleRequest(req, res) {
 
       device.queue.push(body.command);
       
-      // Hard cap to ensure memory stability
-      if (device.queue.length > 20) {
-          device.queue = device.queue.slice(-20);
+      // Allow up to 100 items to support full image chunk sequences
+      if (device.queue.length > 100) {
+          device.queue = device.queue.slice(-100);
       }
 
       device.lastCommandAt = now;

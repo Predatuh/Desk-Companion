@@ -3524,7 +3524,7 @@ class _ConnectionStatusBarState extends State<_ConnectionStatusBar>
               isOnline
                   ? c.deviceName
                   : c.busy
-                      ? 'Scanning…'
+                      ? 'Sending…'
                       : 'Not connected',
               style: Theme.of(context).textTheme.bodySmall,
               overflow: TextOverflow.ellipsis,
