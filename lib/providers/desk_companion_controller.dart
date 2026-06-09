@@ -110,7 +110,32 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionGlasses = 'none';
   String _companionHeadwear = 'none';
   String _companionPiercing = 'none';
-  
+
+  int _companionScale = 100;
+  int _companionOffsetX = 0;
+  int _companionOffsetY = 0;
+  int _companionHeadwearSize = 100;
+  int _companionHeadwearWidth = 100;
+  int _companionHeadwearHeight = 100;
+  int _companionHeadwearOffsetX = 0;
+  int _companionHeadwearOffsetY = 0;
+  int _companionHairSize = 100;
+  int _companionHairWidth = 100;
+  int _companionHairHeight = 100;
+  int _companionHairThickness = 100;
+  int _companionHairOffsetX = 0;
+  int _companionHairOffsetY = 0;
+  int _companionEyeOffsetX = 0;
+  int _companionEyeOffsetY = 0;
+  int _companionMouthOffsetX = 0;
+  int _companionMouthOffsetY = 0;
+  int _companionMustacheSize = 100;
+  int _companionMustacheWidth = 100;
+  int _companionMustacheHeight = 100;
+  int _companionMustacheThickness = 100;
+  int _companionMustacheOffsetX = 0;
+  int _companionMustacheOffsetY = 0;
+
   int _stickFigureScale = 100;
   int _stickFigureSpacing = 100;
   int _stickFigureEnergy = 55;
@@ -171,6 +196,32 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionGlasses => _companionGlasses;
   String get companionHeadwear => _companionHeadwear;
   String get companionPiercing => _companionPiercing;
+  int get companionScale => _companionScale;
+  int get companionOffsetX => _companionOffsetX;
+  int get companionOffsetY => _companionOffsetY;
+  int get companionHeadwearSize => _companionHeadwearSize;
+  int get companionHeadwearWidth => _companionHeadwearWidth;
+  int get companionHeadwearHeight => _companionHeadwearHeight;
+  int get companionHeadwearOffsetX => _companionHeadwearOffsetX;
+  int get companionHeadwearOffsetY => _companionHeadwearOffsetY;
+  int get companionHairSize => _companionHairSize;
+  int get companionHairWidth => _companionHairWidth;
+  int get companionHairHeight => _companionHairHeight;
+  int get companionHairThickness => _companionHairThickness;
+  int get companionHairOffsetX => _companionHairOffsetX;
+  int get companionHairOffsetY => _companionHairOffsetY;
+  int get companionEyeOffsetX => _companionEyeOffsetX;
+  int get companionEyeOffsetY => _companionEyeOffsetY;
+  int get companionMouthOffsetX => _companionMouthOffsetX;
+  int get companionMouthOffsetY => _companionMouthOffsetY;
+  int get companionMustacheSize => _companionMustacheSize;
+  int get companionMustacheWidth => _companionMustacheWidth;
+  int get companionMustacheHeight => _companionMustacheHeight;
+  int get companionMustacheThickness => _companionMustacheThickness;
+  int get companionMustacheOffsetX => _companionMustacheOffsetX;
+  int get companionMustacheOffsetY => _companionMustacheOffsetY;
+  DateTime? get relayLastSeenAt => _relayLastSeenAt;
+  DateTime? get relayLastStatusAt => _relayLastStatusAt;
   int get stickFigureScale => _stickFigureScale;
   int get stickFigureSpacing => _stickFigureSpacing;
   int get stickFigureEnergy => _stickFigureEnergy;
@@ -769,6 +820,17 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendCompanionScale(int scale) async {
+    await _runBusy(() async {
+      await _sendCommand(
+        {'type': 'set_companion_scale', 'scale': scale},
+        mode: _mode,
+        bleLabel: 'Companion scale sent over BLE.',
+        relayLabel: 'Companion scale queued through relay.',
+      );
+    });
+  }
+
   Future<void> sendFireworkPalette(String palette) async {
     await _runBusy(() async {
       await _sendCommand(
@@ -1128,6 +1190,27 @@ class DeskCompanionController extends ChangeNotifier {
       _companionGlasses = glasses.trim();
       _companionHeadwear = headwear.trim();
       _companionPiercing = piercing.trim();
+      _companionHeadwearSize = headwearSize;
+      _companionHeadwearWidth = headwearWidth;
+      _companionHeadwearHeight = headwearHeight;
+      _companionHeadwearOffsetX = headwearOffsetX;
+      _companionHeadwearOffsetY = headwearOffsetY;
+      _companionHairSize = hairSize;
+      _companionHairWidth = hairWidth;
+      _companionHairHeight = hairHeight;
+      _companionHairThickness = hairThickness;
+      _companionHairOffsetX = hairOffsetX;
+      _companionHairOffsetY = hairOffsetY;
+      _companionEyeOffsetX = eyeOffsetX;
+      _companionEyeOffsetY = eyeOffsetY;
+      _companionMouthOffsetX = mouthOffsetX;
+      _companionMouthOffsetY = mouthOffsetY;
+      _companionMustacheSize = mustacheSize;
+      _companionMustacheWidth = mustacheWidth;
+      _companionMustacheHeight = mustacheHeight;
+      _companionMustacheThickness = mustacheThickness;
+      _companionMustacheOffsetX = mustacheOffsetX;
+      _companionMustacheOffsetY = mustacheOffsetY;
       await _persistRelayPreferences();
       notifyListeners();
     });
