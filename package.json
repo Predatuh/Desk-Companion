@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Relay server for Desk Companion ESP32 display.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node relay_server/server.js"
   }
