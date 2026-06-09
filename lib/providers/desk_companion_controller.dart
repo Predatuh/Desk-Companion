@@ -571,16 +571,13 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> scanWifiNetworks() async {
-    await _runBusy(() async {
-      _requireBleProvisioning();
-      _wifiScanPending = true;
-      _wifiConnectPending = false;
-      _availableWifiNetworks = const [];
-      notifyListeners();
-      unawaited(_persistRelayPreferences());
-      await _sendBleCommand({'type': 'scan_wifi'});
-      _setStatus('Scanning for Wi-Fi networks over BLE...');
-    });
+    _requireBleProvisioning();
+    _wifiScanPending = true;
+    _wifiConnectPending = false;
+    _availableWifiNetworks = const [];
+    notifyListeners();
+    await _sendBleCommand({'type': 'scan_wifi'});
+    _setStatus('Scanning for Wi-Fi networks over BLE...');
   }
 
   Future<void> forgetWifi() async {
