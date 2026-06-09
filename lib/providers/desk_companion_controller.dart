@@ -24,8 +24,7 @@ class RelayTargetProfile {
   final String relayBaseUrl;
   final String deviceToken;
 
-  String get key =>
-      '${relayBaseUrl.toLowerCase()}|${deviceToken.toLowerCase()}';
+  String get key => '${relayBaseUrl.toLowerCase()}|${deviceToken.toLowerCase()}';
 
   Map<String, dynamic> toJson() {
     return {
@@ -36,15 +35,14 @@ class RelayTargetProfile {
   }
 
   static RelayTargetProfile? fromJson(dynamic raw) {
-    if (raw is! Map<String, dynamic>) {
-      return null;
-    }
+    if (raw is! Map<String, dynamic>) return null;
+    
     final label = (raw['label'] as String? ?? '').trim();
     final relayBaseUrl = (raw['relayBaseUrl'] as String? ?? '').trim();
     final deviceToken = (raw['deviceToken'] as String? ?? '').trim();
-    if (relayBaseUrl.isEmpty || deviceToken.isEmpty) {
-      return null;
-    }
+    
+    if (relayBaseUrl.isEmpty || deviceToken.isEmpty) return null;
+    
     return RelayTargetProfile(
       label: label.isEmpty ? deviceToken : label,
       relayBaseUrl: relayBaseUrl,
@@ -66,16 +64,14 @@ class DeskCompanionController extends ChangeNotifier {
   static const String statusUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f003';
   static const String imageUuid = '63f10c20-d7c4-4bc9-a0e0-5c3b3ad0f004';
   static const String targetName = 'Desk Companion';
-  static const List<String> targetNames = [
-    'Desk Companion S3',
-    'Desk Companion Mini',
-  ];
+  static const List<String> targetNames = ['Desk Companion S3', 'Desk Companion Mini'];
+  
+  // Storage Keys
   static const String _relayProfilesKey = 'relayProfiles';
   static const String _relayBaseUrlKey = 'relayBaseUrl';
   static const String _deviceTokenKey = 'deviceToken';
   static const String _connectedSsidKey = 'lastSsid';
   static const String _modeKey = 'lastMode';
-  static const String _wifiNetworksKey = 'lastWifiNetworks';
   static const String _petPersonalityKey = 'petPersonality';
   static const String _activePetModeKey = 'activePetMode';
   static const String _visualModelKey = 'companionVisualModel';
@@ -92,30 +88,6 @@ class DeskCompanionController extends ChangeNotifier {
   static const String _glassesKey = 'companionGlasses';
   static const String _headwearKey = 'companionHeadwear';
   static const String _piercingKey = 'companionPiercing';
-  static const String _headwearSizeKey = 'companionHeadwearSize';
-  static const String _headwearWidthKey = 'companionHeadwearWidth';
-  static const String _headwearHeightKey = 'companionHeadwearHeight';
-  static const String _headwearOffsetXKey = 'companionHeadwearOffsetX';
-  static const String _headwearOffsetYKey = 'companionHeadwearOffsetY';
-  static const String _hairSizeKey = 'companionHairSize';
-  static const String _mustacheSizeKey = 'companionMustacheSize';
-  static const String _hairWidthKey = 'companionHairWidth';
-  static const String _hairHeightKey = 'companionHairHeight';
-  static const String _hairThicknessKey = 'companionHairThickness';
-  static const String _hairOffsetXKey = 'companionHairOffsetX';
-  static const String _hairOffsetYKey = 'companionHairOffsetY';
-  static const String _eyeOffsetXKey = 'companionEyeOffsetX';
-  static const String _eyeOffsetYKey = 'companionEyeOffsetY';
-  static const String _mouthOffsetXKey = 'companionMouthOffsetX';
-  static const String _mouthOffsetYKey = 'companionMouthOffsetY';
-  static const String _companionScaleKey = 'companionScale';
-  static const String _companionOffsetXKey = 'companionOffsetX';
-  static const String _companionOffsetYKey = 'companionOffsetY';
-  static const String _mustacheWidthKey = 'companionMustacheWidth';
-  static const String _mustacheHeightKey = 'companionMustacheHeight';
-  static const String _mustacheThicknessKey = 'companionMustacheThickness';
-  static const String _mustacheOffsetXKey = 'companionMustacheOffsetX';
-  static const String _mustacheOffsetYKey = 'companionMustacheOffsetY';
 
   CompanionBleState _bleState = CompanionBleState.disconnected;
   String _statusMessage = 'Ready to connect.';
@@ -129,6 +101,7 @@ class DeskCompanionController extends ChangeNotifier {
   String _petPersonality = 'curious';
   String _activePetMode = 'hangout';
   DateTime? _lastStyleSentAt;
+  
   String _companionVisualModel = CompanionVisualModel.classic.command;
   String _companionScene = CompanionScene.none.command;
   String _companionHair = 'none';
@@ -137,41 +110,19 @@ class DeskCompanionController extends ChangeNotifier {
   String _companionGlasses = 'none';
   String _companionHeadwear = 'none';
   String _companionPiercing = 'none';
-  int _companionHeadwearSize = 100;
-  int _companionHeadwearWidth = 100;
-  int _companionHeadwearHeight = 100;
-  int _companionHeadwearOffsetX = 0;
-  int _companionHeadwearOffsetY = 0;
-  int _companionHairSize = 100;
-  int _companionMustacheSize = 100;
-  int _companionHairWidth = 100;
-  int _companionHairHeight = 100;
-  int _companionHairThickness = 100;
-  int _companionHairOffsetX = 0;
-  int _companionHairOffsetY = 0;
-  int _companionEyeOffsetX = 0;
-  int _companionEyeOffsetY = 0;
-  int _companionMouthOffsetX = 0;
-  int _companionMouthOffsetY = 0;
-  int _companionScale = 100;
-  int _companionOffsetX = 0;
-  int _companionOffsetY = 0;
-  int _companionMustacheWidth = 100;
-  int _companionMustacheHeight = 100;
-  int _companionMustacheThickness = 100;
-  int _companionMustacheOffsetX = 0;
-  int _companionMustacheOffsetY = 0;
+  
   int _stickFigureScale = 100;
   int _stickFigureSpacing = 100;
   int _stickFigureEnergy = 55;
   int _bondLevel = 50;
   int _energyLevel = 72;
   int _boredomLevel = 28;
+  
   List<String> _availableWifiNetworks = const [];
   String _wifiIpAddress = '';
   String? _lastRelayError;
   int _relayPendingCount = 0;
-  DateTime? _relayLastCommandAt;
+  
   DateTime? _relayLastSeenAt;
   DateTime? _relayLastStatusAt;
   bool _relayOnline = false;
@@ -180,12 +131,10 @@ class DeskCompanionController extends ChangeNotifier {
   bool _wifiScanPending = false;
   bool _wifiConnectPending = false;
   double _relaySendProgress = 0.0;
+  
   Timer? _relayDeliveryPollTimer;
-
-  // Delivery tracking stages: sending -> queued -> delivered -> displaying
-  String _deliveryStage = ''; // '', 'sending', 'queued', 'delivered', 'displaying'
-  DateTime? _lastCommandDeliveredAt;
-  String _currentDeviceMode = ''; // last known mode from device status
+  String _deliveryStage = ''; 
+  String _currentDeviceMode = ''; 
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _commandCharacteristic;
@@ -202,6 +151,7 @@ class DeskCompanionController extends ChangeNotifier {
   Timer? _relayPollTimer;
   bool _relayStatusRequestInFlight = false;
 
+  // Getters
   CompanionBleState get bleState => _bleState;
   String get statusMessage => _statusMessage;
   String get mode => _mode;
@@ -221,30 +171,6 @@ class DeskCompanionController extends ChangeNotifier {
   String get companionGlasses => _companionGlasses;
   String get companionHeadwear => _companionHeadwear;
   String get companionPiercing => _companionPiercing;
-  int get companionHeadwearSize => _companionHeadwearSize;
-  int get companionHeadwearWidth => _companionHeadwearWidth;
-  int get companionHeadwearHeight => _companionHeadwearHeight;
-  int get companionHeadwearOffsetX => _companionHeadwearOffsetX;
-  int get companionHeadwearOffsetY => _companionHeadwearOffsetY;
-  int get companionHairSize => _companionHairSize;
-  int get companionMustacheSize => _companionMustacheSize;
-  int get companionHairWidth => _companionHairWidth;
-  int get companionHairHeight => _companionHairHeight;
-  int get companionHairThickness => _companionHairThickness;
-  int get companionHairOffsetX => _companionHairOffsetX;
-  int get companionHairOffsetY => _companionHairOffsetY;
-  int get companionEyeOffsetX => _companionEyeOffsetX;
-  int get companionEyeOffsetY => _companionEyeOffsetY;
-  int get companionMouthOffsetX => _companionMouthOffsetX;
-  int get companionMouthOffsetY => _companionMouthOffsetY;
-  int get companionScale => _companionScale;
-  int get companionOffsetX => _companionOffsetX;
-  int get companionOffsetY => _companionOffsetY;
-  int get companionMustacheWidth => _companionMustacheWidth;
-  int get companionMustacheHeight => _companionMustacheHeight;
-  int get companionMustacheThickness => _companionMustacheThickness;
-  int get companionMustacheOffsetX => _companionMustacheOffsetX;
-  int get companionMustacheOffsetY => _companionMustacheOffsetY;
   int get stickFigureScale => _stickFigureScale;
   int get stickFigureSpacing => _stickFigureSpacing;
   int get stickFigureEnergy => _stickFigureEnergy;
@@ -254,9 +180,6 @@ class DeskCompanionController extends ChangeNotifier {
   List<String> get availableWifiNetworks => _availableWifiNetworks;
   String get wifiIpAddress => _wifiIpAddress;
   int get relayPendingCount => _relayPendingCount;
-  DateTime? get relayLastCommandAt => _relayLastCommandAt;
-  DateTime? get relayLastSeenAt => _relayLastSeenAt;
-  DateTime? get relayLastStatusAt => _relayLastStatusAt;
   bool get isRelayOnline => _relayOnline;
   bool get isRemoteConnected => _relayOnline;
   bool get relayStatusKnown => _relayStatusKnown;
@@ -265,57 +188,38 @@ class DeskCompanionController extends ChangeNotifier {
   bool get wifiConnectPending => _wifiConnectPending;
   double get relaySendProgress => _relaySendProgress;
   String get deliveryStage => _deliveryStage;
-  DateTime? get lastCommandDeliveredAt => _lastCommandDeliveredAt;
   String get currentDeviceMode => _currentDeviceMode;
-  bool get wifiConnected =>
-      _connectedSsid.isNotEmpty && _wifiIpAddress.isNotEmpty;
+  
+  bool get wifiConnected => _connectedSsid.isNotEmpty && _wifiIpAddress.isNotEmpty;
   bool get isBleConnected => _bleState == CompanionBleState.connected;
-  bool get hasRelayTarget =>
-      _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
+  bool get hasRelayTarget => _resolvedRelayUri != null && _deviceToken.trim().isNotEmpty;
   bool get canControlDevice => isBleConnected || hasRelayTarget;
 
   Uri? get _resolvedRelayUri {
     final sanitized = _sanitizeRelayBaseUrl(_relayBaseUrl);
-    if (sanitized.isEmpty) {
-      return null;
-    }
+    if (sanitized.isEmpty) return null;
 
-    final withScheme =
-        (sanitized.startsWith('http://') || sanitized.startsWith('https://'))
-            ? sanitized
-            : 'https://$sanitized';
+    final withScheme = (sanitized.startsWith('http://') || sanitized.startsWith('https://')) ? sanitized : 'https://$sanitized';
     return Uri.tryParse('$withScheme/');
   }
 
   static String _sanitizeRelayBaseUrl(String value) {
     var url = value.trim();
-    if (url.isEmpty) {
-      return '';
-    }
+    if (url.isEmpty) return '';
 
     final queryIndex = url.indexOf('?');
-    if (queryIndex != -1) {
-      url = url.substring(0, queryIndex);
-    }
+    if (queryIndex != -1) url = url.substring(0, queryIndex);
 
     final fragmentIndex = url.indexOf('#');
-    if (fragmentIndex != -1) {
-      url = url.substring(0, fragmentIndex);
-    }
+    if (fragmentIndex != -1) url = url.substring(0, fragmentIndex);
 
     final relayPathIndex = url.indexOf('/v1/device');
-    if (relayPathIndex != -1) {
-      url = url.substring(0, relayPathIndex);
-    }
+    if (relayPathIndex != -1) url = url.substring(0, relayPathIndex);
 
     final healthIndex = url.indexOf('/health');
-    if (healthIndex != -1) {
-      url = url.substring(0, healthIndex);
-    }
+    if (healthIndex != -1) url = url.substring(0, healthIndex);
 
-    while (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
-    }
+    while (url.endsWith('/')) url = url.substring(0, url.length - 1);
 
     return url;
   }
@@ -364,9 +268,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> selectRelayProfile(String profileKey) async {
     final profile = _relayProfiles.where((entry) => entry.key == profileKey);
-    if (profile.isEmpty) {
-      throw const HttpException('Selected relay profile was not found.');
-    }
+    if (profile.isEmpty) throw const HttpException('Selected relay profile was not found.');
 
     final selected = profile.first;
     _relayBaseUrl = selected.relayBaseUrl;
@@ -378,12 +280,9 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> deleteRelayProfile(String profileKey) async {
-    final next = _relayProfiles
-        .where((entry) => entry.key != profileKey)
-        .toList(growable: false);
-    if (next.length == _relayProfiles.length) {
-      return;
-    }
+    final next = _relayProfiles.where((entry) => entry.key != profileKey).toList(growable: false);
+    if (next.length == _relayProfiles.length) return;
+    
     _relayProfiles = next;
     _syncSelectedRelayProfile();
     await _persistRelayProfiles();
@@ -391,8 +290,7 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   void _syncSelectedRelayProfile() {
-    final currentKey =
-        '${_relayBaseUrl.toLowerCase()}|${_deviceToken.toLowerCase()}';
+    final currentKey = '${_relayBaseUrl.toLowerCase()}|${_deviceToken.toLowerCase()}';
     if (_relayBaseUrl.isEmpty || _deviceToken.isEmpty) {
       _selectedRelayProfileKey = null;
       return;
@@ -402,22 +300,15 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   List<RelayTargetProfile> _decodeRelayProfiles(String? raw) {
-    if (raw == null || raw.trim().isEmpty) {
-      return const [];
-    }
-
+    if (raw == null || raw.trim().isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) {
-        return const [];
-      }
+      if (decoded is! List) return const [];
 
       final byKey = <String, RelayTargetProfile>{};
       for (final item in decoded) {
         final profile = RelayTargetProfile.fromJson(item);
-        if (profile == null) {
-          continue;
-        }
+        if (profile == null) continue;
         byKey[profile.key] = profile;
       }
       return byKey.values.toList(growable: false);
@@ -445,21 +336,11 @@ class DeskCompanionController extends ChangeNotifier {
     int? stickFigureSpacing,
     int? stickFigureEnergy,
   }) async {
-    if (visualModel != null) {
-      _companionVisualModel = companionVisualModelFromCommand(visualModel).command;
-    }
-    if (scene != null) {
-      _companionScene = companionSceneFromCommand(scene).command;
-    }
-    if (stickFigureScale != null) {
-      _stickFigureScale = stickFigureScale;
-    }
-    if (stickFigureSpacing != null) {
-      _stickFigureSpacing = stickFigureSpacing;
-    }
-    if (stickFigureEnergy != null) {
-      _stickFigureEnergy = stickFigureEnergy;
-    }
+    if (visualModel != null) _companionVisualModel = companionVisualModelFromCommand(visualModel).command;
+    if (scene != null) _companionScene = companionSceneFromCommand(scene).command;
+    if (stickFigureScale != null) _stickFigureScale = stickFigureScale;
+    if (stickFigureSpacing != null) _stickFigureSpacing = stickFigureSpacing;
+    if (stickFigureEnergy != null) _stickFigureEnergy = stickFigureEnergy;
 
     await _persistRelayPreferences();
     notifyListeners();
@@ -467,79 +348,23 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> _loadRelayPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    _relayBaseUrl = _sanitizeRelayBaseUrl(
-      prefs.getString(_relayBaseUrlKey) ?? _relayBaseUrl,
-    );
+    _relayBaseUrl = _sanitizeRelayBaseUrl(prefs.getString(_relayBaseUrlKey) ?? _relayBaseUrl);
     _deviceToken = (prefs.getString(_deviceTokenKey) ?? '').trim();
-    _relayProfiles =
-        _decodeRelayProfiles(prefs.getString(_relayProfilesKey));
+    _relayProfiles = _decodeRelayProfiles(prefs.getString(_relayProfilesKey));
     _syncSelectedRelayProfile();
     _connectedSsid = (prefs.getString(_connectedSsidKey) ?? '').trim();
     _mode = (prefs.getString(_modeKey) ?? _mode).trim();
-    _petPersonality =
-      (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
-    _activePetMode =
-      (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
-    _companionVisualModel = companionVisualModelFromCommand(
-      prefs.getString(_visualModelKey),
-    ).command;
-    _companionScene = companionSceneFromCommand(
-      prefs.getString(_sceneKey),
-    ).command;
+    _petPersonality = (prefs.getString(_petPersonalityKey) ?? _petPersonality).trim();
+    _activePetMode = (prefs.getString(_activePetModeKey) ?? _activePetMode).trim();
+    _companionVisualModel = companionVisualModelFromCommand(prefs.getString(_visualModelKey)).command;
+    _companionScene = companionSceneFromCommand(prefs.getString(_sceneKey)).command;
     _companionHair = (prefs.getString(_hairKey) ?? _companionHair).trim();
     _companionEars = (prefs.getString(_earsKey) ?? _companionEars).trim();
-    _companionMustache =
-        (prefs.getString(_mustacheKey) ?? _companionMustache).trim();
-    _companionGlasses =
-      (prefs.getString(_glassesKey) ?? _companionGlasses).trim();
-    _companionHeadwear =
-      (prefs.getString(_headwearKey) ?? _companionHeadwear).trim();
-    _companionPiercing =
-      (prefs.getString(_piercingKey) ?? _companionPiercing).trim();
-    _companionHeadwearSize =
-      prefs.getInt(_headwearSizeKey) ?? _companionHeadwearSize;
-    _companionHeadwearWidth =
-      prefs.getInt(_headwearWidthKey) ?? _companionHeadwearWidth;
-    _companionHeadwearHeight =
-      prefs.getInt(_headwearHeightKey) ?? _companionHeadwearHeight;
-    _companionHeadwearOffsetX =
-      prefs.getInt(_headwearOffsetXKey) ?? _companionHeadwearOffsetX;
-    _companionHeadwearOffsetY =
-      prefs.getInt(_headwearOffsetYKey) ?? _companionHeadwearOffsetY;
-    _companionHairSize = prefs.getInt(_hairSizeKey) ?? _companionHairSize;
-    _companionMustacheSize =
-        prefs.getInt(_mustacheSizeKey) ?? _companionMustacheSize;
-    _companionHairWidth = prefs.getInt(_hairWidthKey) ?? _companionHairWidth;
-    _companionHairHeight = prefs.getInt(_hairHeightKey) ?? _companionHairHeight;
-    _companionHairThickness =
-      prefs.getInt(_hairThicknessKey) ?? _companionHairThickness;
-    _companionHairOffsetX =
-      prefs.getInt(_hairOffsetXKey) ?? _companionHairOffsetX;
-    _companionHairOffsetY =
-      prefs.getInt(_hairOffsetYKey) ?? _companionHairOffsetY;
-    _companionEyeOffsetX =
-      prefs.getInt(_eyeOffsetXKey) ?? _companionEyeOffsetX;
-    _companionEyeOffsetY =
-      prefs.getInt(_eyeOffsetYKey) ?? _companionEyeOffsetY;
-    _companionMouthOffsetX =
-      prefs.getInt(_mouthOffsetXKey) ?? _companionMouthOffsetX;
-    _companionMouthOffsetY =
-      prefs.getInt(_mouthOffsetYKey) ?? _companionMouthOffsetY;
-    _companionScale = prefs.getInt(_companionScaleKey) ?? _companionScale;
-    _companionOffsetX =
-      prefs.getInt(_companionOffsetXKey) ?? _companionOffsetX;
-    _companionOffsetY =
-      prefs.getInt(_companionOffsetYKey) ?? _companionOffsetY;
-    _companionMustacheWidth =
-      prefs.getInt(_mustacheWidthKey) ?? _companionMustacheWidth;
-    _companionMustacheHeight =
-      prefs.getInt(_mustacheHeightKey) ?? _companionMustacheHeight;
-    _companionMustacheThickness =
-      prefs.getInt(_mustacheThicknessKey) ?? _companionMustacheThickness;
-    _companionMustacheOffsetX =
-      prefs.getInt(_mustacheOffsetXKey) ?? _companionMustacheOffsetX;
-    _companionMustacheOffsetY =
-      prefs.getInt(_mustacheOffsetYKey) ?? _companionMustacheOffsetY;
+    _companionMustache = (prefs.getString(_mustacheKey) ?? _companionMustache).trim();
+    _companionGlasses = (prefs.getString(_glassesKey) ?? _companionGlasses).trim();
+    _companionHeadwear = (prefs.getString(_headwearKey) ?? _companionHeadwear).trim();
+    _companionPiercing = (prefs.getString(_piercingKey) ?? _companionPiercing).trim();
+    
     _stickFigureScale = prefs.getInt(_stickFigureScaleKey) ?? _stickFigureScale;
     _stickFigureSpacing = prefs.getInt(_stickFigureSpacingKey) ?? _stickFigureSpacing;
     _stickFigureEnergy = prefs.getInt(_stickFigureEnergyKey) ?? _stickFigureEnergy;
@@ -552,16 +377,12 @@ class DeskCompanionController extends ChangeNotifier {
 
     if (hasRelayTarget) {
       _relayStatusKnown = true;
-      _statusMessage = _connectedSsid.isNotEmpty
-          ? 'Last known Wi-Fi: $_connectedSsid'
-          : 'Checking relay status...';
+      _statusMessage = _connectedSsid.isNotEmpty ? 'Last known Wi-Fi: $_connectedSsid' : 'Checking relay status...';
       notifyListeners();
       _startRelayPollTimer();
       try {
         await refreshDeviceStatus();
-      } catch (_) {
-        // Keep the app usable if the initial relay check fails.
-      }
+      } catch (_) { }
     }
   }
 
@@ -581,50 +402,21 @@ class DeskCompanionController extends ChangeNotifier {
     await prefs.setString(_glassesKey, _companionGlasses);
     await prefs.setString(_headwearKey, _companionHeadwear);
     await prefs.setString(_piercingKey, _companionPiercing);
-    await prefs.setInt(_headwearSizeKey, _companionHeadwearSize);
-    await prefs.setInt(_headwearWidthKey, _companionHeadwearWidth);
-    await prefs.setInt(_headwearHeightKey, _companionHeadwearHeight);
-    await prefs.setInt(_headwearOffsetXKey, _companionHeadwearOffsetX);
-    await prefs.setInt(_headwearOffsetYKey, _companionHeadwearOffsetY);
-    await prefs.setInt(_hairSizeKey, _companionHairSize);
-    await prefs.setInt(_mustacheSizeKey, _companionMustacheSize);
-    await prefs.setInt(_hairWidthKey, _companionHairWidth);
-    await prefs.setInt(_hairHeightKey, _companionHairHeight);
-    await prefs.setInt(_hairThicknessKey, _companionHairThickness);
-    await prefs.setInt(_hairOffsetXKey, _companionHairOffsetX);
-    await prefs.setInt(_hairOffsetYKey, _companionHairOffsetY);
-    await prefs.setInt(_eyeOffsetXKey, _companionEyeOffsetX);
-    await prefs.setInt(_eyeOffsetYKey, _companionEyeOffsetY);
-    await prefs.setInt(_mouthOffsetXKey, _companionMouthOffsetX);
-    await prefs.setInt(_mouthOffsetYKey, _companionMouthOffsetY);
-    await prefs.setInt(_companionScaleKey, _companionScale);
-    await prefs.setInt(_companionOffsetXKey, _companionOffsetX);
-    await prefs.setInt(_companionOffsetYKey, _companionOffsetY);
-    await prefs.setInt(_mustacheWidthKey, _companionMustacheWidth);
-    await prefs.setInt(_mustacheHeightKey, _companionMustacheHeight);
-    await prefs.setInt(_mustacheThicknessKey, _companionMustacheThickness);
-    await prefs.setInt(_mustacheOffsetXKey, _companionMustacheOffsetX);
-    await prefs.setInt(_mustacheOffsetYKey, _companionMustacheOffsetY);
     await prefs.setInt(_stickFigureScaleKey, _stickFigureScale);
     await prefs.setInt(_stickFigureSpacingKey, _stickFigureSpacing);
     await prefs.setInt(_stickFigureEnergyKey, _stickFigureEnergy);
     await prefs.setInt(_bondLevelKey, _bondLevel);
     await prefs.setInt(_energyLevelKey, _energyLevel);
     await prefs.setInt(_boredomLevelKey, _boredomLevel);
-    await prefs.remove(_wifiNetworksKey);
   }
 
   Future<void> scanAndConnect() async {
-    if (_bleState != CompanionBleState.disconnected) {
-      return;
-    }
+    if (_bleState != CompanionBleState.disconnected) return;
 
     final adapterState = await FlutterBluePlus.adapterState.first;
     if (adapterState != BluetoothAdapterState.on) {
       _setStatus('Bluetooth is off. Turn it on and retry.');
-      if (Platform.isAndroid) {
-        await FlutterBluePlus.turnOn();
-      }
+      if (Platform.isAndroid) await FlutterBluePlus.turnOn();
       return;
     }
 
@@ -634,11 +426,8 @@ class DeskCompanionController extends ChangeNotifier {
     await _scanSub?.cancel();
     _scanSub = FlutterBluePlus.onScanResults.listen((results) {
       for (final result in results) {
-        final nameMatches = _matchesTargetName(result.device.platformName) ||
-            _matchesTargetName(result.advertisementData.advName);
-        final serviceMatches = result.advertisementData.serviceUuids.any(
-          (uuid) => uuid.str.toLowerCase() == serviceUuid,
-        );
+        final nameMatches = _matchesTargetName(result.device.platformName) || _matchesTargetName(result.advertisementData.advName);
+        final serviceMatches = result.advertisementData.serviceUuids.any((uuid) => uuid.str.toLowerCase() == serviceUuid);
         if (nameMatches || serviceMatches) {
           FlutterBluePlus.stopScan();
           unawaited(_connect(result.device));
@@ -650,30 +439,19 @@ class DeskCompanionController extends ChangeNotifier {
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
     if (_bleState == CompanionBleState.scanning) {
-      _setBleState(
-        CompanionBleState.disconnected,
-        'Desk Companion not found over BLE.',
-      );
+      _setBleState(CompanionBleState.disconnected, 'Desk Companion not found over BLE.');
     }
   }
 
   bool _matchesTargetName(String? value) {
     final normalized = value?.trim().toLowerCase();
-    if (normalized == null || normalized.isEmpty) {
-      return false;
-    }
+    if (normalized == null || normalized.isEmpty) return false;
 
-    return normalized.startsWith(targetName.toLowerCase()) ||
-        targetNames.any(
-      (candidate) => candidate.toLowerCase() == normalized,
-    );
+    return normalized.startsWith(targetName.toLowerCase()) || targetNames.any((candidate) => candidate.toLowerCase() == normalized);
   }
 
   Future<void> _connect(BluetoothDevice device) async {
-    _setBleState(
-      CompanionBleState.connecting,
-      'Connecting to ${device.platformName.isEmpty ? targetName : device.platformName}...',
-    );
+    _setBleState(CompanionBleState.connecting, 'Connecting to ${device.platformName.isEmpty ? targetName : device.platformName}...');
     await _scanSub?.cancel();
 
     try {
@@ -681,9 +459,7 @@ class DeskCompanionController extends ChangeNotifier {
       _device = device;
       _deviceName = device.platformName.isEmpty ? targetName : device.platformName;
 
-      if (Platform.isAndroid) {
-        await device.requestMtu(512);
-      }
+      if (Platform.isAndroid) await device.requestMtu(512);
 
       _connectionSub = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected) {
@@ -693,24 +469,16 @@ class DeskCompanionController extends ChangeNotifier {
 
       final services = await device.discoverServices();
       for (final service in services) {
-        if (service.uuid.str.toLowerCase() != serviceUuid) {
-          continue;
-        }
+        if (service.uuid.str.toLowerCase() != serviceUuid) continue;
         for (final characteristic in service.characteristics) {
           final uuid = characteristic.uuid.str.toLowerCase();
-          if (uuid == commandUuid) {
-            _commandCharacteristic = characteristic;
-          } else if (uuid == statusUuid) {
-            _statusCharacteristic = characteristic;
-          } else if (uuid == imageUuid) {
-            _imageCharacteristic = characteristic;
-          }
+          if (uuid == commandUuid) _commandCharacteristic = characteristic;
+          else if (uuid == statusUuid) _statusCharacteristic = characteristic;
+          else if (uuid == imageUuid) _imageCharacteristic = characteristic;
         }
       }
 
-      if (_commandCharacteristic == null ||
-          _statusCharacteristic == null ||
-          _imageCharacteristic == null) {
+      if (_commandCharacteristic == null || _statusCharacteristic == null || _imageCharacteristic == null) {
         await disconnect();
         _setStatus('Connected device is missing required characteristics.');
         return;
@@ -728,25 +496,17 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   void _handleStatusBytes(List<int> bytes) {
-    if (bytes.isEmpty) {
-      return;
-    }
-
+    if (bytes.isEmpty) return;
     try {
       final decoded = utf8.decode(bytes).trim();
       final payload = jsonDecode(decoded);
-      if (payload is Map<String, dynamic>) {
-        _applyStatusMap(payload);
-      }
+      if (payload is Map<String, dynamic>) _applyStatusMap(payload);
     } catch (_) {
       _setStatus('Received unreadable status from device.');
     }
   }
 
-  Future<void> sendWifiCredentials({
-    required String ssid,
-    required String password,
-  }) async {
+  Future<void> sendWifiCredentials({required String ssid, required String password}) async {
     await _runBusy(() async {
       _requireBleProvisioning();
       _connectedSsid = ssid.trim();
@@ -754,11 +514,7 @@ class DeskCompanionController extends ChangeNotifier {
       _wifiConnectPending = true;
       _wifiScanPending = false;
       notifyListeners();
-      await _sendBleCommand({
-        'type': 'connect_wifi',
-        'ssid': ssid,
-        'password': password,
-      });
+      await _sendBleCommand({'type': 'connect_wifi', 'ssid': ssid, 'password': password});
       _setStatus('Sent Wi-Fi credentials over BLE. Waiting for the device to join...');
     });
   }
@@ -790,10 +546,7 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  Future<void> configureRelay({
-    required String relayUrl,
-    required String token,
-  }) async {
+  Future<void> configureRelay({required String relayUrl, required String token}) async {
     await _runBusy(() async {
       _requireBleProvisioning();
       final sanitizedRelayUrl = _sanitizeRelayBaseUrl(relayUrl);
@@ -816,14 +569,10 @@ class DeskCompanionController extends ChangeNotifier {
     final result = await _runBusy<bool>(() async {
       if (isBleConnected) {
         await _sendBleCommand({'type': 'status'});
-        if (hasRelayTarget) {
-          return _fetchRelayStatus();
-        }
+        if (hasRelayTarget) return _fetchRelayStatus();
         return true;
       }
-      if (hasRelayTarget) {
-        return _fetchRelayStatus();
-      }
+      if (hasRelayTarget) return _fetchRelayStatus();
       return false;
     });
     return result ?? false;
@@ -840,13 +589,7 @@ class DeskCompanionController extends ChangeNotifier {
     return result ?? false;
   }
 
-  Future<void> sendNote(
-    String text, {
-    required int fontSize,
-    int border = 0,
-    String icons = '',
-    String flowerAccent = '',
-  }) async {
+  Future<void> sendNote(String text, {required int fontSize, int border = 0, String icons = '', String flowerAccent = ''}) async {
     await _runBusy(() async {
       await _sendCommand(
         {
@@ -872,9 +615,7 @@ class DeskCompanionController extends ChangeNotifier {
 
   Future<void> sendHomeBackgroundImage(CompanionImagePayload payload) async {
     await _runBusy(() async {
-      if (!payload.isColor) {
-        throw const FormatException('Home background images must be full color.');
-      }
+      if (!payload.isColor) throw const FormatException('Home background images must be full color.');
       await _sendColorBitmap(
         payload.bitmap,
         idleBackground: true,
@@ -900,11 +641,7 @@ class DeskCompanionController extends ChangeNotifier {
       if (payload.isColor) {
         await _sendColorBitmap(payload.bitmap);
       } else {
-        await _sendBitmap(
-          payload.bitmap,
-          allowRelay: true,
-          silent: false,
-        );
+        await _sendBitmap(payload.bitmap, allowRelay: true, silent: false);
       }
     });
   }
@@ -943,15 +680,9 @@ class DeskCompanionController extends ChangeNotifier {
         'arrangement': arrangement,
         'mixed': mixed ? 1 : 0,
       };
-      if (petalColor != null) {
-        command['petalColor'] = petalColor;
-      }
-      if (centerColor != null) {
-        command['centerColor'] = centerColor;
-      }
-      if (stemColor != null) {
-        command['stemColor'] = stemColor;
-      }
+      if (petalColor != null) command['petalColor'] = petalColor;
+      if (centerColor != null) command['centerColor'] = centerColor;
+      if (stemColor != null) command['stemColor'] = stemColor;
       await _sendCommand(
         command,
         mode: 'flower',
@@ -1057,21 +788,6 @@ class DeskCompanionController extends ChangeNotifier {
         bleLabel: 'Firework size sent over BLE.',
         relayLabel: 'Firework size queued through relay.',
       );
-    });
-  }
-
-  Future<void> sendCompanionScale(int scale) async {
-    await _runBusy(() async {
-      final clampedScale = scale.clamp(10, 300);
-      await _sendCommand(
-        {'type': 'set_companion_scale', 'scale': clampedScale},
-        mode: 'companion_scale',
-        bleLabel: 'Companion scale sent over BLE.',
-        relayLabel: 'Companion scale queued through relay.',
-      );
-      _companionScale = clampedScale;
-      await _persistRelayPreferences();
-      notifyListeners();
     });
   }
 
@@ -1229,8 +945,6 @@ class DeskCompanionController extends ChangeNotifier {
     });
   }
 
-  /// Geocode a city name, zip code, or address to lat/lon via Nominatim.
-  /// Returns `{lat, lon}` on success, `null` on failure.
   Future<Map<String, double>?> geocodeLocation(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return null;
@@ -1240,9 +954,7 @@ class DeskCompanionController extends ChangeNotifier {
         'format': 'json',
         'limit': '1',
       });
-      final response = await http.get(uri, headers: {
-        'User-Agent': 'DeskCompanionApp/1.0',
-      });
+      final response = await http.get(uri, headers: {'User-Agent': 'DeskCompanionApp/1.0'});
       if (response.statusCode != 200) return null;
       final List<dynamic> results = json.decode(response.body);
       if (results.isEmpty) return null;
@@ -1329,80 +1041,43 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<void> setCompanionStyle({
-    required String hair,
-    required String ears,
-    required String mustache,
-    required String glasses,
-    required String headwear,
-    required String piercing,
-    int headwearSize = 100,
-    int headwearWidth = 100,
-    int headwearHeight = 100,
-    int headwearOffsetX = 0,
-    int headwearOffsetY = 0,
-    required int hairSize,
-    required int mustacheSize,
-    required int hairWidth,
-    required int hairHeight,
-    required int hairThickness,
-    required int hairOffsetX,
-    required int hairOffsetY,
-    required int eyeOffsetX,
-    required int eyeOffsetY,
-    required int mouthOffsetX,
-    required int mouthOffsetY,
-    required int companionOffsetX,
-    required int companionOffsetY,
-    required int mustacheWidth,
-    required int mustacheHeight,
-    required int mustacheThickness,
-    required int mustacheOffsetX,
-    required int mustacheOffsetY,
+    required String hair, required String ears, required String mustache, required String glasses,
+    required String headwear, required String piercing,
+    int headwearSize = 100, int headwearWidth = 100, int headwearHeight = 100,
+    int headwearOffsetX = 0, int headwearOffsetY = 0,
+    required int hairSize, required int mustacheSize,
+    required int hairWidth, required int hairHeight, required int hairThickness,
+    required int hairOffsetX, required int hairOffsetY,
+    required int eyeOffsetX, required int eyeOffsetY,
+    required int mouthOffsetX, required int mouthOffsetY,
+    required int companionOffsetX, required int companionOffsetY,
+    required int mustacheWidth, required int mustacheHeight, required int mustacheThickness,
+    required int mustacheOffsetX, required int mustacheOffsetY,
   }) async {
     await _runBusy(() async {
-      // The full set_companion_style payload exceeds the BLE write ceiling.
-      // The firmware accepts partial style updates, so BLE sends multiple
-      // smaller packets while relay still uses a single merged payload.
       final styleIdentityPacket = {
         'type': 'set_companion_style',
-        'hair': hair,
-        'ears': ears,
-        'mustache': mustache,
-        'glasses': glasses,
-        'headwear': headwear,
-        'piercing': piercing,
+        'hair': hair, 'ears': ears, 'mustache': mustache, 'glasses': glasses,
+        'headwear': headwear, 'piercing': piercing,
       };
       final styleSizePacket = {
         'type': 'set_companion_style',
-        'headwearSize': headwearSize,
-        'headwearWidth': headwearWidth,
-        'headwearHeight': headwearHeight,
-        'hairSize': hairSize,
-        'mustacheSize': mustacheSize,
+        'headwearSize': headwearSize, 'headwearWidth': headwearWidth, 'headwearHeight': headwearHeight,
+        'hairSize': hairSize, 'mustacheSize': mustacheSize,
       };
       final styleShapePacket = {
         'type': 'set_companion_style',
-        'hairWidth': hairWidth,
-        'hairHeight': hairHeight,
-        'hairThickness': hairThickness,
-        'mustacheWidth': mustacheWidth,
-        'mustacheHeight': mustacheHeight,
-        'mustacheThickness': mustacheThickness,
+        'hairWidth': hairWidth, 'hairHeight': hairHeight, 'hairThickness': hairThickness,
+        'mustacheWidth': mustacheWidth, 'mustacheHeight': mustacheHeight, 'mustacheThickness': mustacheThickness,
       };
       final offsetPacket = {
         'type': 'set_companion_offsets',
-        'headwearOffsetX': headwearOffsetX,
-        'headwearOffsetY': headwearOffsetY,
-        'hairOffsetX': hairOffsetX,
-        'hairOffsetY': hairOffsetY,
-        'eyeOffsetX': eyeOffsetX,
-        'eyeOffsetY': eyeOffsetY,
-        'mouthOffsetX': mouthOffsetX,
-        'mouthOffsetY': mouthOffsetY,
-        'companionOffsetX': companionOffsetX,
-        'companionOffsetY': companionOffsetY,
-        'mustacheOffsetX': mustacheOffsetX,
-        'mustacheOffsetY': mustacheOffsetY,
+        'headwearOffsetX': headwearOffsetX, 'headwearOffsetY': headwearOffsetY,
+        'hairOffsetX': hairOffsetX, 'hairOffsetY': hairOffsetY,
+        'eyeOffsetX': eyeOffsetX, 'eyeOffsetY': eyeOffsetY,
+        'mouthOffsetX': mouthOffsetX, 'mouthOffsetY': mouthOffsetY,
+        'companionOffsetX': companionOffsetX, 'companionOffsetY': companionOffsetY,
+        'mustacheOffsetX': mustacheOffsetX, 'mustacheOffsetY': mustacheOffsetY,
       };
 
       _deliveryStage = 'sending';
@@ -1423,21 +1098,13 @@ class DeskCompanionController extends ChangeNotifier {
         });
       } else if (hasRelayTarget) {
         final sent = await _postRelay({
-          ...styleIdentityPacket,
-          ...styleSizePacket,
-          ...styleShapePacket,
-          'headwearOffsetX': headwearOffsetX,
-          'headwearOffsetY': headwearOffsetY,
-          'hairOffsetX': hairOffsetX,
-          'hairOffsetY': hairOffsetY,
-          'eyeOffsetX': eyeOffsetX,
-          'eyeOffsetY': eyeOffsetY,
-          'mouthOffsetX': mouthOffsetX,
-          'mouthOffsetY': mouthOffsetY,
-          'companionOffsetX': companionOffsetX,
-          'companionOffsetY': companionOffsetY,
-          'mustacheOffsetX': mustacheOffsetX,
-          'mustacheOffsetY': mustacheOffsetY,
+          ...styleIdentityPacket, ...styleSizePacket, ...styleShapePacket,
+          'headwearOffsetX': headwearOffsetX, 'headwearOffsetY': headwearOffsetY,
+          'hairOffsetX': hairOffsetX, 'hairOffsetY': hairOffsetY,
+          'eyeOffsetX': eyeOffsetX, 'eyeOffsetY': eyeOffsetY,
+          'mouthOffsetX': mouthOffsetX, 'mouthOffsetY': mouthOffsetY,
+          'companionOffsetX': companionOffsetX, 'companionOffsetY': companionOffsetY,
+          'mustacheOffsetX': mustacheOffsetX, 'mustacheOffsetY': mustacheOffsetY,
         });
         if (sent) {
           _deliveryStage = 'queued';
@@ -1451,9 +1118,9 @@ class DeskCompanionController extends ChangeNotifier {
       } else {
         _deliveryStage = '';
         notifyListeners();
-        throw const HttpException(
-            'Not connected. Pair over BLE or configure a relay.');
+        throw const HttpException('Not connected. Pair over BLE or configure a relay.');
       }
+      
       _lastStyleSentAt = DateTime.now();
       _companionHair = hair.trim();
       _companionEars = ears.trim();
@@ -1461,54 +1128,23 @@ class DeskCompanionController extends ChangeNotifier {
       _companionGlasses = glasses.trim();
       _companionHeadwear = headwear.trim();
       _companionPiercing = piercing.trim();
-      _companionHeadwearSize = headwearSize;
-      _companionHeadwearWidth = headwearWidth;
-      _companionHeadwearHeight = headwearHeight;
-      _companionHeadwearOffsetX = headwearOffsetX;
-      _companionHeadwearOffsetY = headwearOffsetY;
-      _companionHairSize = hairSize;
-      _companionMustacheSize = mustacheSize;
-      _companionHairWidth = hairWidth;
-      _companionHairHeight = hairHeight;
-      _companionHairThickness = hairThickness;
-      _companionHairOffsetX = hairOffsetX;
-      _companionHairOffsetY = hairOffsetY;
-      _companionEyeOffsetX = eyeOffsetX;
-      _companionEyeOffsetY = eyeOffsetY;
-      _companionMouthOffsetX = mouthOffsetX;
-      _companionMouthOffsetY = mouthOffsetY;
-      _companionOffsetX = companionOffsetX;
-      _companionOffsetY = companionOffsetY;
-      _companionMustacheWidth = mustacheWidth;
-      _companionMustacheHeight = mustacheHeight;
-      _companionMustacheThickness = mustacheThickness;
-      _companionMustacheOffsetX = mustacheOffsetX;
-      _companionMustacheOffsetY = mustacheOffsetY;
       await _persistRelayPreferences();
       notifyListeners();
     });
   }
 
   Future<void> sendLiveBitmap(Uint8List bitmap) async {
-    if (!isBleConnected) {
-      return;
-    }
+    if (!isBleConnected) return;
 
     _queuedLiveBitmap = Uint8List.fromList(bitmap);
-    if (_liveSendInFlight) {
-      return;
-    }
+    if (_liveSendInFlight) return;
 
     _liveSendInFlight = true;
     try {
       while (_queuedLiveBitmap != null) {
         final nextBitmap = _queuedLiveBitmap!;
         _queuedLiveBitmap = null;
-        await _sendBitmap(
-          nextBitmap,
-          allowRelay: false,
-          silent: true,
-        );
+        await _sendBitmap(nextBitmap, allowRelay: false, silent: true);
       }
     } finally {
       _liveSendInFlight = false;
@@ -1574,48 +1210,31 @@ class DeskCompanionController extends ChangeNotifier {
     throw const HttpException('Not connected. Pair over BLE or configure a relay.');
   }
 
-  Future<void> _sendBitmap(
-    Uint8List bitmap, {
-    required bool allowRelay,
-    required bool silent,
-  }) async {
-    final canSendOverBle = isBleConnected &&
-        _imageCharacteristic != null &&
-        _commandCharacteristic != null;
+  Future<void> _sendBitmap(Uint8List bitmap, {required bool allowRelay, required bool silent}) async {
+    final canSendOverBle = isBleConnected && _imageCharacteristic != null && _commandCharacteristic != null;
 
     if (!canSendOverBle && allowRelay && hasRelayTarget) {
       if (await _postRelay({'type': 'set_image', 'data': base64Encode(bitmap)})) {
         _mode = 'image';
-        if (!silent) {
-          _pollRelayDelivery('Image');
-        }
+        if (!silent) _pollRelayDelivery('Image');
         return;
       }
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
     }
 
-    if (!canSendOverBle) {
-      throw const HttpException('BLE is not connected and relay image send is unavailable.');
-    }
+    if (!canSendOverBle) throw const HttpException('BLE is not connected and relay image send is unavailable.');
 
     await _sendBleCommand({'type': 'begin_image', 'total': bitmap.length});
 
     final chunkSize = Platform.isAndroid ? 244 : 180;
     for (var offset = 0; offset < bitmap.length; offset += chunkSize) {
-      final end = (offset + chunkSize < bitmap.length)
-          ? offset + chunkSize
-          : bitmap.length;
-      await _imageCharacteristic!.write(
-        bitmap.sublist(offset, end),
-        withoutResponse: true,
-      );
+      final end = (offset + chunkSize < bitmap.length) ? offset + chunkSize : bitmap.length;
+      await _imageCharacteristic!.write(bitmap.sublist(offset, end), withoutResponse: true);
     }
 
     await _sendBleCommand({'type': 'commit_image'});
     _mode = 'image';
-    if (!silent) {
-      _setStatus('Image sent over BLE.');
-    }
+    if (!silent) _setStatus('Image sent over BLE.');
   }
 
   Future<void> _sendColorBitmap(
@@ -1624,9 +1243,7 @@ class DeskCompanionController extends ChangeNotifier {
     String? relayDeliveryLabel,
     String? bleSuccessLabel,
   }) async {
-    final canSendOverBle = isBleConnected &&
-        _imageCharacteristic != null &&
-        _commandCharacteristic != null;
+    final canSendOverBle = isBleConnected && _imageCharacteristic != null && _commandCharacteristic != null;
 
     if (!canSendOverBle && hasRelayTarget) {
       _relaySendProgress = 0.0;
@@ -1644,13 +1261,10 @@ class DeskCompanionController extends ChangeNotifier {
       }
 
       const chunkSize = 3072;
-      final totalChunks =
-          (rgb565.length + chunkSize - 1) ~/ chunkSize;
+      final totalChunks = (rgb565.length + chunkSize - 1) ~/ chunkSize;
       var chunkIndex = 0;
       for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
-        final end = (offset + chunkSize < rgb565.length)
-            ? offset + chunkSize
-            : rgb565.length;
+        final end = (offset + chunkSize < rgb565.length) ? offset + chunkSize : rgb565.length;
         final sent = await _postRelay({
           'type': 'color_image_chunk',
           'data': base64Encode(rgb565.sublist(offset, end)),
@@ -1662,16 +1276,13 @@ class DeskCompanionController extends ChangeNotifier {
         }
         chunkIndex++;
         _relaySendProgress = chunkIndex / (totalChunks + 1);
-        _setStatus(
-            'Uploading… (${(_relaySendProgress * 100).round()}%)');
+        _setStatus('Uploading… (${(_relaySendProgress * 100).round()}%)');
       }
 
       if (await _postRelay({'type': 'commit_color_image'})) {
         _relaySendProgress = 1.0;
         notifyListeners();
-        if (!idleBackground) {
-          _mode = 'color_image';
-        }
+        if (!idleBackground) _mode = 'color_image';
         _pollRelayDelivery(relayDeliveryLabel ?? (idleBackground ? 'Home background' : 'Color image'));
         return;
       }
@@ -1680,33 +1291,22 @@ class DeskCompanionController extends ChangeNotifier {
       throw HttpException(_lastRelayError ?? 'Relay send failed.');
     }
 
-    if (!canSendOverBle) {
-      throw const HttpException(
-          'BLE is not connected and relay color image send is unavailable.');
-    }
+    if (!canSendOverBle) throw const HttpException('BLE is not connected and relay color image send is unavailable.');
 
-    await _sendBleCommand(
-        {
-          'type': 'begin_color_image',
-          'total': rgb565.length,
-          if (idleBackground) 'idleBackground': 1,
-        });
+    await _sendBleCommand({
+      'type': 'begin_color_image',
+      'total': rgb565.length,
+      if (idleBackground) 'idleBackground': 1,
+    });
 
     final chunkSize = Platform.isAndroid ? 244 : 180;
     for (var offset = 0; offset < rgb565.length; offset += chunkSize) {
-      final end = (offset + chunkSize < rgb565.length)
-          ? offset + chunkSize
-          : rgb565.length;
-      await _imageCharacteristic!.write(
-        rgb565.sublist(offset, end),
-        withoutResponse: true,
-      );
+      final end = (offset + chunkSize < rgb565.length) ? offset + chunkSize : rgb565.length;
+      await _imageCharacteristic!.write(rgb565.sublist(offset, end), withoutResponse: true);
     }
 
     await _sendBleCommand({'type': 'commit_color_image'});
-    if (!idleBackground) {
-      _mode = 'color_image';
-    }
+    if (!idleBackground) _mode = 'color_image';
     _setStatus(bleSuccessLabel ?? (idleBackground ? 'Home background sent over BLE.' : 'Color image sent over BLE.'));
   }
 
@@ -1726,9 +1326,7 @@ class DeskCompanionController extends ChangeNotifier {
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({'command': command}),
       );
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return true;
-      }
+      if (response.statusCode >= 200 && response.statusCode < 300) return true;
       _lastRelayError = 'Relay returned ${response.statusCode}.';
       _setStatus(_lastRelayError!);
       return false;
@@ -1740,9 +1338,7 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   Future<bool> _fetchRelayStatus() async {
-    if (_relayStatusRequestInFlight) {
-      return _relayOnline;
-    }
+    if (_relayStatusRequestInFlight) return _relayOnline;
 
     _relayStatusRequestInFlight = true;
     final base = _sanitizeRelayBaseUrl(_relayBaseUrl);
@@ -1770,35 +1366,21 @@ class DeskCompanionController extends ChangeNotifier {
       }
 
       _relayPendingCount = (payload['pending'] as num?)?.toInt() ?? 0;
+      
       final lastCommandAtValue = payload['lastCommandAt'] as String?;
-      _relayLastCommandAt = lastCommandAtValue == null
-          ? null
-          : DateTime.tryParse(lastCommandAtValue)?.toLocal();
-
-      final lastPullAtValue = payload['lastPullAt'] as String?;
-      _relayLastSeenAt = lastPullAtValue == null
-          ? null
-          : DateTime.tryParse(lastPullAtValue)?.toLocal();
-      final lastStatusAtValue = payload['lastStatusAt'] as String?;
-      _relayLastStatusAt = lastStatusAtValue == null
-          ? null
-          : DateTime.tryParse(lastStatusAtValue)?.toLocal();
-        final latestRelayActivity = _latestRelayActivityAt();
-        _relayOnline = latestRelayActivity != null &&
-          DateTime.now().difference(latestRelayActivity) <=
-            _relayHeartbeatGrace;
+      _relayLastSeenAt = payload['lastPullAt'] == null ? null : DateTime.tryParse(payload['lastPullAt'] as String)?.toLocal();
+      _relayLastStatusAt = payload['lastStatusAt'] == null ? null : DateTime.tryParse(payload['lastStatusAt'] as String)?.toLocal();
+      
+      final latestRelayActivity = _latestRelayActivityAt();
+      _relayOnline = latestRelayActivity != null && DateTime.now().difference(latestRelayActivity) <= _relayHeartbeatGrace;
       _relayStatusKnown = true;
 
       final lastStatus = payload['lastStatus'];
-      if (lastStatus is Map<String, dynamic>) {
-        _applyStatusMap(lastStatus);
-      }
+      if (lastStatus is Map<String, dynamic>) _applyStatusMap(lastStatus);
 
       if (!_relayOnline) {
         if (_relayLastSeenAt == null && _relayLastStatusAt != null) {
-          _setStatus(
-            'Device reached the relay, but it is not polling for commands yet.',
-          );
+          _setStatus('Device reached the relay, but it is not polling for commands yet.');
         } else if (latestRelayActivity != null) {
           _setStatus('Device relay heartbeat is stale. Continuing to watch for reconnect.');
         } else {
@@ -1824,15 +1406,9 @@ class DeskCompanionController extends ChangeNotifier {
   }
 
   DateTime? _latestRelayActivityAt() {
-    if (_relayLastSeenAt == null) {
-      return _relayLastStatusAt;
-    }
-    if (_relayLastStatusAt == null) {
-      return _relayLastSeenAt;
-    }
-    return _relayLastSeenAt!.isAfter(_relayLastStatusAt!)
-        ? _relayLastSeenAt
-        : _relayLastStatusAt;
+    if (_relayLastSeenAt == null) return _relayLastStatusAt;
+    if (_relayLastStatusAt == null) return _relayLastSeenAt;
+    return _relayLastSeenAt!.isAfter(_relayLastStatusAt!) ? _relayLastSeenAt : _relayLastStatusAt;
   }
 
   void _applyStatusMap(Map<String, dynamic> payload) {
@@ -1841,232 +1417,35 @@ class DeskCompanionController extends ChangeNotifier {
     _connectedSsid = (payload['ssid'] as String? ?? '').trim();
     _wifiIpAddress = (payload['ip'] as String? ?? '').trim();
     final status = (payload['status'] as String? ?? '').trim();
-    if (status.isNotEmpty) {
-      _statusMessage = status;
-    }
+    if (status.isNotEmpty) _statusMessage = status;
 
     _updateWifiActivity(status);
 
-    final incomingRelayUrl = _sanitizeRelayBaseUrl(
-      payload['relayUrl'] as String? ?? '',
-    );
-    if (incomingRelayUrl.isNotEmpty) {
-      _relayBaseUrl = incomingRelayUrl;
-    }
+    final incomingRelayUrl = _sanitizeRelayBaseUrl(payload['relayUrl'] as String? ?? '');
+    if (incomingRelayUrl.isNotEmpty) _relayBaseUrl = incomingRelayUrl;
 
     final incomingToken = (payload['deviceToken'] as String? ?? '').trim();
-    if (incomingToken.isNotEmpty) {
-      _deviceToken = incomingToken;
-    }
+    if (incomingToken.isNotEmpty) _deviceToken = incomingToken;
 
     _syncSelectedRelayProfile();
 
-    // Guard: skip overwriting appearance fields for 15 seconds after a
-    // style was just sent locally. This prevents stale relay pull responses
-    // (buffered before the device applied the command) from reverting newly-
-    // pushed accessories like headwear and mustache.
-    final styleSentRecently = _lastStyleSentAt != null &&
-        DateTime.now().difference(_lastStyleSentAt!).inSeconds < 15;
-
-    final incomingPersonality =
-        (payload['personality'] as String? ?? '').trim();
-    if (incomingPersonality.isNotEmpty) {
-      _petPersonality = incomingPersonality;
-    }
+    final styleSentRecently = _lastStyleSentAt != null && DateTime.now().difference(_lastStyleSentAt!).inSeconds < 15;
+    final incomingPersonality = (payload['personality'] as String? ?? '').trim();
+    if (incomingPersonality.isNotEmpty) _petPersonality = incomingPersonality;
 
     final incomingPetMode = (payload['petMode'] as String? ?? '').trim();
-    if (incomingPetMode.isNotEmpty) {
-      _activePetMode = incomingPetMode;
-    }
+    if (incomingPetMode.isNotEmpty) _activePetMode = incomingPetMode;
 
     if (styleSentRecently) return;
 
     final incomingHair = (payload['hair'] as String? ?? '').trim();
-    if (incomingHair.isNotEmpty) {
-      _companionHair = incomingHair;
-    }
+    if (incomingHair.isNotEmpty) _companionHair = incomingHair;
 
     final incomingEars = (payload['ears'] as String? ?? '').trim();
-    if (incomingEars.isNotEmpty) {
-      _companionEars = incomingEars;
-    }
+    if (incomingEars.isNotEmpty) _companionEars = incomingEars;
 
     final incomingMustache = (payload['mustache'] as String? ?? '').trim();
-    if (incomingMustache.isNotEmpty) {
-      _companionMustache = incomingMustache;
-    }
-
-    final incomingGlasses = (payload['glasses'] as String? ?? '').trim();
-    if (incomingGlasses.isNotEmpty) {
-      _companionGlasses = incomingGlasses;
-    }
-
-    final incomingHeadwear = (payload['headwear'] as String? ?? '').trim();
-    if (incomingHeadwear.isNotEmpty) {
-      _companionHeadwear = incomingHeadwear;
-    }
-
-    final incomingHeadwearSize = (payload['headwearSize'] as num?)?.toInt();
-    if (incomingHeadwearSize != null) {
-      _companionHeadwearSize = incomingHeadwearSize;
-    }
-
-    final incomingHeadwearWidth = (payload['headwearWidth'] as num?)?.toInt();
-    if (incomingHeadwearWidth != null) {
-      _companionHeadwearWidth = incomingHeadwearWidth;
-    }
-
-    final incomingHeadwearHeight = (payload['headwearHeight'] as num?)?.toInt();
-    if (incomingHeadwearHeight != null) {
-      _companionHeadwearHeight = incomingHeadwearHeight;
-    }
-
-    final incomingHeadwearOffsetX =
-        (payload['headwearOffsetX'] as num?)?.toInt();
-    if (incomingHeadwearOffsetX != null) {
-      _companionHeadwearOffsetX = incomingHeadwearOffsetX;
-    }
-
-    final incomingHeadwearOffsetY =
-        (payload['headwearOffsetY'] as num?)?.toInt();
-    if (incomingHeadwearOffsetY != null) {
-      _companionHeadwearOffsetY = incomingHeadwearOffsetY;
-    }
-
-    final incomingPiercing = (payload['piercing'] as String? ?? '').trim();
-    if (incomingPiercing.isNotEmpty) {
-      _companionPiercing = incomingPiercing;
-    }
-
-    final incomingHairSize = (payload['hairSize'] as num?)?.toInt();
-    if (incomingHairSize != null) {
-      _companionHairSize = incomingHairSize;
-    }
-
-    final incomingMustacheSize = (payload['mustacheSize'] as num?)?.toInt();
-    if (incomingMustacheSize != null) {
-      _companionMustacheSize = incomingMustacheSize;
-    }
-
-    final incomingHairWidth = (payload['hairWidth'] as num?)?.toInt();
-    if (incomingHairWidth != null) {
-      _companionHairWidth = incomingHairWidth;
-    }
-
-    final incomingHairHeight = (payload['hairHeight'] as num?)?.toInt();
-    if (incomingHairHeight != null) {
-      _companionHairHeight = incomingHairHeight;
-    }
-
-    final incomingHairThickness =
-        (payload['hairThickness'] as num?)?.toInt();
-    if (incomingHairThickness != null) {
-      _companionHairThickness = incomingHairThickness;
-    }
-
-    final incomingHairOffsetX = (payload['hairOffsetX'] as num?)?.toInt();
-    if (incomingHairOffsetX != null) {
-      _companionHairOffsetX = incomingHairOffsetX;
-    }
-
-    final incomingHairOffsetY = (payload['hairOffsetY'] as num?)?.toInt();
-    if (incomingHairOffsetY != null) {
-      _companionHairOffsetY = incomingHairOffsetY;
-    }
-
-    final incomingEyeOffsetX = (payload['eyeOffsetX'] as num?)?.toInt();
-    if (incomingEyeOffsetX != null) {
-      _companionEyeOffsetX = incomingEyeOffsetX;
-    }
-
-    final incomingEyeOffsetY = (payload['eyeOffsetY'] as num?)?.toInt();
-    if (incomingEyeOffsetY != null) {
-      _companionEyeOffsetY = incomingEyeOffsetY;
-    }
-
-    final incomingMouthOffsetX = (payload['mouthOffsetX'] as num?)?.toInt();
-    if (incomingMouthOffsetX != null) {
-      _companionMouthOffsetX = incomingMouthOffsetX;
-    }
-
-    final incomingMouthOffsetY = (payload['mouthOffsetY'] as num?)?.toInt();
-    if (incomingMouthOffsetY != null) {
-      _companionMouthOffsetY = incomingMouthOffsetY;
-    }
-
-    final incomingCompanionScale = (payload['companionScale'] as num?)?.toInt();
-    if (incomingCompanionScale != null) {
-      _companionScale = incomingCompanionScale;
-    }
-
-    final incomingCompanionOffsetX =
-        (payload['companionOffsetX'] as num?)?.toInt();
-    if (incomingCompanionOffsetX != null) {
-      _companionOffsetX = incomingCompanionOffsetX;
-    }
-
-    final incomingCompanionOffsetY =
-        (payload['companionOffsetY'] as num?)?.toInt();
-    if (incomingCompanionOffsetY != null) {
-      _companionOffsetY = incomingCompanionOffsetY;
-    }
-
-    final incomingMustacheWidth =
-        (payload['mustacheWidth'] as num?)?.toInt();
-    if (incomingMustacheWidth != null) {
-      _companionMustacheWidth = incomingMustacheWidth;
-    }
-
-    final incomingMustacheHeight =
-        (payload['mustacheHeight'] as num?)?.toInt();
-    if (incomingMustacheHeight != null) {
-      _companionMustacheHeight = incomingMustacheHeight;
-    }
-
-    final incomingMustacheThickness =
-        (payload['mustacheThickness'] as num?)?.toInt();
-    if (incomingMustacheThickness != null) {
-      _companionMustacheThickness = incomingMustacheThickness;
-    }
-
-    final incomingMustacheOffsetX =
-        (payload['mustacheOffsetX'] as num?)?.toInt();
-    if (incomingMustacheOffsetX != null) {
-      _companionMustacheOffsetX = incomingMustacheOffsetX;
-    }
-
-    final incomingMustacheOffsetY =
-        (payload['mustacheOffsetY'] as num?)?.toInt();
-    if (incomingMustacheOffsetY != null) {
-      _companionMustacheOffsetY = incomingMustacheOffsetY;
-    }
-
-    final incomingBondLevel = (payload['bondLevel'] as num?)?.toInt();
-    if (incomingBondLevel != null) {
-      _bondLevel = incomingBondLevel;
-    }
-
-    final incomingEnergyLevel = (payload['energyLevel'] as num?)?.toInt();
-    if (incomingEnergyLevel != null) {
-      _energyLevel = incomingEnergyLevel;
-    }
-
-    final incomingBoredomLevel = (payload['boredomLevel'] as num?)?.toInt();
-    if (incomingBoredomLevel != null) {
-      _boredomLevel = incomingBoredomLevel;
-    }
-
-    final wifiNetworks = payload['wifiNetworks'];
-    if (wifiNetworks is List) {
-      final incoming = wifiNetworks
-          .whereType<String>()
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .toSet()
-          .toList(growable: false);
-      _availableWifiNetworks = incoming;
-      _wifiScanPending = false;
-    }
+    if (incomingMustache.isNotEmpty) _companionMustache = incomingMustache;
 
     unawaited(_persistRelayPreferences());
     notifyListeners();
@@ -2075,21 +1454,16 @@ class DeskCompanionController extends ChangeNotifier {
   void _updateWifiActivity(String status) {
     final normalized = status.toLowerCase();
 
-    if (normalized.contains('scan queued') ||
-        normalized.contains('scanning wi-fi')) {
+    if (normalized.contains('scan queued') || normalized.contains('scanning wi-fi')) {
       _wifiScanPending = true;
       _wifiConnectPending = false;
     }
 
-    if (normalized.contains('wi-fi list updated') ||
-        normalized.contains('no wi-fi found') ||
-        normalized.contains('wi-fi scan failed')) {
+    if (normalized.contains('wi-fi list updated') || normalized.contains('no wi-fi found') || normalized.contains('wi-fi scan failed')) {
       _wifiScanPending = false;
     }
 
-    if (normalized.contains('wi-fi queued') ||
-        normalized.contains('starting wi-fi') ||
-        normalized.contains('joining wi-fi')) {
+    if (normalized.contains('wi-fi queued') || normalized.contains('starting wi-fi') || normalized.contains('joining wi-fi')) {
       _wifiConnectPending = true;
       _wifiScanPending = false;
     }
@@ -2099,28 +1473,19 @@ class DeskCompanionController extends ChangeNotifier {
       _wifiScanPending = false;
     }
 
-    if (normalized.contains('wi-fi failed') ||
-        normalized.contains('wi-fi forgotten')) {
+    if (normalized.contains('wi-fi failed') || normalized.contains('wi-fi forgotten')) {
       _wifiConnectPending = false;
       _wifiScanPending = false;
     }
   }
 
   Future<void> _sendBleCommand(Map<String, dynamic> body) async {
-    if (_commandCharacteristic == null || !isBleConnected) {
-      throw const HttpException('BLE is not connected.');
-    }
-    await _commandCharacteristic!.write(
-      utf8.encode(jsonEncode(body)),
-      withoutResponse: false,
-      allowLongWrite: true,
-    );
+    if (_commandCharacteristic == null || !isBleConnected) throw const HttpException('BLE is not connected.');
+    await _commandCharacteristic!.write(utf8.encode(jsonEncode(body)), withoutResponse: false, allowLongWrite: true);
   }
 
   void _requireBleProvisioning() {
-    if (!isBleConnected) {
-      throw const HttpException('BLE is required for Wi-Fi and relay setup.');
-    }
+    if (!isBleConnected) throw const HttpException('BLE is required for Wi-Fi and relay setup.');
   }
 
   void _pollRelayDelivery(String successLabel) {
@@ -2129,8 +1494,7 @@ class DeskCompanionController extends ChangeNotifier {
     _setStatus('Queued on relay. Waiting for device…');
     var attempts = 0;
     const maxAttempts = 30;
-    _relayDeliveryPollTimer =
-        Timer.periodic(const Duration(seconds: 2), (timer) async {
+    _relayDeliveryPollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       attempts++;
       if (isBleConnected || !hasRelayTarget) {
         timer.cancel();
@@ -2144,19 +1508,16 @@ class DeskCompanionController extends ChangeNotifier {
         final token = _deviceToken.trim();
         final url = '$base/v1/device/${Uri.encodeComponent(token)}/status?t=${DateTime.now().millisecondsSinceEpoch}';
         final response = await http.get(Uri.parse(url));
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          return;
-        }
+        if (response.statusCode < 200 || response.statusCode >= 300) return;
+        
         final payload = jsonDecode(response.body);
-        if (payload is! Map<String, dynamic>) {
-          return;
-        }
+        if (payload is! Map<String, dynamic>) return;
+        
         final pending = (payload['pending'] as int?) ?? 0;
         if (pending == 0) {
           timer.cancel();
           _relaySendProgress = 0.0;
           _deliveryStage = 'delivered';
-          _lastCommandDeliveredAt = DateTime.now();
           _setStatus('Delivered. $successLabel');
           Future.delayed(const Duration(seconds: 2), () {
             if (_deliveryStage == 'delivered') {
@@ -2173,22 +1534,18 @@ class DeskCompanionController extends ChangeNotifier {
           return;
         }
         _setStatus('Queued on relay ($pending pending)…');
-      } catch (_) {
-        // Ignore transient errors, keep polling.
-      }
+      } catch (_) { }
+
       if (attempts >= maxAttempts) {
         timer.cancel();
         _relaySendProgress = 0.0;
         _deliveryStage = '';
-        final lastPull =
-            _relayLastSeenAt;
-        final isActive = lastPull != null &&
-            DateTime.now().difference(lastPull) <= _relayHeartbeatGrace;
+        final lastPull = _relayLastSeenAt;
+        final isActive = lastPull != null && DateTime.now().difference(lastPull) <= _relayHeartbeatGrace;
         if (!isActive) {
           _setStatus('Queued on relay. Device is not polling remotely.');
         } else {
-          _setStatus(
-              'Queued on relay. Timed out waiting — device may still receive it.');
+          _setStatus('Queued on relay. Timed out waiting — device may still receive it.');
         }
       }
     });
@@ -2217,18 +1574,13 @@ class DeskCompanionController extends ChangeNotifier {
     if (wasConnected && !_intentionalDisconnect) {
       _setStatus('BLE disconnected. Reconnecting in 5s...');
       Future.delayed(const Duration(seconds: 5), () {
-        if (_bleState == CompanionBleState.disconnected) {
-          scanAndConnect();
-        }
+        if (_bleState == CompanionBleState.disconnected) scanAndConnect();
       });
     }
   }
 
   Future<T?> _runBusy<T>(Future<T> Function() action) async {
-    if (_busy) {
-      return null;
-    }
-
+    if (_busy) return null;
     _busy = true;
     notifyListeners();
     try {
@@ -2256,7 +1608,6 @@ class DeskCompanionController extends ChangeNotifier {
     } else {
       _relayPollTimer?.cancel();
       _relayPendingCount = 0;
-      _relayLastCommandAt = null;
       _relayStatusKnown = false;
       _relayOnline = false;
       _relayLastSeenAt = null;
@@ -2267,9 +1618,7 @@ class DeskCompanionController extends ChangeNotifier {
   void _startRelayPollTimer() {
     _relayPollTimer?.cancel();
     _relayPollTimer = Timer.periodic(_relayStatusRefreshInterval, (_) {
-      if (hasRelayTarget) {
-        unawaited(_fetchRelayStatus());
-      }
+      if (hasRelayTarget) unawaited(_fetchRelayStatus());
     });
   }
 

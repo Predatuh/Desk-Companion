@@ -3,7 +3,7 @@
   "compiler.optimization_flags": "-Os",
   "customBuildProperties": "",
   "fqbn": "esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc",
-  "hardwareFolders": "C:\\Users\\tanne\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.3.7,C:\\Users\\tanne\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.3.7",
+  "hardwareFolders": "C:\\Users\\tanne\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.3.8,C:\\Users\\tanne\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.3.8",
   "otherLibrariesFolders": "C:\\Users\\tanne\\Documents\\Arduino\\libraries",
   "sketchLocation": "C:\\Users\\tanne\\Desktop\\desk_companion\\esp32_firmware\\tft_28"
 }

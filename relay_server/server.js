@@ -24,11 +24,7 @@ function getDevice(token) {
 }
 
 function serializeDevices() {
-  return JSON.stringify(
-    Object.fromEntries(devices.entries()),
-    null,
-    2,
-  );
+  return JSON.stringify(Object.fromEntries(devices.entries()), null, 2);
 }
 
 async function loadDevices() {
@@ -53,9 +49,7 @@ async function loadDevices() {
 }
 
 function queuePersist() {
-  if (persistTimer) {
-    clearTimeout(persistTimer);
-  }
+  if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(async () => {
     persistTimer = null;
     try {
@@ -136,11 +130,27 @@ async function handleRequest(req, res) {
       if (!body.command || typeof body.command !== 'object') {
         return sendJson(res, 400, { error: 'missing_command' });
       }
+      
       const now = new Date().toISOString();
+      const type = body.command.type || '';
+      
+      // THE FIX: If this is a fresh display command, clear the queue to prevent massive backlogs.
+      // We skip clearing if it's an image chunk sequence or a silent status check.
+      if (!type.includes('chunk') && !type.includes('commit') && type !== 'status') {
+          device.queue = [];
+      }
+
       device.queue.push(body.command);
+      
+      // Hard cap to ensure memory stability
+      if (device.queue.length > 20) {
+          device.queue = device.queue.slice(-20);
+      }
+
       device.lastCommandAt = now;
       device.updatedAt = now;
       queuePersist();
+      
       return sendJson(res, 202, {
         queued: true,
         pending: device.queue.length,
@@ -150,10 +160,11 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && action === 'pull') {
       const now = new Date().toISOString();
-      const nextCommand = device.queue.shift();
+      const nextCommand = device.queue.shift(); 
       device.lastPullAt = now;
       device.updatedAt = now;
       queuePersist();
+      
       if (!nextCommand) {
         res.writeHead(204, {
           'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
