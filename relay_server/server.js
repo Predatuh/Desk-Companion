@@ -118,7 +118,7 @@ async function handleRequest(req, res) {
       return sendJson(res, 200, { ok: true, queue_size: device.queue.length });
     }
 
-    if (req.method === 'GET' && action === 'command') {
+    if (req.method === 'GET' && (action === 'command' || action === 'pull')) {
       const now = new Date().toISOString();
       device.lastPullAt = now;
       device.updatedAt = now;
